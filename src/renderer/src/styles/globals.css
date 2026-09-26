@@ -1,0 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
+
+.range-accent {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  cursor: pointer;
+  outline: none;
+  background: linear-gradient(
+    to right,
+    #1db954 var(--range-progress, 0%),
+    #4d4d4d var(--range-progress, 0%)
+  );
+  transition: height 100ms ease;
+}
+.range-accent:hover {
+  height: 5px;
+}
+.range-accent::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: white;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.85);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+.range-accent:hover::-webkit-slider-thumb {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@keyframes eq-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.eq-bar {
+  animation: eq-bar 0.9s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+/*
+ * Long library grids render every tile at once (no virtualisation here, unlike
+ * the phone's FlatList). Letting the browser skip layout and paint for tiles
+ * that are off-screen keeps scrolling cheap without pulling in a windowing
+ * library. contain-intrinsic-size reserves a plausible box so the scrollbar
+ * doesn't jump around as tiles enter and leave.
+ */
+.lazy-tile {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}

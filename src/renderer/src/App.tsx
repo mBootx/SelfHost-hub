@@ -1,0 +1,100 @@
+import { useEffect } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import Sidebar from '@renderer/components/Sidebar'
+import ErrorBoundary from '@renderer/components/ErrorBoundary'
+import NavidromeModule from '@renderer/components/Navidrome'
+import FileBrowserModule from '@renderer/components/FileBrowser'
+import SettingsModule from '@renderer/components/Settings'
+import Player from '@renderer/components/Navidrome/Player'
+import UploadManager from '@renderer/components/FileBrowser/UploadManager'
+import ToastHost from '@renderer/components/Toast'
+import { useNavidromeStore } from '@renderer/store/navidromeStore'
+import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
+import { useDowntifyStore } from '@renderer/store/downtifyStore'
+import { useOfflineStore } from '@renderer/store/offlineStore'
+import { useDownloadStore } from '@renderer/store/downloadStore'
+import { useRemoteStore } from '@renderer/store/remoteStore'
+import { useHistoryStore } from '@renderer/store/historyStore'
+
+export default function App(): JSX.Element {
+  const restoreNavidrome = useNavidromeStore((s) => s.restoreSession)
+  const loadPlaybackPrefs = useNavidromeStore((s) => s.loadPlaybackPrefs)
+  const restoreFileBrowser = useFileBrowserStore((s) => s.restoreSession)
+  const restoreDowntify = useDowntifyStore((s) => s.restoreSession)
+  const loadOfflineTracks = useOfflineStore((s) => s.loadFromDisk)
+  const loadDownloads = useDownloadStore((s) => s.loadFromDisk)
+  const loadHistory = useHistoryStore((s) => s.loadFromDisk)
+  const initRemote = useRemoteStore((s) => s.init)
+  const navidromeConnected = useNavidromeStore((s) => s.status === 'connected')
+
+  useEffect(() => {
+    // Reconnect all three services as soon as the app launches, not only
+    // when the user first navigates to each tab, so switching tabs feels
+    // instant instead of showing a fresh "reconnecting..." each time.
+    restoreNavidrome()
+    restoreFileBrowser()
+    restoreDowntify()
+    loadOfflineTracks()
+    loadDownloads()
+    loadHistory()
+    loadPlaybackPrefs()
+  }, [])
+
+  useEffect(() => {
+    // The remote-control hub scopes pairing to the current Navidrome account,
+    // so it can only (re)start once that account is known - retried whenever
+    // the connection state changes rather than once at boot.
+    initRemote()
+  }, [navidromeConnected])
+
+  return (
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-surface-base text-white">
+      <div className="flex min-h-0 flex-1">
+        <Sidebar />
+        <main className="min-w-0 flex-1">
+          <Routes>
+            <Route path="/" element={<Navigate to="/navidrome" replace />} />
+            <Route
+              path="/navidrome/*"
+              element={
+                <ErrorBoundary label="Navidrome">
+                  <NavidromeModule />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/filebrowser/*"
+              element={
+                <ErrorBoundary label="FileBrowser">
+                  <FileBrowserModule />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ErrorBoundary label="Reglages">
+                  <SettingsModule />
+                </ErrorBoundary>
+              }
+            />
+            {/* Downtify lost its own screen; keep old links working. */}
+            <Route path="/downtify/*" element={<Navigate to="/settings" replace />} />
+            <Route path="*" element={<Navigate to="/navidrome" replace />} />
+          </Routes>
+        </main>
+      </div>
+      {/* Rendered outside the routed <main> so playback survives switching tabs. */}
+      {navidromeConnected && (
+        <ErrorBoundary label="Lecteur Navidrome">
+          <Player />
+        </ErrorBoundary>
+      )}
+      {/* Global so an upload keeps reporting progress even after leaving the FileBrowser tab. */}
+      <ErrorBoundary label="Televersements">
+        <UploadManager />
+      </ErrorBoundary>
+      <ToastHost />
+    </div>
+  )
+}
