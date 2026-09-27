@@ -57,7 +57,7 @@ export default function PlaybackController(): null {
     pendingPlayRef.current = isPlaying
     audioPlayer.replace(source)
     audioPlayer.shouldCorrectPitch = true
-    audioPlayer.playbackRate = playbackRate
+    audioPlayer.setPlaybackRate(playbackRate)
     if (isPlaying) audioPlayer.play()
     recordHistory(song)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,8 +103,11 @@ export default function PlaybackController(): null {
   }, [volume])
 
   useEffect(() => {
+    // Must be setPlaybackRate(): the typings allow `playbackRate = x`, but the
+    // native Android property is getter-only and assigning it throws at runtime,
+    // which crashed the app on every launch since this effect runs on mount.
     audioPlayer.shouldCorrectPitch = true
-    audioPlayer.playbackRate = playbackRate
+    audioPlayer.setPlaybackRate(playbackRate)
   }, [playbackRate])
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { AppState, AppStateStatus } from 'react-native'
+import { AppState } from 'react-native'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -14,6 +14,9 @@ import { useDownloadStore } from '@/store/downloadStore'
 import { useRemoteStore } from '@/store/remoteStore'
 import { useHistoryStore } from '@/store/historyStore'
 import { colors } from '@/constants/theme'
+
+/** A quick hop to another app shouldn't redo three logins on the way back. */
+const RESUME_REVALIDATE_MS = 30_000
 
 /**
  * The detail screens keep a back button but no title bar colour of their own, so
@@ -51,20 +54,26 @@ export default function RootLayout() {
     loadPlaybackPrefs()
   }, [])
 
-  // Android can kill and recreate the whole JS engine while the app sits in the
-  // background (or a session can simply go stale over a long pause) with nothing
-  // in these stores ever noticing - the user just finds everything logged out
-  // next time they look. Re-run the same handshakes used at cold start whenever
-  // the app comes back to the foreground so that self-heals instead.
-  const appState = useRef<AppStateStatus>(AppState.currentState)
+  // A session can go stale over a long pause in the background with nothing in
+  // these stores noticing, so re-run the cold-start handshakes when the app
+  // comes back after a while. Keyed on a real 'background' event rather than
+  // AppState.currentState: Android reports 'background' as the initial state
+  // whenever JS loads before the activity resumes, which made the launch itself
+  // look like a resume and ran every login twice, racing the mount effect above.
+  const backgroundedAt = useRef<number | null>(null)
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
-      if (appState.current.match(/inactive|background/) && next === 'active') {
-        restoreNavidrome()
-        restoreFileBrowser()
-        restoreDowntify()
+      if (next === 'background') {
+        backgroundedAt.current = Date.now()
+      } else if (next === 'active' && backgroundedAt.current !== null) {
+        const awayMs = Date.now() - backgroundedAt.current
+        backgroundedAt.current = null
+        if (awayMs > RESUME_REVALIDATE_MS) {
+          restoreNavidrome()
+          restoreFileBrowser()
+          restoreDowntify()
+        }
       }
-      appState.current = next
     })
     return () => sub.remove()
   }, [restoreNavidrome, restoreFileBrowser, restoreDowntify])
