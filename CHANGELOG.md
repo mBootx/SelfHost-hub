@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1 — 2026-09-28
+
+### Changed
+- No functional changes. This release exists to test the automatic updater that arrived in 1.2.0: an installed 1.2.0 should pick it up on its own.
+
 ## 1.2.0 — 2026-09-28
 
 ### Added
