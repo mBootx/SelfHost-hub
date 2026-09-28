@@ -109,6 +109,8 @@ export class FileBrowserClient {
       headers: { 'X-Password': encodeURIComponent(this.password), 'X-Secret': '' }
     })
     if (!res.ok) {
+      // Unreachable is not the same as rejected: callers only log out on a real 401/403.
+      if (res.status === 0) throw new ApiError(res.error || 'Serveur injoignable', 0)
       let message = res.status === 401 || res.status === 403 ? 'Identifiants invalides' : res.error
       if (res.data?.message) message = res.data.message
       throw new ApiError(message || 'Connexion echouee', res.status || 401)

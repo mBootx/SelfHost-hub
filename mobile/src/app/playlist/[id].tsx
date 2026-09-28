@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
-import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator } from 'react-native'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native'
 import { useLocalSearchParams, useNavigation } from 'expo-router'
-import { Play, HardDriveDownload, ListMusic } from 'lucide-react-native'
+import { Play, HardDriveDownload, ListMusic, Trash2 } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useOfflineStore } from '@/store/offlineStore'
 import { useToastStore } from '@/store/toastStore'
@@ -20,6 +20,12 @@ const SORT_OPTIONS: { key: SortMode; label: string }[] = [
   { key: 'duration', label: 'Duree' }
 ]
 
+/** A playlist slot; `key` stays valid as earlier slots are removed, unlike its index. */
+interface Entry {
+  key: string
+  song: NDSong
+}
+
 export default function PlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const navigation = useNavigation()
@@ -29,33 +35,67 @@ export default function PlaylistScreen() {
   const isPlaying = useNavidromeStore((s) => s.isPlaying)
   const downloadTracks = useOfflineStore((s) => s.downloadTracks)
   const removeFromPlaylist = useNavidromeStore((s) => s.removeFromPlaylist)
+  const deletePlaylist = useNavidromeStore((s) => s.deletePlaylist)
   const showToast = useToastStore((s) => s.show)
 
   const [playlist, setPlaylist] = useState<NDPlaylist | null>(null)
-  const [songs, setSongs] = useState<NDSong[]>([])
+  const [entries, setEntries] = useState<Entry[]>([])
+  const [removing, setRemoving] = useState<ReadonlySet<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [sortMode, setSortMode] = useState<SortMode>('default')
+  // The server addresses slots by index, so removals run one at a time against this mirror of its order.
+  const serverEntries = useRef<Entry[]>([])
+  const removalQueue = useRef<Promise<void>>(Promise.resolve())
 
-  // Sorting only changes what's displayed - removal still has to address the
-  // song by its real position in the server's playlist, so each row keeps its
-  // original index alongside wherever the sort puts it on screen.
-  const displaySongs = useMemo(() => {
-    const withIndex = songs.map((song, originalIndex) => ({ song, originalIndex }))
-    if (sortMode === 'title') withIndex.sort((a, b) => a.song.title.localeCompare(b.song.title))
-    else if (sortMode === 'artist') withIndex.sort((a, b) => a.song.artist.localeCompare(b.song.artist))
-    else if (sortMode === 'duration') withIndex.sort((a, b) => a.song.duration - b.song.duration)
-    return withIndex
-  }, [songs, sortMode])
+  const displayEntries = useMemo(() => {
+    const visible = entries.filter((e) => !removing.has(e.key))
+    if (sortMode === 'title') visible.sort((a, b) => a.song.title.localeCompare(b.song.title))
+    else if (sortMode === 'artist') visible.sort((a, b) => a.song.artist.localeCompare(b.song.artist))
+    else if (sortMode === 'duration') visible.sort((a, b) => a.song.duration - b.song.duration)
+    return visible
+  }, [entries, removing, sortMode])
 
-  async function handleRemove(index: number): Promise<void> {
+  function handleRemove(key: string): void {
     if (!id) return
-    try {
-      await removeFromPlaylist(id, index)
-      setSongs((prev) => prev.filter((_, i) => i !== index))
-      showToast('Retire de la playlist')
-    } catch {
-      showToast('Impossible de retirer ce titre')
-    }
+    setRemoving((prev) => new Set(prev).add(key))
+    removalQueue.current = removalQueue.current.then(async () => {
+      try {
+        const index = serverEntries.current.findIndex((e) => e.key === key)
+        if (index < 0) return
+        await removeFromPlaylist(id, index)
+        serverEntries.current = serverEntries.current.filter((e) => e.key !== key)
+        setEntries(serverEntries.current)
+        showToast('Retire de la playlist')
+      } catch {
+        showToast('Impossible de retirer ce titre')
+      } finally {
+        setRemoving((prev) => {
+          const next = new Set(prev)
+          next.delete(key)
+          return next
+        })
+      }
+    })
+  }
+
+  function confirmDelete(): void {
+    if (!id || !playlist) return
+    Alert.alert('Supprimer la playlist', `"${playlist.name}" sera definitivement supprimee.`, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deletePlaylist(id)
+            showToast(`Playlist "${playlist.name}" supprimee`)
+            navigation.goBack()
+          } catch (err: any) {
+            showToast(err?.message || 'Impossible de supprimer la playlist')
+          }
+        }
+      }
+    ])
   }
 
   useEffect(() => {
@@ -64,8 +104,10 @@ export default function PlaylistScreen() {
     client
       .getPlaylist(id)
       .then((res) => {
+        const loaded = res.songs.map((song, i) => ({ key: `${i}:${song.id}`, song }))
+        serverEntries.current = loaded
         setPlaylist(res.playlist)
-        setSongs(res.songs)
+        setEntries(loaded)
         navigation.setOptions({ title: res.playlist?.name || 'Playlist' })
         prefetchCoverArt(client, res.songs.map((s) => s.coverArt || s.albumId), 100)
       })
@@ -84,13 +126,19 @@ export default function PlaylistScreen() {
 
   // Playlists don't always carry their own coverArt id on the server; fall back to the
   // first track's art (already fetched, no extra request) so the header isn't blank.
-  const coverId = playlist?.coverArt || songs[0]?.coverArt || songs[0]?.albumId
+  const firstSong = entries[0]?.song
+  const coverId = playlist?.coverArt || firstSong?.coverArt || firstSong?.albumId
+  const songs = displayEntries.map((e) => e.song)
 
   return (
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      initialNumToRender={14}
+      maxToRenderPerBatch={14}
+      windowSize={7}
+      removeClippedSubviews
       ListHeaderComponent={
         <View style={styles.header}>
           <CoverImage
@@ -103,7 +151,7 @@ export default function PlaylistScreen() {
           <Text style={styles.name} numberOfLines={2}>
             {playlist?.name}
           </Text>
-          <Text style={styles.meta}>{songs.length} titres</Text>
+          <Text style={styles.meta}>{displayEntries.length} titres</Text>
           <View style={styles.actions}>
             <Pressable
               style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}
@@ -122,6 +170,14 @@ export default function PlaylistScreen() {
             >
               <HardDriveDownload size={16} color={colors.textSecondary} />
             </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+              onPress={confirmDelete}
+              accessibilityRole="button"
+              accessibilityLabel="Supprimer la playlist"
+            >
+              <Trash2 size={16} color={colors.danger} />
+            </Pressable>
           </View>
           <View style={styles.sortRow}>
             {SORT_OPTIONS.map((opt) => (
@@ -136,16 +192,16 @@ export default function PlaylistScreen() {
           </View>
         </View>
       }
-      data={displaySongs}
-      keyExtractor={(d) => `${d.song.id}-${d.originalIndex}`}
+      data={displayEntries}
+      keyExtractor={(e) => e.key}
       renderItem={({ item, index }) => (
         <TrackRow
           song={item.song}
           client={client}
           isCurrent={item.song.id === currentSongId}
           isPlaying={isPlaying}
-          onPress={() => playQueue(displaySongs.map((d) => d.song), index)}
-          onRemove={() => handleRemove(item.originalIndex)}
+          onPress={() => playQueue(songs, index)}
+          onRemove={() => handleRemove(item.key)}
         />
       )}
     />

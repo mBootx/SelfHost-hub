@@ -27,13 +27,27 @@ interface FileBrowserState {
   goForward: () => Promise<void>
   refresh: () => Promise<void>
   refreshUsage: () => Promise<void>
+  /** Quiet check on app resume: renews an expired login without reloading the UI. */
+  revalidate: () => Promise<void>
   setViewMode: (m: 'list' | 'grid') => void
+}
+
+/** Renews an expired JWT with the saved password; only a rejected password logs out (and wipes it). */
+async function reauthenticate(get: () => FileBrowserState, client: FileBrowserClient): Promise<boolean> {
+  try {
+    await client.login()
+    return true
+  } catch (err: any) {
+    if (err?.status === 401 || err?.status === 403) await get().logout()
+    return false
+  }
 }
 
 async function loadPath(
   get: () => FileBrowserState,
   set: (partial: Partial<FileBrowserState>) => void,
-  path: string
+  path: string,
+  retried = false
 ): Promise<void> {
   const { client } = get()
   if (!client) return
@@ -42,23 +56,8 @@ async function loadPath(
     const items = await client.list(path)
     set({ items, currentPath: path, loading: false })
   } catch (err: any) {
-    if (err?.status === 401) {
-      // The server-side JWT can expire mid-session even though the saved
-      // password is still good - re-authenticate transparently before
-      // treating this as a real logout (which would also wipe that password).
-      try {
-        await client.login()
-        const items = await client.list(path)
-        set({ items, currentPath: path, loading: false })
-        return
-      } catch {
-        // Stored credentials are genuinely no longer valid.
-      }
-    }
+    if (err?.status === 401 && !retried && (await reauthenticate(get, client))) return loadPath(get, set, path, true)
     set({ loading: false, error: err?.message || 'Erreur de navigation' })
-    if (err?.status === 401) {
-      await get().logout()
-    }
   }
 }
 
@@ -159,6 +158,19 @@ export const useFileBrowserStore = create<FileBrowserState>((set, get) => ({
       set({ usage })
     } catch {
       // usage reporting is best-effort, keep the explorer usable without it
+    }
+  },
+
+  revalidate: async () => {
+    const { client, status } = get()
+    if (!client || status !== 'connected') {
+      if (status !== 'connecting') await get().restoreSession()
+      return
+    }
+    try {
+      await client.list(get().currentPath)
+    } catch (err: any) {
+      if (err?.status === 401) await reauthenticate(get, client)
     }
   },
 

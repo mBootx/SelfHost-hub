@@ -92,6 +92,8 @@ export class FileBrowserClient {
       headers: { 'X-Password': encodeURIComponent(this.password), 'X-Secret': '' }
     })
     if (!res.ok) {
+      // Unreachable is not the same as rejected: callers only log out on a real 401/403.
+      if (res.status === 0) throw new ApiError(res.error || 'Serveur injoignable', 0)
       let message = res.status === 401 || res.status === 403 ? 'Identifiants invalides' : res.error
       try {
         const parsed = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
@@ -164,6 +166,18 @@ export class FileBrowserClient {
       auth: this.token || ''
     })
     return `${this.baseUrl}/api/resources/download?${params.toString()}`
+  }
+
+  /** Server-generated small preview; callers fall back to rawUrl() if the server can't produce one. */
+  thumbnailUrl(path: string): string {
+    const params = new URLSearchParams({
+      source: this.source || '',
+      path,
+      size: 'small',
+      inline: 'true',
+      auth: this.token || ''
+    })
+    return `${this.baseUrl}/api/preview?${params.toString()}`
   }
 
   /** Returns where the file landed, so callers can log it in the downloads history. */

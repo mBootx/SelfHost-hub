@@ -25,5 +25,6 @@ export function prefetchCoverArt(client: NavidromeClient | null, ids: Array<stri
   }
   if (unique.size === 0) return
   const urls = Array.from(unique, (id) => client.coverArtUrl(id, size))
-  Image.prefetch(urls, 'memory-disk').catch(() => {})
+  // Disk only: decoding whole batches into the small memory cache would evict the covers on screen.
+  Image.prefetch(urls, 'disk').catch(() => {})
 }

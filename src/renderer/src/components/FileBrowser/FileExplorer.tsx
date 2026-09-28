@@ -33,6 +33,7 @@ import { FBItem } from '@renderer/services/filebrowser'
 import FileActions from './FileActions'
 import UsageMeter from './UsageMeter'
 import FolderThumbnail from './FolderThumbnail'
+import FileThumbnail from './FileThumbnail'
 import ContextMenu, { ContextMenuItem } from '@renderer/components/ContextMenu'
 import PromptModal from '@renderer/components/PromptModal'
 import ConfirmModal from '@renderer/components/ConfirmModal'
@@ -544,7 +545,7 @@ export default function FileExplorer(): JSX.Element {
                 {item.isDir && client ? (
                   <FolderThumbnail client={client} folder={item} className="h-16 w-16" />
                 ) : item.type?.includes('image') && client ? (
-                  <img src={client.rawUrl(item.path)} alt="" className="h-16 w-16 rounded object-cover" />
+                  <FileThumbnail client={client} path={item.path} className="h-16 w-16 rounded object-cover" />
                 ) : (
                   <div className="flex h-16 w-16 items-center justify-center rounded bg-surface-hover">
                     {iconFor(item)}

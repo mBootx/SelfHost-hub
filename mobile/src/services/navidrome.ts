@@ -52,6 +52,11 @@ function randomSalt(): string {
   return Math.random().toString(36).slice(2, 12)
 }
 
+/** Every requested cover size maps to one of these, so a cover is downloaded (and cached) at most three times. */
+function coverSizeBucket(size: number): number {
+  return size <= 160 ? 160 : size <= 320 ? 320 : 640
+}
+
 export class ApiError extends Error {
   status: number
   constructor(message: string, status: number) {
@@ -65,15 +70,17 @@ export class NavidromeClient {
   private username: string
   private password: string
   private coverArtUrls = new Map<string, string>()
+  // Derived from public account info only: a fixed salt keeps cover URLs identical across restarts.
+  private coverSalt: string
 
   constructor(config: NavidromeConfig) {
     this.baseUrl = config.url.replace(/\/+$/, '')
     this.username = config.username
     this.password = config.password
+    this.coverSalt = md5(`${this.username}@${this.baseUrl}`).slice(0, 12)
   }
 
-  private authParams(): Record<string, string> {
-    const salt = randomSalt()
+  private authParams(salt = randomSalt()): Record<string, string> {
     const token = md5(this.password + salt)
     return {
       u: this.username,
@@ -85,8 +92,8 @@ export class NavidromeClient {
     }
   }
 
-  buildMediaUrl(endpoint: 'stream' | 'getCoverArt' | 'download', params: Record<string, string>): string {
-    const search = new URLSearchParams({ ...this.authParams(), ...params })
+  buildMediaUrl(endpoint: 'stream' | 'getCoverArt' | 'download', params: Record<string, string>, salt?: string): string {
+    const search = new URLSearchParams({ ...this.authParams(salt), ...params })
     return `${this.baseUrl}/rest/${endpoint}.view?${search.toString()}`
   }
 
@@ -172,6 +179,10 @@ export class NavidromeClient {
     await this.call('updatePlaylist', { playlistId, songIndexToRemove: String(songIndex) })
   }
 
+  async deletePlaylist(playlistId: string): Promise<void> {
+    await this.call('deletePlaylist', { id: playlistId })
+  }
+
   async search(query: string): Promise<{ artists: NDArtist[]; albums: NDAlbum[]; songs: NDSong[] }> {
     const body = await this.call<any>('search3', { query, artistCount: '10', albumCount: '10', songCount: '20' })
     const r = body.searchResult3 || {}
@@ -206,17 +217,15 @@ export class NavidromeClient {
   }
 
   /**
-   * Subsonic auth embeds a fresh random salt in every URL, so calling this twice
-   * for the same artwork used to produce two different URLs - which meant the image
-   * cache (keyed on URL) missed on every single render and re-downloaded the cover.
-   * Tokens don't expire, so we mint one URL per (id, size) and reuse it for the
-   * lifetime of the client.
+   * Image caches are keyed on URL, so a cover must always get the same one: a random
+   * salt changed it on every launch and reconnect, and the disk cache never hit.
    */
   coverArtUrl(coverArtId: string, size = 300): string {
-    const key = `${coverArtId}@${size}`
+    const bucket = coverSizeBucket(size)
+    const key = `${coverArtId}@${bucket}`
     let url = this.coverArtUrls.get(key)
     if (!url) {
-      url = this.buildMediaUrl('getCoverArt', { id: coverArtId, size: String(size) })
+      url = this.buildMediaUrl('getCoverArt', { id: coverArtId, size: String(bucket) }, this.coverSalt)
       this.coverArtUrls.set(key, url)
     }
     return url

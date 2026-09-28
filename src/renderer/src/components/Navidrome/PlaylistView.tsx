@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Play, ListMusic, HardDriveDownload, X } from 'lucide-react'
+import { Play, ListMusic, HardDriveDownload, X, Trash2 } from 'lucide-react'
 import { NavidromeClient, NDPlaylist, NDSong } from '@renderer/services/navidrome'
 import { prefetchCoverArt } from '@renderer/services/imagePrefetch'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useOfflineStore } from '@renderer/store/offlineStore'
 import { useToastStore } from '@renderer/store/toastStore'
+import ConfirmModal from '@renderer/components/ConfirmModal'
 import TrackThumbnail from './TrackThumbnail'
 import { useTrackMenu } from './useTrackMenu'
 import OfflineButton from './OfflineButton'
@@ -12,6 +13,7 @@ import OfflineButton from './OfflineButton'
 interface Props {
   client: NavidromeClient
   playlistId: string
+  onDeleted: () => void
 }
 
 type SortMode = 'default' | 'title' | 'artist' | 'duration'
@@ -29,7 +31,7 @@ function formatDuration(sec: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function PlaylistView({ client, playlistId }: Props): JSX.Element {
+export default function PlaylistView({ client, playlistId, onDeleted }: Props): JSX.Element {
   const [playlist, setPlaylist] = useState<NDPlaylist | null>(null)
   const [songs, setSongs] = useState<NDSong[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,9 +41,22 @@ export default function PlaylistView({ client, playlistId }: Props): JSX.Element
   const isPlaying = useNavidromeStore((s) => s.isPlaying)
   const downloadTracks = useOfflineStore((s) => s.downloadTracks)
   const removeFromPlaylist = useNavidromeStore((s) => s.removeFromPlaylist)
+  const deletePlaylist = useNavidromeStore((s) => s.deletePlaylist)
   const showToast = useToastStore((s) => s.show)
   const [removingIndex, setRemovingIndex] = useState<number | null>(null)
   const [sortMode, setSortMode] = useState<SortMode>('default')
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  async function handleDeletePlaylist(): Promise<void> {
+    try {
+      await deletePlaylist(playlistId)
+      showToast(`Playlist "${playlist?.name}" supprimee`)
+      onDeleted()
+    } catch (err: any) {
+      showToast(err?.message || 'Impossible de supprimer la playlist')
+      setConfirmingDelete(false)
+    }
+  }
 
   // Sorting only changes what's displayed - removal still has to address the
   // song by its real position in the server's playlist, so each row keeps its
@@ -112,6 +127,13 @@ export default function PlaylistView({ client, playlistId }: Props): JSX.Element
             >
               <HardDriveDownload className="h-4 w-4" /> Hors-ligne
             </button>
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              title="Supprimer la playlist"
+              className="flex items-center gap-2 rounded-full border border-surface-border px-4 py-2 text-sm text-gray-300 transition-colors hover:border-red-500 hover:text-red-400"
+            >
+              <Trash2 className="h-4 w-4" /> Supprimer
+            </button>
             <select
               value={sortMode}
               onChange={(e) => setSortMode(e.target.value as SortMode)}
@@ -155,7 +177,8 @@ export default function PlaylistView({ client, playlistId }: Props): JSX.Element
               <td className="w-8 py-2 pr-2 text-right">
                 <button
                   onClick={() => handleRemove(originalIndex)}
-                  disabled={removingIndex === originalIndex}
+                  // All rows wait: a second removal sent before the first lands would target a stale index.
+                  disabled={removingIndex !== null}
                   title="Retirer de la playlist"
                   className="rounded p-1 text-gray-500 opacity-0 transition-opacity hover:text-red-400 disabled:opacity-60 group-hover:opacity-100"
                 >
@@ -167,6 +190,13 @@ export default function PlaylistView({ client, playlistId }: Props): JSX.Element
         </tbody>
       </table>
       {trackMenu.menu}
+      <ConfirmModal
+        open={confirmingDelete}
+        title="Supprimer la playlist ?"
+        description={`"${playlist?.name}" sera definitivement supprimee.`}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={handleDeletePlaylist}
+      />
     </div>
   )
 }

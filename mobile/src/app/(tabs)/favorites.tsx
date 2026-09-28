@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { View, Text, ScrollView, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native'
+import { View, Text, FlatList, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native'
 import { Heart } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import NavidromeGate from '@/components/navidrome/NavidromeGate'
@@ -59,46 +59,53 @@ function FavoritesContent() {
       {loading ? (
         <ActivityIndicator color={colors.accent} style={styles.loader} />
       ) : (
-        <ScrollView
+        // A FlatList so only rows near the viewport mount - liked songs can run into the hundreds.
+        <FlatList
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={14}
+          maxToRenderPerBatch={14}
+          windowSize={7}
+          removeClippedSubviews
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} colors={[colors.accent]} />
           }
-        >
-          {!!error && <Text style={styles.error}>{error}</Text>}
+          ListHeaderComponent={
+            <>
+              {!!error && <Text style={styles.error}>{error}</Text>}
 
-          {!error && isEmpty && (
-            <EmptyState icon={Heart} title="Aucun favori" hint="Les titres et albums que vous aimez sur Navidrome apparaitront ici." />
-          )}
+              {!error && isEmpty && (
+                <EmptyState icon={Heart} title="Aucun favori" hint="Les titres et albums que vous aimez sur Navidrome apparaitront ici." />
+              )}
 
-          {favorites.albums.length > 0 && (
-            <View style={styles.section}>
-              <SectionTitle>Albums</SectionTitle>
-              <View style={styles.grid}>
-                {favorites.albums.map((album) => (
-                  <AlbumTile key={album.id} album={album} />
-                ))}
-              </View>
-            </View>
-          )}
+              {favorites.albums.length > 0 && (
+                <View style={styles.section}>
+                  <SectionTitle>Albums</SectionTitle>
+                  <View style={styles.grid}>
+                    {favorites.albums.map((album) => (
+                      <AlbumTile key={album.id} album={album} />
+                    ))}
+                  </View>
+                </View>
+              )}
 
-          {favorites.songs.length > 0 && client && (
-            <View style={styles.section}>
-              <SectionTitle>Titres</SectionTitle>
-              {favorites.songs.map((song, i) => (
-                <TrackRow
-                  key={song.id}
-                  song={song}
-                  client={client}
-                  isCurrent={song.id === currentSongId}
-                  isPlaying={isPlaying}
-                  onPress={() => playQueue(favorites.songs, i)}
-                />
-              ))}
-            </View>
-          )}
-        </ScrollView>
+              {favorites.songs.length > 0 && <SectionTitle>Titres</SectionTitle>}
+            </>
+          }
+          data={favorites.songs}
+          keyExtractor={(s) => s.id}
+          renderItem={({ item, index }) =>
+            client ? (
+              <TrackRow
+                song={item}
+                client={client}
+                isCurrent={item.id === currentSongId}
+                isPlaying={isPlaying}
+                onPress={() => playQueue(favorites.songs, index)}
+              />
+            ) : null
+          }
+        />
       )}
     </Screen>
   )

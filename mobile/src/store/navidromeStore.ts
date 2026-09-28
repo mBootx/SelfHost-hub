@@ -45,6 +45,7 @@ interface NavidromeState {
   reorderQueue: (fromIndex: number, toIndex: number) => void
   clearQueue: () => void
   removeFromPlaylist: (playlistId: string, songIndex: number) => Promise<void>
+  deletePlaylist: (playlistId: string) => Promise<void>
   togglePlay: () => void
   next: () => void
   prev: () => void
@@ -272,6 +273,13 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     set((s) => ({
       playlists: s.playlists.map((p) => (p.id === playlistId ? { ...p, songCount: Math.max(0, p.songCount - 1) } : p))
     }))
+  },
+
+  deletePlaylist: async (playlistId) => {
+    const { client } = get()
+    if (!client) throw new Error('Non connecte')
+    await client.deletePlaylist(playlistId)
+    set((s) => ({ playlists: s.playlists.filter((p) => p.id !== playlistId) }))
   },
 
   togglePlay: () => set((s) => ({ isPlaying: s.queue.length > 0 ? !s.isPlaying : false })),

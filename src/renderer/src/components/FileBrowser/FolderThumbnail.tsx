@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Folder } from 'lucide-react'
 import { FileBrowserClient, FBItem } from '@renderer/services/filebrowser'
+import FileThumbnail from './FileThumbnail'
 
+/** Folder path -> paths of the (up to 4) images shown in its collage. */
 const imageCache = new Map<string, string[]>()
 
 interface Props {
@@ -23,7 +25,7 @@ export default function FolderThumbnail({ client, folder, className }: Props): J
         const covers = children
           .filter((c) => !c.isDir && (c.type || '').includes('image'))
           .slice(0, 4)
-          .map((c) => client.rawUrl(c.path))
+          .map((c) => c.path)
         imageCache.set(folder.path, covers)
         if (!cancelled) setImages(covers)
       })
@@ -46,7 +48,7 @@ export default function FolderThumbnail({ client, folder, className }: Props): J
   if (images.length === 1) {
     return (
       <div className={`overflow-hidden rounded ${className || ''}`}>
-        <img src={images[0]} alt="" className="h-full w-full object-cover" />
+        <FileThumbnail client={client} path={images[0]} className="h-full w-full object-cover" />
       </div>
     )
   }
@@ -55,7 +57,7 @@ export default function FolderThumbnail({ client, folder, className }: Props): J
     <div className={`grid grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded ${className || ''}`}>
       {[0, 1, 2, 3].map((i) => (
         <div key={i} className="bg-surface-hover">
-          {images[i] && <img src={images[i]} alt="" className="h-full w-full object-cover" />}
+          {images[i] && <FileThumbnail client={client} path={images[i]} className="h-full w-full object-cover" />}
         </div>
       ))}
     </div>

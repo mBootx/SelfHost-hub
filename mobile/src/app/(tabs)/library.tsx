@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { View, Text, Pressable, FlatList, RefreshControl, StyleSheet } from 'react-native'
+import { View, Text, Pressable, FlatList, RefreshControl, StyleSheet, Alert } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Disc3, ListMusic, Users, Plus } from 'lucide-react-native'
+import { Disc3, ListMusic, Users, Plus, FolderOpen, Trash2 } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useToastStore } from '@/store/toastStore'
+import { NDPlaylist } from '@/services/navidrome'
+import ActionSheet from '@/components/ActionSheet'
 import NavidromeGate from '@/components/navidrome/NavidromeGate'
 import AlbumTile from '@/components/navidrome/AlbumTile'
 import PlaylistTile from '@/components/navidrome/PlaylistTile'
@@ -39,12 +41,32 @@ function LibraryContent() {
   const playlists = useNavidromeStore((s) => s.playlists)
   const loadLibrary = useNavidromeStore((s) => s.loadLibrary)
   const createPlaylist = useNavidromeStore((s) => s.createPlaylist)
+  const deletePlaylist = useNavidromeStore((s) => s.deletePlaylist)
   const showToast = useToastStore((s) => s.show)
 
   const [subTab, setSubTab] = useState<SubTab>('albums')
   const [refreshing, setRefreshing] = useState(false)
   const [showNewPlaylist, setShowNewPlaylist] = useState(false)
   const [creatingPlaylist, setCreatingPlaylist] = useState(false)
+  const [menuPlaylist, setMenuPlaylist] = useState<NDPlaylist | null>(null)
+
+  function confirmDeletePlaylist(playlist: NDPlaylist): void {
+    Alert.alert('Supprimer la playlist', `"${playlist.name}" sera definitivement supprimee.`, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deletePlaylist(playlist.id)
+            showToast(`Playlist "${playlist.name}" supprimee`)
+          } catch (err: any) {
+            showToast(err?.message || 'Impossible de supprimer la playlist')
+          }
+        }
+      }
+    ])
+  }
 
   async function handleRefresh(): Promise<void> {
     setRefreshing(true)
@@ -136,7 +158,7 @@ function LibraryContent() {
           showsVerticalScrollIndicator={false}
           {...LIST_PERF}
           ListEmptyComponent={<EmptyState icon={ListMusic} title="Aucune playlist" hint="Appuyez sur + pour en creer une." />}
-          renderItem={({ item }) => <PlaylistTile playlist={item} />}
+          renderItem={({ item }) => <PlaylistTile playlist={item} onLongPress={() => setMenuPlaylist(item)} />}
         />
       ) : (
         <FlatList
@@ -160,6 +182,24 @@ function LibraryContent() {
         confirmLabel={creatingPlaylist ? 'Creation...' : 'Creer'}
         onCancel={() => setShowNewPlaylist(false)}
         onConfirm={handleCreatePlaylist}
+      />
+
+      <ActionSheet
+        visible={!!menuPlaylist}
+        title={menuPlaylist?.name}
+        items={
+          menuPlaylist
+            ? [
+                {
+                  label: 'Ouvrir',
+                  icon: FolderOpen,
+                  onPress: () => router.push({ pathname: '/playlist/[id]', params: { id: menuPlaylist.id } })
+                },
+                { label: 'Supprimer la playlist', icon: Trash2, danger: true, onPress: () => confirmDeletePlaylist(menuPlaylist) }
+              ]
+            : []
+        }
+        onClose={() => setMenuPlaylist(null)}
       />
     </Screen>
   )

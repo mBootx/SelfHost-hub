@@ -6,7 +6,13 @@ import { NDPlaylist } from '@/services/navidrome'
 import CoverImage from '@/components/CoverImage'
 import { colors, radius, spacing } from '@/constants/theme'
 
-export default function PlaylistTile({ playlist, variant = 'grid' }: { playlist: NDPlaylist; variant?: 'grid' | 'rail' }) {
+interface Props {
+  playlist: NDPlaylist
+  variant?: 'grid' | 'rail'
+  onLongPress?: () => void
+}
+
+export default function PlaylistTile({ playlist, variant = 'grid', onLongPress }: Props) {
   const router = useRouter()
   const client = useNavidromeStore((s) => s.client)
 
@@ -14,6 +20,8 @@ export default function PlaylistTile({ playlist, variant = 'grid' }: { playlist:
     <Pressable
       style={({ pressed }) => [variant === 'rail' ? styles.rail : styles.grid, pressed && styles.pressed]}
       onPress={() => router.push({ pathname: '/playlist/[id]', params: { id: playlist.id } })}
+      onLongPress={onLongPress}
+      delayLongPress={300}
       accessibilityRole="button"
       accessibilityLabel={`${playlist.name}, ${playlist.songCount} titres`}
     >

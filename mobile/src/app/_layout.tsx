@@ -14,9 +14,14 @@ import { useDownloadStore } from '@/store/downloadStore'
 import { useRemoteStore } from '@/store/remoteStore'
 import { useHistoryStore } from '@/store/historyStore'
 import { colors } from '@/constants/theme'
+import { ConnectionStatus } from '@/types'
 
-/** A quick hop to another app shouldn't redo three logins on the way back. */
+/** A quick hop to another app shouldn't re-check every service on the way back. */
 const RESUME_REVALIDATE_MS = 30_000
+
+function isDown(status: ConnectionStatus): boolean {
+  return status !== 'connected' && status !== 'connecting'
+}
 
 /**
  * The detail screens keep a back button but no title bar colour of their own, so
@@ -35,6 +40,7 @@ export default function RootLayout() {
   const restoreNavidrome = useNavidromeStore((s) => s.restoreSession)
   const loadPlaybackPrefs = useNavidromeStore((s) => s.loadPlaybackPrefs)
   const restoreFileBrowser = useFileBrowserStore((s) => s.restoreSession)
+  const revalidateFileBrowser = useFileBrowserStore((s) => s.revalidate)
   const restoreDowntify = useDowntifyStore((s) => s.restoreSession)
   const loadOfflineTracks = useOfflineStore((s) => s.loadFromDisk)
   const loadArtworkOverrides = useArtworkStore((s) => s.loadFromDisk)
@@ -54,12 +60,9 @@ export default function RootLayout() {
     loadPlaybackPrefs()
   }, [])
 
-  // A session can go stale over a long pause in the background with nothing in
-  // these stores noticing, so re-run the cold-start handshakes when the app
-  // comes back after a while. Keyed on a real 'background' event rather than
-  // AppState.currentState: Android reports 'background' as the initial state
-  // whenever JS loads before the activity resumes, which made the launch itself
-  // look like a resume and ran every login twice, racing the mount effect above.
+  // Keyed on a real 'background' event, not AppState.currentState, which Android can
+  // report as 'background' at launch. Only services that are actually down reconnect:
+  // replacing a working client makes every open screen reload its data.
   const backgroundedAt = useRef<number | null>(null)
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
@@ -69,14 +72,14 @@ export default function RootLayout() {
         const awayMs = Date.now() - backgroundedAt.current
         backgroundedAt.current = null
         if (awayMs > RESUME_REVALIDATE_MS) {
-          restoreNavidrome()
-          restoreFileBrowser()
-          restoreDowntify()
+          if (isDown(useNavidromeStore.getState().status)) restoreNavidrome()
+          if (isDown(useDowntifyStore.getState().status)) restoreDowntify()
+          revalidateFileBrowser()
         }
       }
     })
     return () => sub.remove()
-  }, [restoreNavidrome, restoreFileBrowser, restoreDowntify])
+  }, [restoreNavidrome, restoreDowntify, revalidateFileBrowser])
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.base }}>

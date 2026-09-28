@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Modal, View, Text, Image, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native'
+import { Modal, View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native'
+import { Image } from 'expo-image'
 import { X } from 'lucide-react-native'
 import { FileBrowserClient, FBItem } from '@/services/filebrowser'
 import { colors, spacing } from '@/constants/theme'
@@ -30,7 +31,16 @@ export default function PreviewModal({ item, client, onClose }: Props) {
           </Pressable>
         </View>
         <View style={styles.body}>
-          {type.includes('image') && <Image source={{ uri: client.rawUrl(item.path) }} style={styles.image} resizeMode="contain" />}
+          {type.includes('image') && (
+            <Image
+              // Keyed on the file, not the URL: the URL embeds the login token, which changes every session.
+              source={{ uri: client.rawUrl(item.path), cacheKey: `fb:${client.getSourceName()}:${item.path}:${item.modified}` }}
+              style={styles.image}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              transition={120}
+            />
+          )}
           {type.includes('text') && (
             <ScrollView style={styles.textScroll}>
               {text === null ? <ActivityIndicator color={colors.accent} /> : <Text style={styles.text}>{text}</Text>}

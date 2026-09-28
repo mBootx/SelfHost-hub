@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Search, Home, Users, Disc3, ListMusic, Heart, LogOut, PanelRight, Download, Sparkles, Plus } from 'lucide-react'
+import { Search, Home, Users, Disc3, ListMusic, Heart, LogOut, PanelRight, Download, Sparkles, Plus, FolderOpen, Trash2 } from 'lucide-react'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
 import { useHistoryStore } from '@renderer/store/historyStore'
-import { NDAlbum, NDArtist, NDSong } from '@renderer/services/navidrome'
+import { useToastStore } from '@renderer/store/toastStore'
+import { NDAlbum, NDArtist, NDPlaylist, NDSong } from '@renderer/services/navidrome'
 import { DowntifySong } from '@renderer/services/downtify'
 import { fetchLyrics, LyricsResult } from '@renderer/services/lyrics'
 import { findArtwork, loadArtworkOverrides } from '@renderer/services/artwork'
@@ -15,6 +16,8 @@ import PlaylistView from './PlaylistView'
 import NewPlaylistPrompt from './NewPlaylistPrompt'
 import LyricsPanel from './LyricsPanel'
 import ServiceUnavailable from '@renderer/components/ServiceUnavailable'
+import ContextMenu from '@renderer/components/ContextMenu'
+import ConfirmModal from '@renderer/components/ConfirmModal'
 import SearchResultsList from '@renderer/components/Downtify/SearchResultsList'
 
 const SEARCH_DEBOUNCE_MS = 300
@@ -90,6 +93,21 @@ export default function MainPlayer(): JSX.Element {
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null)
   const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null)
   const [showNewPlaylist, setShowNewPlaylist] = useState(false)
+  const [playlistMenu, setPlaylistMenu] = useState<{ x: number; y: number; playlist: NDPlaylist } | null>(null)
+  const [playlistToDelete, setPlaylistToDelete] = useState<NDPlaylist | null>(null)
+  const deletePlaylist = useNavidromeStore((s) => s.deletePlaylist)
+  const showToast = useToastStore((s) => s.show)
+
+  async function handleDeletePlaylist(playlist: NDPlaylist): Promise<void> {
+    try {
+      await deletePlaylist(playlist.id)
+      showToast(`Playlist "${playlist.name}" supprimee`)
+    } catch (err: any) {
+      showToast(err?.message || 'Impossible de supprimer la playlist')
+    } finally {
+      setPlaylistToDelete(null)
+    }
+  }
   const [showRightPanel, setShowRightPanel] = useState(true)
   const [lyrics, setLyrics] = useState<LyricsResult | null>(null)
   const [loadingLyrics, setLoadingLyrics] = useState(false)
@@ -242,7 +260,9 @@ export default function MainPlayer(): JSX.Element {
     if (selectedAlbum && client) return <AlbumView client={client} albumId={selectedAlbum} />
     if (selectedArtist && client)
       return <ArtistView client={client} artistId={selectedArtist} onSelectAlbum={setSelectedAlbum} />
-    if (selectedPlaylist && client) return <PlaylistView client={client} playlistId={selectedPlaylist} />
+    if (selectedPlaylist && client) {
+      return <PlaylistView client={client} playlistId={selectedPlaylist} onDeleted={() => setSelectedPlaylist(null)} />
+    }
 
     if (section === 'search') {
       return (
@@ -360,6 +380,10 @@ export default function MainPlayer(): JSX.Element {
             <button
               key={p.id}
               onClick={() => setSelectedPlaylist(p.id)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setPlaylistMenu({ x: e.clientX, y: e.clientY, playlist: p })
+              }}
               className="lazy-tile rounded-md p-3 text-left hover:bg-surface-hover"
             >
               {p.coverArt && client ? (
@@ -563,6 +587,31 @@ export default function MainPlayer(): JSX.Element {
           onCreated={(id) => setSelectedPlaylist(id)}
         />
       )}
+
+      {playlistMenu && (
+        <ContextMenu
+          x={playlistMenu.x}
+          y={playlistMenu.y}
+          items={[
+            { label: 'Ouvrir', icon: FolderOpen, onClick: () => setSelectedPlaylist(playlistMenu.playlist.id) },
+            {
+              label: 'Supprimer la playlist',
+              icon: Trash2,
+              danger: true,
+              separatorBefore: true,
+              onClick: () => setPlaylistToDelete(playlistMenu.playlist)
+            }
+          ]}
+          onClose={() => setPlaylistMenu(null)}
+        />
+      )}
+      <ConfirmModal
+        open={!!playlistToDelete}
+        title="Supprimer la playlist ?"
+        description={playlistToDelete ? `"${playlistToDelete.name}" sera definitivement supprimee.` : ''}
+        onCancel={() => setPlaylistToDelete(null)}
+        onConfirm={() => (playlistToDelete ? handleDeletePlaylist(playlistToDelete) : undefined)}
+      />
     </div>
   )
 }
