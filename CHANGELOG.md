@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 — 2026-09-28
+
+### Added
+- **Automatic updates on Windows:** the app checks GitHub at launch and every 6 hours, downloads new versions in the background, and installs them when you quit. A card offers "Redemarrer maintenant" to update right away.
+- **One-tap updates on Android:** when a new version is out, a card offers "Mettre a jour". It downloads the APK with a progress bar, then Android asks you to confirm the install. The first time, Android asks you to allow SelfHost Hub to install apps.
+- **Settings → Application** on both apps shows the installed version and has a "Rechercher" button to check for updates on demand.
+
+> This is the one version to install by hand: builds before 1.2.0 don't have the updater. Every later release reaches you on its own.
+
 ## 1.1.0 — 2026-09-28
 
 ### Added

@@ -15,6 +15,7 @@ import {
   localLanAddress,
   REMOTE_CONTROL_PORT
 } from './remoteHub'
+import { initAutoUpdates } from './updater'
 
 const store = new Store({ name: 'selfhost-hub-config' })
 
@@ -80,6 +81,7 @@ app.whenReady().then(() => {
 
   registerIpc()
   createWindow()
+  initAutoUpdates(() => mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

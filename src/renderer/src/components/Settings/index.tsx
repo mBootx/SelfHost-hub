@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Music, FolderOpen, Download, HardDriveDownload, Cast } from 'lucide-react'
+import { Music, FolderOpen, Download, HardDriveDownload, Cast, RefreshCw } from 'lucide-react'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
@@ -46,6 +46,58 @@ function ServiceRow({
           Se deconnecter
         </button>
       )}
+    </div>
+  )
+}
+
+type UpdateState = 'idle' | 'checking' | 'current' | 'downloading' | 'ready' | 'dev' | 'error'
+
+function UpdatesRow(): JSX.Element {
+  const [currentVersion, setCurrentVersion] = useState('')
+  const [state, setState] = useState<UpdateState>('idle')
+  const [latestVersion, setLatestVersion] = useState('')
+
+  useEffect(() => {
+    window.api.updater.currentVersion().then(setCurrentVersion)
+  }, [])
+
+  async function check(): Promise<void> {
+    setState('checking')
+    try {
+      const outcome = await window.api.updater.check()
+      if ('version' in outcome) setLatestVersion(outcome.version)
+      setState(outcome.status)
+    } catch {
+      setState('error')
+    }
+  }
+
+  const messages: Record<UpdateState, string> = {
+    idle: 'Les mises a jour sont verifiees au demarrage puis toutes les 6 heures.',
+    checking: 'Recherche...',
+    current: 'Vous avez la derniere version.',
+    downloading: `Version ${latestVersion} en cours de telechargement.`,
+    ready: `Version ${latestVersion} prete : elle s'installera a la fermeture.`,
+    dev: 'Indisponible en mode developpement.',
+    error: 'Verification impossible (hors ligne ?).'
+  }
+
+  return (
+    <div className="flex items-center gap-4 rounded-lg border border-surface-border bg-surface-elevated p-4">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-hover">
+        <RefreshCw className={`h-5 w-5 text-gray-300 ${state === 'checking' ? 'animate-spin' : ''}`} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">SelfHost Hub {currentVersion && `v${currentVersion}`}</p>
+        <p className="text-xs text-gray-400">{messages[state]}</p>
+      </div>
+      <button
+        onClick={check}
+        disabled={state === 'checking'}
+        className="rounded-full border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-accent hover:text-accent disabled:opacity-60"
+      >
+        Rechercher
+      </button>
     </div>
   )
 }
@@ -207,6 +259,11 @@ export default function SettingsModule(): JSX.Element {
               </button>
             )}
           </div>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Application</h2>
+          <UpdatesRow />
         </section>
       </div>
     </div>

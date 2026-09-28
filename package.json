@@ -1,6 +1,6 @@
 {
   "name": "selfhost-hub",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Hub centralise pour services auto-heberges (Navidrome, FileBrowser, Downtify)",
   "main": "./out/main/index.js",
   "author": "selfhost-hub",
@@ -11,13 +11,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "preview": "electron-vite preview",
     "dist": "electron-vite build && electron-builder",
-    "dist:win": "electron-vite build && electron-builder --win",
+    "dist:win": "electron-vite build && electron-builder --win --publish never",
     "dist:mac": "electron-vite build && electron-builder --mac",
     "dist:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "axios": "^1.7.7",
     "electron-store": "^8.2.0",
+    "electron-updater": "~6.2.1",
     "js-md5": "^0.8.3",
     "lucide-react": "^0.446.0",
     "react": "^18.3.1",
@@ -50,6 +51,16 @@
     "win": {
       "target": "nsis"
     },
+    "nsis": {
+      "artifactName": "SelfHost-Hub-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "mBootx",
+        "repo": "SelfHost-hub"
+      }
+    ],
     "mac": {
       "target": "dmg"
     },

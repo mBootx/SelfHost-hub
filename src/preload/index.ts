@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { AxiosRequestConfig } from 'axios'
 
+export type UpdateCheckOutcome = { status: 'dev' } | { status: 'current' | 'downloading' | 'ready'; version: string }
+
 const api = {
   store: {
     get: (key: string) => ipcRenderer.invoke('store:get', key),
@@ -52,6 +54,19 @@ const api = {
         callback(data)
       ipcRenderer.on('offline:downloadProgress', listener)
       return () => ipcRenderer.removeListener('offline:downloadProgress', listener)
+    }
+  },
+  updater: {
+    check: (): Promise<UpdateCheckOutcome> => ipcRenderer.invoke('updater:check'),
+    currentVersion: (): Promise<string> => ipcRenderer.invoke('updater:currentVersion'),
+    downloadedVersion: (): Promise<string | null> => ipcRenderer.invoke('updater:downloadedVersion'),
+    installNow: () => ipcRenderer.invoke('updater:installNow'),
+    onDownloaded: (callback: (info: { version: string }) => void) => {
+      const listener = (_event: unknown, info: { version: string }): void => callback(info)
+      ipcRenderer.on('updater:downloaded', listener)
+      return (): void => {
+        ipcRenderer.removeListener('updater:downloaded', listener)
+      }
     }
   },
   remote: {

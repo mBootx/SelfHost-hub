@@ -8,6 +8,7 @@ import SettingsModule from '@renderer/components/Settings'
 import Player from '@renderer/components/Navidrome/Player'
 import UploadManager from '@renderer/components/FileBrowser/UploadManager'
 import ToastHost from '@renderer/components/Toast'
+import UpdateBanner from '@renderer/components/UpdateBanner'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
@@ -95,6 +96,7 @@ export default function App(): JSX.Element {
         <UploadManager />
       </ErrorBoundary>
       <ToastHost />
+      <UpdateBanner />
     </div>
   )
 }

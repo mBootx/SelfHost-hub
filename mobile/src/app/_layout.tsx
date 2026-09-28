@@ -5,6 +5,9 @@ import { StatusBar } from 'expo-status-bar'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import PlaybackController from '@/components/PlaybackController'
 import PlayerOverlay from '@/components/PlayerOverlay'
+import UpdatePrompt from '@/components/UpdatePrompt'
+import { clearDownloadedUpdates } from '@/services/appUpdate'
+import { useUpdateStore } from '@/store/updateStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 import { useDowntifyStore } from '@/store/downtifyStore'
@@ -47,6 +50,7 @@ export default function RootLayout() {
   const loadDownloads = useDownloadStore((s) => s.loadFromDisk)
   const initRemote = useRemoteStore((s) => s.init)
   const loadHistory = useHistoryStore((s) => s.loadFromDisk)
+  const checkForUpdate = useUpdateStore((s) => s.check)
 
   useEffect(() => {
     restoreNavidrome()
@@ -58,6 +62,9 @@ export default function RootLayout() {
     initRemote()
     loadHistory()
     loadPlaybackPrefs()
+    // Any APK still in the cache belongs to an update that was installed or abandoned.
+    clearDownloadedUpdates()
+    checkForUpdate()
   }, [])
 
   // Keyed on a real 'background' event, not AppState.currentState, which Android can
@@ -75,11 +82,12 @@ export default function RootLayout() {
           if (isDown(useNavidromeStore.getState().status)) restoreNavidrome()
           if (isDown(useDowntifyStore.getState().status)) restoreDowntify()
           revalidateFileBrowser()
+          checkForUpdate()
         }
       }
     })
     return () => sub.remove()
-  }, [restoreNavidrome, restoreDowntify, revalidateFileBrowser])
+  }, [restoreNavidrome, restoreDowntify, revalidateFileBrowser, checkForUpdate])
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.base }}>
@@ -96,6 +104,7 @@ export default function RootLayout() {
         <Stack.Screen name="now-playing" options={{ presentation: 'modal' }} />
       </Stack>
       <PlayerOverlay />
+      <UpdatePrompt />
     </GestureHandlerRootView>
   )
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
-import Constants from 'expo-constants'
-import { Music, FolderOpen, Download, HardDriveDownload, ChevronRight, Check, Cast } from 'lucide-react-native'
+import { Music, FolderOpen, Download, HardDriveDownload, ChevronRight, Check, Cast, RefreshCw } from 'lucide-react-native'
+import { installedVersion } from '@/services/appUpdate'
+import { useUpdateStore } from '@/store/updateStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 import { useDowntifyStore } from '@/store/downtifyStore'
@@ -93,6 +94,17 @@ export default function SettingsTab() {
 
   const [dtSettings, setDtSettings] = useState<DowntifySettings | null>(null)
   const [savingSettings, setSavingSettings] = useState(false)
+
+  const updatePhase = useUpdateStore((s) => s.phase)
+  const availableUpdate = useUpdateStore((s) => s.update)
+  const checkForUpdate = useUpdateStore((s) => s.check)
+  const [updateMessage, setUpdateMessage] = useState('Verifiees au demarrage, au plus une fois par heure.')
+
+  async function handleCheckUpdate(): Promise<void> {
+    const outcome = await checkForUpdate(true)
+    if (outcome === 'current') setUpdateMessage('Vous avez la derniere version.')
+    else if (outcome === 'error') setUpdateMessage('Verification impossible (hors ligne ?).')
+  }
 
   useEffect(() => {
     if (!downtifyClient) {
@@ -293,7 +305,33 @@ export default function SettingsTab() {
           )}
         </View>
 
-        <Text style={styles.version}>SelfHost Hub v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+        <View style={styles.sectionSpacer}>
+          <SectionTitle>Application</SectionTitle>
+        </View>
+        <View style={styles.row}>
+          <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
+            <RefreshCw size={20} color={colors.textSecondary} />
+          </View>
+          <View style={styles.rowInfo}>
+            <Text style={styles.rowTitle}>SelfHost Hub v{installedVersion()}</Text>
+            <Text style={styles.rowMeta}>
+              {updatePhase === 'checking'
+                ? 'Recherche...'
+                : availableUpdate
+                  ? `Version ${availableUpdate.version} disponible.`
+                  : updateMessage}
+            </Text>
+          </View>
+          <Pressable
+            style={({ pressed }) => [styles.pillButton, pressed && styles.pressed]}
+            onPress={handleCheckUpdate}
+            disabled={updatePhase === 'checking' || updatePhase === 'downloading'}
+            accessibilityRole="button"
+            accessibilityLabel="Rechercher des mises a jour"
+          >
+            <Text style={styles.pillText}>Rechercher</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </Screen>
   )
@@ -350,6 +388,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     paddingVertical: spacing.md
   },
-  saveButtonText: { color: '#000', fontWeight: '700', fontSize: 14 },
-  version: { color: colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: spacing.xl }
+  saveButtonText: { color: '#000', fontWeight: '700', fontSize: 14 }
 })
