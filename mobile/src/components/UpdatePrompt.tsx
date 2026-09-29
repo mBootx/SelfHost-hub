@@ -12,11 +12,12 @@ export default function UpdatePrompt() {
   const progress = useUpdateStore((s) => s.progress)
   const error = useUpdateStore((s) => s.error)
   const dismissed = useUpdateStore((s) => s.dismissed)
+  const readyToInstall = useUpdateStore((s) => s.readyToInstall)
   const install = useUpdateStore((s) => s.install)
   const dismiss = useUpdateStore((s) => s.dismiss)
 
   if (!update || dismissed || phase === 'idle' || phase === 'checking') return null
-  const downloading = phase === 'downloading'
+  const busy = phase === 'downloading' || phase === 'installing'
   const sizeMb = Math.round(update.sizeBytes / (1024 * 1024))
 
   return (
@@ -26,26 +27,32 @@ export default function UpdatePrompt() {
         <Text style={styles.title} numberOfLines={1}>
           Mise a jour {update.version} disponible
         </Text>
-        {!downloading && (
+        {!busy && (
           <Pressable onPress={dismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Plus tard">
             <X size={16} color={colors.textMuted} />
           </Pressable>
         )}
       </View>
-      {downloading ? (
+      {phase === 'downloading' ? (
         <>
           <View style={styles.track}>
             <View style={[styles.fill, { width: `${progress}%` }]} />
           </View>
           <Text style={styles.meta}>Telechargement... {progress}%</Text>
         </>
+      ) : phase === 'installing' ? (
+        <Text style={styles.meta}>Ouverture de l'installateur...</Text>
       ) : (
         <>
           <Text style={phase === 'error' ? styles.error : styles.meta} numberOfLines={2}>
-            {phase === 'error' ? error : `${sizeMb} Mo - Android vous demandera de confirmer l'installation.`}
+            {phase === 'error'
+              ? error
+              : readyToInstall
+                ? "Deja telechargee - Android vous demandera de confirmer l'installation."
+                : `${sizeMb} Mo - Android vous demandera de confirmer l'installation.`}
           </Text>
           <Pressable style={({ pressed }) => [styles.button, pressed && styles.pressed]} onPress={install}>
-            <Text style={styles.buttonText}>{phase === 'error' ? 'Reessayer' : 'Mettre a jour'}</Text>
+            <Text style={styles.buttonText}>{phase === 'error' ? 'Reessayer' : readyToInstall ? 'Installer' : 'Mettre a jour'}</Text>
           </Pressable>
         </>
       )}

@@ -2,7 +2,7 @@ import { create, StoreApi } from 'zustand'
 import { md5 } from 'js-md5'
 import * as Device from 'expo-device'
 import { useNavidromeStore, RepeatMode } from './navidromeStore'
-import { audioPlayer } from '@/services/playbackEngine'
+import { seekTo } from '@/services/playbackEngine'
 import { storage } from '@/services/storage'
 import {
   RemoteHubClient,
@@ -73,7 +73,7 @@ function applyCommandLocally(action: string, payload: any): void {
       s.prev()
       break
     case 'seek':
-      audioPlayer.seekTo(payload.seconds)
+      seekTo(payload.seconds)
       useNavidromeStore.setState({ currentTime: payload.seconds })
       break
     case 'setVolume':

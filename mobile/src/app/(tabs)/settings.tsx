@@ -3,6 +3,8 @@ import { View, Text, TextInput, Pressable, ScrollView, Alert, ActivityIndicator,
 import { useRouter } from 'expo-router'
 import { Music, FolderOpen, Download, HardDriveDownload, ChevronRight, Check, Cast, RefreshCw } from 'lucide-react-native'
 import { installedVersion } from '@/services/appUpdate'
+import AppearanceSection from '@/components/settings/AppearanceSection'
+import PlaybackSection from '@/components/settings/PlaybackSection'
 import { useUpdateStore } from '@/store/updateStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
@@ -280,6 +282,9 @@ export default function SettingsTab() {
           </>
         )}
 
+        <AppearanceSection />
+        <PlaybackSection />
+
         <View style={styles.sectionSpacer}>
           <SectionTitle>Stockage</SectionTitle>
         </View>
@@ -325,7 +330,7 @@ export default function SettingsTab() {
           <Pressable
             style={({ pressed }) => [styles.pillButton, pressed && styles.pressed]}
             onPress={handleCheckUpdate}
-            disabled={updatePhase === 'checking' || updatePhase === 'downloading'}
+            disabled={updatePhase === 'checking' || updatePhase === 'downloading' || updatePhase === 'installing'}
             accessibilityRole="button"
             accessibilityLabel="Rechercher des mises a jour"
           >

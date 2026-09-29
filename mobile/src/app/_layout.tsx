@@ -6,8 +6,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import PlaybackController from '@/components/PlaybackController'
 import PlayerOverlay from '@/components/PlayerOverlay'
 import UpdatePrompt from '@/components/UpdatePrompt'
-import { clearDownloadedUpdates } from '@/services/appUpdate'
+import { pruneStaleDownloads } from '@/services/appUpdate'
 import { useUpdateStore } from '@/store/updateStore'
+import { useAudioSettingsStore } from '@/store/audioSettingsStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 import { useDowntifyStore } from '@/store/downtifyStore'
@@ -51,6 +52,7 @@ export default function RootLayout() {
   const initRemote = useRemoteStore((s) => s.init)
   const loadHistory = useHistoryStore((s) => s.loadFromDisk)
   const checkForUpdate = useUpdateStore((s) => s.check)
+  const loadAudioSettings = useAudioSettingsStore((s) => s.load)
 
   useEffect(() => {
     restoreNavidrome()
@@ -62,8 +64,9 @@ export default function RootLayout() {
     initRemote()
     loadHistory()
     loadPlaybackPrefs()
-    // Any APK still in the cache belongs to an update that was installed or abandoned.
-    clearDownloadedUpdates()
+    loadAudioSettings()
+    // Keeps a downloaded APK that is still newer than this install, so retrying an update doesn't re-download it.
+    pruneStaleDownloads()
     checkForUpdate()
   }, [])
 

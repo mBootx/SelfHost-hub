@@ -1,0 +1,23 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.selfhostnative'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.selfhostnative"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // The equalizer attaches to each expo-audio player's audio session. expo-audio is built from
+  // source (see buildFromSource in package.json), so its Gradle project exists to depend on.
+  implementation project(':expo-audio')
+  // expo-audio keeps Media3 private; this only lets us compile against ExoPlayer (same version).
+  compileOnly "androidx.media3:media3-exoplayer:1.9.0"
+}

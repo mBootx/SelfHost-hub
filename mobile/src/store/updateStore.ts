@@ -1,13 +1,15 @@
 import { create } from 'zustand'
-import { AvailableUpdate, downloadAndInstall, findUpdate } from '@/services/appUpdate'
+import { AvailableUpdate, downloadUpdate, findUpdate, isDownloaded, openInstaller } from '@/services/appUpdate'
 
 /** GitHub allows 60 anonymous API calls an hour; automatic checks stay far below that. */
 const AUTO_CHECK_INTERVAL_MS = 60 * 60 * 1000
 
-type Phase = 'idle' | 'checking' | 'available' | 'downloading' | 'error'
+type Phase = 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'error'
 
 interface UpdateState {
   update: AvailableUpdate | null
+  /** The APK is already complete in the cache, so installing skips the download. */
+  readyToInstall: boolean
   phase: Phase
   progress: number
   error: string | null
@@ -19,8 +21,13 @@ interface UpdateState {
   dismiss: () => void
 }
 
+function isBusy(phase: Phase): boolean {
+  return phase === 'checking' || phase === 'downloading' || phase === 'installing'
+}
+
 export const useUpdateStore = create<UpdateState>((set, get) => ({
   update: null,
+  readyToInstall: false,
   phase: 'idle',
   progress: 0,
   error: null,
@@ -29,16 +36,16 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
   check: async (manual = false) => {
     const { phase, lastCheckedAt } = get()
-    if (phase === 'checking' || phase === 'downloading') return 'skipped'
+    if (isBusy(phase)) return 'skipped'
     if (!manual && Date.now() - lastCheckedAt < AUTO_CHECK_INTERVAL_MS) return 'skipped'
     set({ phase: 'checking', lastCheckedAt: Date.now() })
     try {
       const update = await findUpdate()
       if (update) {
-        set({ update, phase: 'available', error: null, dismissed: false })
+        set({ update, readyToInstall: isDownloaded(update), phase: 'available', error: null, dismissed: false })
         return 'available'
       }
-      set({ update: null, phase: 'idle' })
+      set({ update: null, readyToInstall: false, phase: 'idle' })
       return 'current'
     } catch {
       set({ phase: get().update ? 'available' : 'idle' })
@@ -48,17 +55,23 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
   install: async () => {
     const { update, phase } = get()
-    if (!update || phase === 'downloading') return
-    set({ phase: 'downloading', progress: 0, error: null })
+    if (!update || isBusy(phase)) return
+    set({ error: null })
     try {
-      await downloadAndInstall(update, (fraction) => {
-        const progress = Math.min(100, Math.round(fraction * 100))
-        if (progress !== get().progress) set({ progress })
-      })
+      if (!get().readyToInstall) {
+        set({ phase: 'downloading', progress: 0 })
+        await downloadUpdate(update, (fraction) => {
+          const progress = Math.min(100, Math.round(fraction * 100))
+          if (progress !== get().progress) set({ progress })
+        })
+        set({ readyToInstall: true })
+      }
+      set({ phase: 'installing' })
+      await openInstaller(update)
       // Back from the installer without updating (a successful install restarts the app instead).
       set({ phase: 'available' })
     } catch (err: any) {
-      set({ phase: 'error', error: err?.message || 'La mise a jour a echoue' })
+      set({ phase: 'error', error: err?.message || 'La mise a jour a echoue', readyToInstall: isDownloaded(update) })
     }
   },
 

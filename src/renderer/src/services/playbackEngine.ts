@@ -1,15 +1,13 @@
-/**
- * The <audio> element lives inside Player.tsx, but the store owns the transport
- * actions (next/prev/repeat) and sometimes has to move the playhead itself -
- * restarting the current track on "previous", for instance. Player registers its
- * element here so those actions can reach it without prop drilling or a context.
- */
-let element: HTMLAudioElement | null = null
+import { AudioEngine } from './audioEngine'
 
-export function registerAudioElement(el: HTMLAudioElement | null): void {
-  element = el
+let engine: AudioEngine | null = null
+
+/** One engine for the whole app session: playback must outlive whichever screen is showing. */
+export function getAudioEngine(): AudioEngine {
+  if (!engine) engine = new AudioEngine()
+  return engine
 }
 
 export function seekTo(seconds: number): void {
-  if (element) element.currentTime = seconds
+  getAudioEngine().seek(seconds)
 }

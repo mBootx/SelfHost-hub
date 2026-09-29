@@ -1,8 +1,8 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, safeStorage, protocol, net } from 'electron'
-import { join } from 'path'
-import { pathToFileURL } from 'url'
+import { app, shell, BrowserWindow, ipcMain, dialog, safeStorage, protocol, session } from 'electron'
+import { join, relative } from 'path'
 import { createWriteStream, createReadStream, statSync, mkdirSync, existsSync, unlinkSync } from 'fs'
-import { PassThrough } from 'stream'
+import { stat } from 'fs/promises'
+import { PassThrough, Readable } from 'stream'
 import Store from 'electron-store'
 import axios, { AxiosRequestConfig } from 'axios'
 import {
@@ -72,11 +72,44 @@ app.whenReady().then(() => {
   offlineDir = join(app.getPath('userData'), 'offline-music')
   mkdirSync(offlineDir, { recursive: true })
 
-  protocol.handle('offline', (request) => {
-    // Built with no authority (offline:///<filename>), so the whole path after
-    // the scheme is the filename - keeps the mapping to disk unambiguous.
+  protocol.handle('offline', async (request) => {
+    // URLs are offline://tracks/<filename>: a standard scheme parses like http, so the filename
+    // must sit in the path - with an empty host it would become the host and the path just "/".
     const filename = decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, ''))
-    return net.fetch(pathToFileURL(join(offlineDir, filename)).toString())
+    const filePath = join(offlineDir, filename)
+    if (relative(offlineDir, filePath).startsWith('..')) return new Response(null, { status: 403 })
+    let size: number
+    try {
+      size = (await stat(filePath)).size
+    } catch {
+      return new Response(null, { status: 404 })
+    }
+    // Answering byte ranges is what makes downloaded tracks seekable (the player asks for "bytes=N-").
+    const range = /bytes=(\d*)-(\d*)/.exec(request.headers.get('range') || '')
+    const first = range?.[1] ? Number(range[1]) : 0
+    const last = range?.[2] ? Math.min(Number(range[2]), size - 1) : size - 1
+    if (first > last) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } })
+    const headers: Record<string, string> = {
+      'Accept-Ranges': 'bytes',
+      'Content-Length': String(last - first + 1),
+      // The player loads media with crossOrigin="anonymous" (Web Audio needs CORS-clean audio).
+      'Access-Control-Allow-Origin': '*'
+    }
+    const body = Readable.toWeb(createReadStream(filePath, { start: first, end: last })) as unknown as ReadableStream
+    if (!range) return new Response(body, { status: 200, headers })
+    return new Response(body, { status: 206, headers: { ...headers, 'Content-Range': `bytes ${first}-${last}/${size}` } })
+  })
+
+  // Same reason for streamed tracks: without this header the audio is rejected, not just muted.
+  session.defaultSession.webRequest.onHeadersReceived({ urls: ['*://*/*'] }, (details, callback) => {
+    if (details.resourceType !== 'media') return callback({})
+    const responseHeaders = { ...details.responseHeaders }
+    // Replace rather than append: two values ("*, *") would fail the CORS check.
+    for (const key of Object.keys(responseHeaders)) {
+      if (key.toLowerCase() === 'access-control-allow-origin') delete responseHeaders[key]
+    }
+    responseHeaders['Access-Control-Allow-Origin'] = ['*']
+    callback({ responseHeaders })
   })
 
   registerIpc()

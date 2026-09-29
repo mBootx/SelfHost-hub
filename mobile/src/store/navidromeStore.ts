@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { NavidromeClient, NDAlbum, NDArtist, NDPlaylist, NDSong } from '@/services/navidrome'
-import { audioPlayer } from '@/services/playbackEngine'
+import { seekTo } from '@/services/playbackEngine'
 import { storage } from '@/services/storage'
 import { prefetchCoverArt } from '@/services/imagePrefetch'
 import { ConnectionStatus } from '@/types'
@@ -310,7 +310,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     // untouched, so nothing else would move the player: seek it here, otherwise
     // the button silently does nothing (which is how it behaved before).
     if (currentTime > 3 || queueIndex <= 0) {
-      audioPlayer.seekTo(0)
+      seekTo(0)
       set({ currentTime: 0, isPlaying: true })
       return
     }

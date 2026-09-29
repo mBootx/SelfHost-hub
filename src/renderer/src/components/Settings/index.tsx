@@ -8,6 +8,8 @@ import { useRemoteStore } from '@renderer/store/remoteStore'
 import DowntifyLoginPage from '@renderer/components/Downtify/LoginPage'
 import DowntifySettingsForm from '@renderer/components/Downtify/SettingsForm'
 import DownloadQueue from '@renderer/components/Downtify/DownloadQueue'
+import AppearanceSection from './AppearanceSection'
+import PlaybackSection from './PlaybackSection'
 
 type IconComponent = typeof Music
 
@@ -161,6 +163,9 @@ export default function SettingsModule(): JSX.Element {
             onLogout={downtifyLogout}
           />
         </section>
+
+        <AppearanceSection />
+        <PlaybackSection />
 
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Controle a distance</h2>

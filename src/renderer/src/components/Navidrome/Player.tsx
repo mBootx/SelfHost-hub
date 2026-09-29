@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Play,
   Pause,
@@ -24,7 +24,8 @@ import { useOfflineStore } from '@renderer/store/offlineStore'
 import { useRemoteStore, LOCAL_DEVICE_ID } from '@renderer/store/remoteStore'
 import { useHistoryStore } from '@renderer/store/historyStore'
 import { useToastStore } from '@renderer/store/toastStore'
-import { registerAudioElement, seekTo } from '@renderer/services/playbackEngine'
+import { useAudioSettingsStore } from '@renderer/store/audioSettingsStore'
+import { getAudioEngine, seekTo } from '@renderer/services/playbackEngine'
 
 const SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.75]
 
@@ -118,7 +119,11 @@ export default function Player(): JSX.Element {
   )
   const isRemote = selectedDeviceId !== LOCAL_DEVICE_ID
 
-  const audioRef = useRef<HTMLAudioElement>(null)
+  const crossfadeSeconds = useAudioSettingsStore((s) => s.crossfadeSeconds)
+  const gapless = useAudioSettingsStore((s) => s.gapless)
+  const eqEnabled = useAudioSettingsStore((s) => s.eqEnabled)
+  const eqGains = useAudioSettingsStore((s) => s.eqGains)
+
   const [showQueue, setShowQueue] = useState(false)
   const [showDevices, setShowDevices] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
@@ -136,41 +141,67 @@ export default function Player(): JSX.Element {
   const shuffle = isRemote ? !!remoteDevice?.shuffle : localShuffle
   const volume = isRemote ? remoteDevice?.volume ?? 0.8 : localVolume
 
-  // Let the store reach the playhead (see services/playbackEngine). These
-  // effects always follow the LOCAL store, never the display state above: this
-  // <audio> element is this computer's own output, which stays silent whenever
-  // a remote device is the selected target (selectDevice pauses it locally).
+  // What follows the current track when it ends on its own - the same rules as the store's next().
+  const localNextSong =
+    localRepeatMode === 'one' ? null : (queue[queueIndex + 1] ?? (localRepeatMode === 'all' ? queue[0] : null))
+
+  // These effects always follow the LOCAL store, never the display state above: the audio engine is
+  // this computer's own output, which stays silent whenever a remote device is the selected target
+  // (selectDevice pauses it locally).
   useEffect(() => {
-    registerAudioElement(audioRef.current)
-    return () => registerAudioElement(null)
+    const engine = getAudioEngine()
+    engine.setHandlers({
+      onProgress: (currentTime, duration) => useNavidromeStore.getState().setProgress(currentTime, duration),
+      onTrackEnd: () => {
+        const { repeatMode, queue, next } = useNavidromeStore.getState()
+        // A one-song queue on repeat-all "advances" to the same index, which reloads nothing.
+        if (repeatMode === 'one' || (repeatMode === 'all' && queue.length === 1)) engine.restart()
+        else next()
+      },
+      onAutoAdvance: () => useNavidromeStore.getState().next()
+    })
+    return () => {
+      engine.setHandlers(null)
+      engine.stop()
+    }
   }, [])
 
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio || !localSong || !client) return
-    audio.src = getOfflineUrl(localSong.id) || client.streamUrl(localSong.id)
-    audio.playbackRate = localPlaybackRate
-    if (localIsPlaying) audio.play().catch(() => {})
+    if (!localSong || !client) return
+    const src = getOfflineUrl(localSong.id) || client.streamUrl(localSong.id)
+    getAudioEngine().load(localSong.id, src, useNavidromeStore.getState().isPlaying)
     recordHistory(localSong)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localSong?.id])
 
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    if (localIsPlaying) audio.play().catch(() => {})
-    else audio.pause()
+    if (!client) return
+    getAudioEngine().setNext(
+      localNextSong ? { id: localNextSong.id, src: getOfflineUrl(localNextSong.id) || client.streamUrl(localNextSong.id) } : null
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localNextSong?.id, client])
+
+  useEffect(() => {
+    if (localIsPlaying) getAudioEngine().play()
+    else getAudioEngine().pause()
   }, [localIsPlaying])
 
   useEffect(() => {
-    const audio = audioRef.current
-    if (audio) audio.volume = localVolume
+    getAudioEngine().setVolume(localVolume)
   }, [localVolume])
 
   useEffect(() => {
-    const audio = audioRef.current
-    if (audio) audio.playbackRate = localPlaybackRate
+    getAudioEngine().setRate(localPlaybackRate)
   }, [localPlaybackRate])
+
+  useEffect(() => {
+    getAudioEngine().setTransitions(crossfadeSeconds, gapless)
+  }, [crossfadeSeconds, gapless])
+
+  useEffect(() => {
+    getAudioEngine().setEqualizer(eqEnabled, eqGains)
+  }, [eqEnabled, eqGains])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -256,23 +287,6 @@ export default function Player(): JSX.Element {
 
   return (
     <div className="border-t border-surface-border bg-surface-elevated">
-      <audio
-        ref={audioRef}
-        onTimeUpdate={(e) => setProgress(e.currentTarget.currentTime, e.currentTarget.duration || 0)}
-        onLoadedMetadata={(e) => setProgress(0, e.currentTarget.duration || 0)}
-        onEnded={() => {
-          if (localRepeatMode === 'one') {
-            const a = audioRef.current
-            if (a) {
-              a.currentTime = 0
-              a.play().catch(() => {})
-            }
-            return
-          }
-          next()
-        }}
-      />
-
       <div className="grid grid-cols-3 items-center gap-4 px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           {song && client ? (

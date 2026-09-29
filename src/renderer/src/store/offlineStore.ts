@@ -34,7 +34,8 @@ interface OfflineState {
 }
 
 function offlineFileUrl(filename: string): string {
-  return `offline:///${encodeURIComponent(filename)}`
+  // Needs a host: offline:///x is rewritten to offline://x/ (see the handler in src/main/index.ts).
+  return `offline://tracks/${encodeURIComponent(filename)}`
 }
 
 async function persist(tracks: Record<string, OfflineTrack>): Promise<void> {

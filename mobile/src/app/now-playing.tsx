@@ -23,7 +23,7 @@ import { useOfflineStore } from '@/store/offlineStore'
 import { useArtworkStore } from '@/store/artworkStore'
 import { useRemoteStore, LOCAL_DEVICE_ID } from '@/store/remoteStore'
 import { useToastStore } from '@/store/toastStore'
-import { audioPlayer } from '@/services/playbackEngine'
+import { seekTo } from '@/services/playbackEngine'
 import { fetchLyrics, LyricsResult } from '@/services/lyrics'
 import OfflineButton from '@/components/navidrome/OfflineButton'
 import LyricsView from '@/components/navidrome/LyricsView'
@@ -73,7 +73,7 @@ function PlayerProgress() {
           if (isRemote) {
             sendCommand('seek', { seconds: value })
           } else {
-            audioPlayer.seekTo(value)
+            seekTo(value)
             setProgress(value, duration)
           }
         }}
@@ -401,7 +401,7 @@ export default function NowPlayingScreen() {
               loading={loadingLyrics}
               searching={searching}
               onSeek={(seconds) => {
-                audioPlayer.seekTo(seconds)
+                seekTo(seconds)
                 setProgress(seconds, useNavidromeStore.getState().duration)
               }}
               onAutoSearch={handleAutoSearch}

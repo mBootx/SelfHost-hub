@@ -4,18 +4,19 @@ module.exports = {
   darkMode: 'class',
   theme: {
     extend: {
+      // Channels live in CSS variables (see globals.css) so Settings can recolour the app live.
       colors: {
         accent: {
-          DEFAULT: '#1DB954',
-          hover: '#1ed760',
-          dark: '#169c46'
+          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
+          hover: 'rgb(var(--accent-hover) / <alpha-value>)',
+          dark: 'rgb(var(--accent-dark) / <alpha-value>)'
         },
         surface: {
-          base: '#0a0a0a',
-          raised: '#121212',
-          elevated: '#181818',
-          hover: '#282828',
-          border: '#2a2a2a'
+          base: 'rgb(var(--surface-base) / <alpha-value>)',
+          raised: 'rgb(var(--surface-raised) / <alpha-value>)',
+          elevated: 'rgb(var(--surface-elevated) / <alpha-value>)',
+          hover: 'rgb(var(--surface-hover) / <alpha-value>)',
+          border: 'rgb(var(--surface-border) / <alpha-value>)'
         }
       },
       fontFamily: {

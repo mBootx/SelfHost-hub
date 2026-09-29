@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.0.0 — 2026-09-28
+
+### Added
+- **Colour schemes:** pick an accent colour (8 presets or your own) and a background style (Sombre, AMOLED, Ardoise, Moka) in Settings → Apparence.
+  - **Desktop:** changes apply live.
+  - **Android:** the app restarts to apply them.
+- **Crossfade:** set how long songs overlap when one ends and the next starts, from 0 to 12 s, in Settings → Lecture. Manual skips stay instant.
+- **Gapless playback:** the next song is preloaded so it starts the moment the current one ends. That also makes skipping to the next song instant.
+- **Equalizer** in Settings → Egaliseur: 10 presets (Graves +, Voix, Rock, Electro...) or your own curve.
+  - **Desktop:** 10 bands, lowering the overall level to avoid distortion when you boost.
+  - **Android:** the phone's own system equalizer (usually 5 bands), with the same presets mapped onto them.
+
+### Fixed
+- **Downloaded tracks never played on desktop.** Their `offline://` links were misread, so every offline track failed to load. They now play, and you can also seek within them.
+- With a single song on repeat-all, playback stopped at the end of the song instead of looping.
+- **Android updater:** if an install doesn't go through, the downloaded APK is now kept, so "Installer" opens it straight away instead of downloading it again. This includes the app restarting after you allow app installs.
+
 ## 1.2.1 — 2026-09-28
 
 ### Changed
