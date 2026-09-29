@@ -1,9 +1,10 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { Music, FolderOpen, Settings, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Music, FolderOpen, Server, Settings, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { useUIStore } from '@renderer/store/uiStore'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
+import { useIsOwner } from '@renderer/hooks/useIsOwner'
 import AppLogo from './AppLogo'
 
 // Downtify has no destination of its own: its search folds into Navidrome's and
@@ -11,6 +12,8 @@ import AppLogo from './AppLogo'
 const NAV_ITEMS = [
   { to: '/navidrome', label: 'Navidrome', icon: Music },
   { to: '/filebrowser', label: 'FileBrowser', icon: FolderOpen },
+  // The server dashboard: only for the account that runs the server.
+  { to: '/server', label: 'Serveur', icon: Server, ownerOnly: true },
   { to: '/settings', label: 'Réglages', icon: Settings }
 ]
 
@@ -37,6 +40,7 @@ export default function Sidebar(): JSX.Element {
   const downtifyStatus = useDowntifyStore((s) => s.status)
   const isPlaying = useNavidromeStore((s) => s.isPlaying)
   const currentSong = useNavidromeStore((s) => s.queue[s.queueIndex] || null)
+  const isOwner = useIsOwner()
   const location = useLocation()
   const onNavidromeTab = location.pathname.startsWith('/navidrome')
 
@@ -62,7 +66,7 @@ export default function Sidebar(): JSX.Element {
       </div>
 
       <nav className="flex-1 space-y-1 px-2">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
+        {NAV_ITEMS.filter((item) => !item.ownerOnly || isOwner).map(({ to, label, icon: Icon }) => {
           const showIndicator = to === '/navidrome' && showBackgroundPlayback
           return (
             <NavLink

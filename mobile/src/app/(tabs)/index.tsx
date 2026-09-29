@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { View, Text, ScrollView, FlatList, Pressable, RefreshControl, StyleSheet } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { ListMusic, Music } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useHistoryStore, HistoryEntry } from '@/store/historyStore'
@@ -99,11 +99,20 @@ function ArtistBubble({ id, name, coverArt }: { id: string; name: string; coverA
 function HomeContent() {
   const username = useNavidromeStore((s) => s.username)
   const recentAlbums = useNavidromeStore((s) => s.recentAlbums)
+  const recentlyPlayed = useNavidromeStore((s) => s.recentlyPlayed)
+  const refreshRecentlyPlayed = useNavidromeStore((s) => s.refreshRecentlyPlayed)
   const playlists = useNavidromeStore((s) => s.playlists)
   const artists = useNavidromeStore((s) => s.artists)
   const loadLibrary = useNavidromeStore((s) => s.loadLibrary)
   const history = useHistoryStore((s) => s.entries)
   const [refreshing, setRefreshing] = useState(false)
+
+  // Picks up what was played on the PC since this list was last loaded.
+  useFocusEffect(
+    useCallback(() => {
+      refreshRecentlyPlayed()
+    }, [refreshRecentlyPlayed])
+  )
 
   async function handleRefresh(): Promise<void> {
     setRefreshing(true)
@@ -134,7 +143,22 @@ function HomeContent() {
           </View>
         )}
 
-        {history.length > 0 && (
+        {/* Plays reported to Navidrome from any device; this phone's own history until there are some. */}
+        {recentlyPlayed.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHead}>
+              <SectionTitle>Récemment écouté</SectionTitle>
+            </View>
+            <FlatList
+              horizontal
+              data={recentlyPlayed}
+              keyExtractor={(a) => a.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.rail}
+              renderItem={({ item }) => <AlbumTile album={item} variant="rail" />}
+            />
+          </View>
+        ) : history.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHead}>
               <SectionTitle>Récemment écouté</SectionTitle>

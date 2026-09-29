@@ -7,10 +7,15 @@ import PlaybackController from '@/components/PlaybackController'
 import PlayerOverlay from '@/components/PlayerOverlay'
 import UpdatePrompt from '@/components/UpdatePrompt'
 import WhatsNewModal from '@/components/WhatsNewModal'
+import LockScreen from '@/components/lock/LockScreen'
 import { pruneStaleDownloads } from '@/services/appUpdate'
 import { startPlaybackMemory } from '@/services/playbackMemory'
+import { startScrobbler } from '@/services/scrobbler'
+import { startDownloadWatcher } from '@/services/downloadWatcher'
+import { startCameraBackup } from '@/services/cameraBackup'
 import { useUpdateStore } from '@/store/updateStore'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
+import { startAppLock } from '@/store/appLockStore'
 import { useAudioSettingsStore } from '@/store/audioSettingsStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
@@ -59,6 +64,7 @@ export default function RootLayout() {
   const checkWhatsNew = useWhatsNewStore((s) => s.check)
 
   useEffect(() => {
+    startAppLock()
     restoreNavidrome()
     restoreFileBrowser()
     restoreDowntify()
@@ -70,6 +76,9 @@ export default function RootLayout() {
     loadPlaybackPrefs()
     loadAudioSettings()
     startPlaybackMemory()
+    startScrobbler()
+    startDownloadWatcher()
+    startCameraBackup()
     // Keeps a downloaded APK that is still newer than this install, so retrying an update doesn't re-download it.
     pruneStaleDownloads()
     checkForUpdate()
@@ -110,11 +119,14 @@ export default function RootLayout() {
         <Stack.Screen name="downtify/queue" options={detailHeader} />
         <Stack.Screen name="downtify/connect" options={detailHeader} />
         <Stack.Screen name="devices/index" options={detailHeader} />
+        <Stack.Screen name="server/index" options={detailHeader} />
         <Stack.Screen name="now-playing" options={{ presentation: 'modal' }} />
       </Stack>
       <PlayerOverlay />
       <UpdatePrompt />
       <WhatsNewModal />
+      {/* Last, so it opens above every other window. */}
+      <LockScreen />
     </GestureHandlerRootView>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Play,
   Pause,
@@ -285,6 +285,113 @@ export default function Player(): JSX.Element {
     const idx = SPEEDS.indexOf(localPlaybackRate)
     setPlaybackRate(SPEEDS[(idx + 1) % SPEEDS.length])
   }
+  function handleSeek(seconds: number): void {
+    if (isRemote) {
+      sendCommand('seek', { seconds })
+    } else {
+      seekTo(seconds)
+      setProgress(seconds, useNavidromeStore.getState().duration)
+    }
+  }
+  function currentPosition(): number {
+    return isRemote ? remoteDevice?.currentTime ?? 0 : useNavidromeStore.getState().currentTime
+  }
+
+  // Windows media controls (volume flyout, lock screen, keyboard media keys) and the tray menu go
+  // through the same handlers as the buttons below, so they drive whichever device is selected.
+  // The ref keeps them current without re-registering on every render.
+  const mediaActions = useRef({ isPlaying, togglePlay: handleTogglePlay, next: handleNext, prev: handlePrev, seek: handleSeek, position: currentPosition })
+  mediaActions.current = { isPlaying, togglePlay: handleTogglePlay, next: handleNext, prev: handlePrev, seek: handleSeek, position: currentPosition }
+
+  useEffect(() => {
+    const session = navigator.mediaSession
+    const artwork = song && client ? client.coverArtUrl(song.coverArt || song.albumId || song.id, 512) : null
+    session.metadata = song
+      ? new MediaMetadata({
+          title: song.title,
+          artist: song.artist,
+          album: song.album ?? '',
+          artwork: artwork ? [{ src: artwork, sizes: '640x640', type: 'image/jpeg' }] : []
+        })
+      : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [song?.id, client])
+
+  useEffect(() => {
+    navigator.mediaSession.playbackState = song ? (isPlaying ? 'playing' : 'paused') : 'none'
+    window.api.tray.setNowPlaying(song ? { title: song.title, artist: song.artist, isPlaying } : null)
+  }, [song, isPlaying])
+
+  useEffect(() => {
+    const session = navigator.mediaSession
+    const actions = mediaActions
+    const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
+      ['play', () => {
+        if (!actions.current.isPlaying) actions.current.togglePlay()
+      }],
+      ['pause', () => {
+        if (actions.current.isPlaying) actions.current.togglePlay()
+      }],
+      ['stop', () => {
+        if (actions.current.isPlaying) actions.current.togglePlay()
+      }],
+      ['nexttrack', () => actions.current.next()],
+      ['previoustrack', () => actions.current.prev()],
+      ['seekto', (details) => {
+        if (details.seekTime !== undefined) actions.current.seek(details.seekTime)
+      }],
+      ['seekbackward', (details) => actions.current.seek(Math.max(0, actions.current.position() - (details.seekOffset ?? 10)))],
+      ['seekforward', (details) => actions.current.seek(actions.current.position() + (details.seekOffset ?? 10))]
+    ]
+    for (const [action, handler] of handlers) {
+      try {
+        session.setActionHandler(action, handler)
+      } catch {
+        // This Chromium doesn't know the action.
+      }
+    }
+    const stopTrayCommands = window.api.tray.onCommand((command) => {
+      if (command === 'toggle') actions.current.togglePlay()
+      else if (command === 'next') actions.current.next()
+      else actions.current.prev()
+    })
+    return () => {
+      for (const [action] of handlers) {
+        try {
+          session.setActionHandler(action, null)
+        } catch {
+          // Same as above.
+        }
+      }
+      stopTrayCommands()
+      session.metadata = null
+      window.api.tray.setNowPlaying(null)
+    }
+  }, [])
+
+  // The Windows timeline: the local playhead at most once a second, or the remote device's last report.
+  useEffect(() => {
+    const session = navigator.mediaSession
+    const update = (duration: number, position: number, rate: number): void => {
+      if (!(duration > 0)) return
+      try {
+        session.setPositionState({ duration, playbackRate: rate, position: Math.min(Math.max(position, 0), duration) })
+      } catch {
+        // Rejected (e.g. duration not known yet): the next update will do.
+      }
+    }
+    if (isRemote) {
+      update(remoteDevice?.duration ?? 0, remoteDevice?.currentTime ?? 0, 1)
+      return
+    }
+    let last = 0
+    return useNavidromeStore.subscribe((s) => {
+      const now = Date.now()
+      if (now - last < 1000) return
+      last = now
+      update(s.duration, s.currentTime, s.playbackRate)
+    })
+  }, [isRemote, remoteDevice])
 
   const VolumeIcon = volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
   const volumePercent = volume * 100

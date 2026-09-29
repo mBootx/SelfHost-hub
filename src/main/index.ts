@@ -16,11 +16,21 @@ import {
   REMOTE_CONTROL_PORT
 } from './remoteHub'
 import { initAutoUpdates } from './updater'
+import { HIDDEN_ARG, initTray, showWindow } from './tray'
+import { sendMagicPacket } from './wakeOnLan'
 
 const store = new Store({ name: 'selfhost-hub-config' })
 
 let mainWindow: BrowserWindow | null = null
 let offlineDir = ''
+
+// One instance only: with the window hidden in the tray, launching the app again should bring it back,
+// not start a second player.
+if (!app.requestSingleInstanceLock()) app.exit(0)
+app.on('second-instance', () => showWindow(mainWindow))
+
+// Started with Windows (see tray.ts): stay in the notification area until the user opens the window.
+const startHidden = process.argv.includes(HIDDEN_ARG)
 
 // Must run before app is ready. Marking the scheme "standard"+"secure" lets a
 // plain <audio src="offline://..."> load like any other media URL, in both
@@ -54,7 +64,9 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('ready-to-show', () => {
+    if (!startHidden) mainWindow?.show()
+  })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -113,6 +125,8 @@ app.whenReady().then(() => {
   })
 
   registerIpc()
+  // Before the window exists: the tray also decides what closing the window does.
+  initTray(() => mainWindow, store)
   createWindow()
   initAutoUpdates(() => mainWindow)
 
@@ -364,4 +378,6 @@ function registerIpc(): void {
     return true
   })
   ipcMain.handle('remote:getDevices', () => currentDeviceList())
+
+  ipcMain.handle('wol:wake', (_e, args: { mac: string; broadcast: string }) => sendMagicPacket(args.mac, args.broadcast))
 }

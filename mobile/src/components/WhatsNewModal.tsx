@@ -1,14 +1,17 @@
 import { Modal, View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { Sparkles } from 'lucide-react-native'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
+import { useAppLockStore } from '@/store/appLockStore'
 import { colors, radius, spacing } from '@/constants/theme'
 
 export default function WhatsNewModal() {
   const notes = useWhatsNewStore((s) => s.notes)
   const dismiss = useWhatsNewStore((s) => s.dismiss)
+  // Waits for the app to be unlocked: a popup opening later would sit above the lock screen.
+  const unlocked = useAppLockStore((s) => s.status === 'unlocked')
 
   return (
-    <Modal visible={!!notes && notes.length > 0} transparent animationType="fade" onRequestClose={dismiss}>
+    <Modal visible={unlocked && !!notes && notes.length > 0} transparent animationType="fade" onRequestClose={dismiss}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.header}>

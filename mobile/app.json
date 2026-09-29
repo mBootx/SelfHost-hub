@@ -53,7 +53,18 @@
       ],
       "expo-sharing",
       "expo-asset",
-      "./plugins/withHighRefreshRate"
+      "./plugins/withHighRefreshRate",
+      "expo-background-task",
+      [
+        "expo-media-library",
+        {
+          "granularPermissions": [
+            "photo",
+            "video"
+          ],
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

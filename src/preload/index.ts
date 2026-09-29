@@ -3,6 +3,21 @@ import type { AxiosRequestConfig } from 'axios'
 
 export type UpdateCheckOutcome = { status: 'dev' } | { status: 'current' | 'downloading' | 'ready'; version: string }
 
+export interface NowPlaying {
+  title: string
+  artist: string
+  isPlaying: boolean
+}
+
+export interface TraySettings {
+  /** Closing the window hides it in the notification area and playback carries on. */
+  closeToTray: boolean
+  /** Starts with Windows, straight into the notification area. */
+  openAtLogin: boolean
+}
+
+export type TrayCommand = 'toggle' | 'next' | 'prev'
+
 const api = {
   store: {
     get: (key: string) => ipcRenderer.invoke('store:get', key),
@@ -68,6 +83,22 @@ const api = {
         ipcRenderer.removeListener('updater:downloaded', listener)
       }
     }
+  },
+  tray: {
+    setNowPlaying: (info: NowPlaying | null) => ipcRenderer.invoke('tray:setNowPlaying', info),
+    getSettings: (): Promise<TraySettings> => ipcRenderer.invoke('tray:getSettings'),
+    setSettings: (next: Partial<TraySettings>): Promise<TraySettings> => ipcRenderer.invoke('tray:setSettings', next),
+    onCommand: (callback: (command: TrayCommand) => void) => {
+      const listener = (_event: unknown, command: TrayCommand): void => callback(command)
+      ipcRenderer.on('tray:command', listener)
+      return (): void => {
+        ipcRenderer.removeListener('tray:command', listener)
+      }
+    }
+  },
+  wol: {
+    wake: (mac: string, broadcast: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('wol:wake', { mac, broadcast })
   },
   remote: {
     start: (args: { accountHash: string; deviceName: string }) => ipcRenderer.invoke('remote:start', args),

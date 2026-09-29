@@ -69,6 +69,8 @@ export default function MainPlayer(): JSX.Element {
   const artists = useNavidromeStore((s) => s.artists)
   const playlists = useNavidromeStore((s) => s.playlists)
   const recentAlbums = useNavidromeStore((s) => s.recentAlbums)
+  const recentlyPlayed = useNavidromeStore((s) => s.recentlyPlayed)
+  const refreshRecentlyPlayed = useNavidromeStore((s) => s.refreshRecentlyPlayed)
   const history = useHistoryStore((s) => s.entries)
 
   const downtifyClient = useDowntifyStore((s) => s.client)
@@ -125,6 +127,11 @@ export default function MainPlayer(): JSX.Element {
   useEffect(() => {
     loadArtworkOverrides().then(setArtworkOverrides)
   }, [])
+
+  // Picks up what was played on the phone since this list was last loaded.
+  useEffect(() => {
+    if (section === 'home' && client) refreshRecentlyPlayed()
+  }, [section, client, refreshRecentlyPlayed])
 
   // The player bar's "/" shortcut can't reach this input directly (it lives in a
   // sibling component), so it dispatches a plain DOM event instead.
@@ -435,7 +442,36 @@ export default function MainPlayer(): JSX.Element {
 
     return (
       <div className="animate-fade-in space-y-8 p-6">
-        {history.length > 0 && (
+        {/* Plays reported to Navidrome from any device; this computer's own history until there are some. */}
+        {recentlyPlayed.length > 0 ? (
+          <div>
+            <h2 className="mb-3 text-lg font-semibold">Récemment écouté</h2>
+            <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1">
+              {recentlyPlayed.map((album) => (
+                <button
+                  key={album.id}
+                  onClick={() => setSelectedAlbum(album.id)}
+                  className="lazy-tile w-32 shrink-0 rounded-md p-2 text-left hover:bg-surface-hover"
+                >
+                  {client && album.coverArt ? (
+                    <img
+                      src={client.coverArtUrl(album.coverArt, 200)}
+                      alt=""
+                      loading="lazy"
+                      className="mb-2 aspect-square w-full rounded object-cover shadow"
+                    />
+                  ) : (
+                    <div className="mb-2 flex aspect-square w-full items-center justify-center rounded bg-surface-hover">
+                      <ListMusic className="h-6 w-6 text-gray-500" />
+                    </div>
+                  )}
+                  <p className="truncate text-xs font-medium">{album.name}</p>
+                  <p className="truncate text-[11px] text-gray-400">{album.artist}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : history.length > 0 && (
           <div>
             <h2 className="mb-3 text-lg font-semibold">Récemment écouté</h2>
             <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1">

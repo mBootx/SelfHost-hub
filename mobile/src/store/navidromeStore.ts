@@ -15,6 +15,8 @@ interface NavidromeState {
 
   artists: NDArtist[]
   recentAlbums: NDAlbum[]
+  /** Albums most recently played on any device, from the plays reported to Navidrome. */
+  recentlyPlayed: NDAlbum[]
   playlists: NDPlaylist[]
   libraryLoaded: boolean
 
@@ -34,6 +36,7 @@ interface NavidromeState {
   restoreSession: () => Promise<void>
   logout: () => Promise<void>
   loadLibrary: () => Promise<void>
+  refreshRecentlyPlayed: () => Promise<void>
   loadPlaybackPrefs: () => Promise<void>
   createPlaylist: (name: string, songIds?: string[]) => Promise<NDPlaylist>
   addSongsToPlaylist: (playlistId: string, songIds: string[]) => Promise<void>
@@ -65,6 +68,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
 
   artists: [],
   recentAlbums: [],
+  recentlyPlayed: [],
   playlists: [],
   libraryLoaded: false,
 
@@ -128,6 +132,19 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     } catch {
       // best-effort: the library view will show empty sections and can retry via navigation
     }
+    await get().refreshRecentlyPlayed()
+  },
+
+  refreshRecentlyPlayed: async () => {
+    const { client } = get()
+    if (!client) return
+    try {
+      const recentlyPlayed = await client.getAlbumList('recent', 15)
+      set({ recentlyPlayed })
+      prefetchCoverArt(client, recentlyPlayed.map((a) => a.coverArt), 200)
+    } catch {
+      // best-effort: the home screen falls back to this device's own history
+    }
   },
 
   createPlaylist: async (name, songIds) => {
@@ -168,6 +185,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
       username: null,
       artists: [],
       recentAlbums: [],
+      recentlyPlayed: [],
       playlists: [],
       libraryLoaded: false,
       queue: [],

@@ -45,6 +45,30 @@ export interface NDPlaylist {
   coverArt?: string
 }
 
+/** A song someone is playing right now, on any device, as the server sees it. */
+export interface NowPlayingEntry extends NDSong {
+  username: string
+  minutesAgo: number
+  playerName?: string
+}
+
+export interface ScanStatus {
+  scanning: boolean
+  /** Songs in the library. */
+  count: number
+  folderCount: number
+  lastScan: string | null
+}
+
+function toScanStatus(raw: any): ScanStatus {
+  return {
+    scanning: !!raw?.scanning,
+    count: raw?.count ?? 0,
+    folderCount: raw?.folderCount ?? 0,
+    lastScan: raw?.lastScan ?? null
+  }
+}
+
 const CLIENT_NAME = 'SelfHostHub'
 const API_VERSION = '1.16.1'
 
@@ -210,6 +234,40 @@ export class NavidromeClient {
     } catch {
       return null
     }
+  }
+
+  /**
+   * Reports a play. `submission: false` marks the song as now playing; `true` records the play, which
+   * feeds play counts and "recently played" and is forwarded to Last.fm/ListenBrainz if the server is set up for it.
+   */
+  async scrobble(id: string, submission: boolean, time?: number): Promise<void> {
+    const params: Record<string, string> = { id, submission: String(submission) }
+    if (time) params.time = String(time)
+    await this.call('scrobble', params)
+  }
+
+  async getScanStatus(): Promise<ScanStatus> {
+    const body = await this.call<any>('getScanStatus')
+    return toScanStatus(body.scanStatus)
+  }
+
+  /** Looks for new or changed files in the music folders. Needs an admin account. */
+  async startScan(): Promise<ScanStatus> {
+    const body = await this.call<any>('startScan')
+    return toScanStatus(body.scanStatus)
+  }
+
+  /** What every account is playing right now. */
+  async getNowPlaying(): Promise<NowPlayingEntry[]> {
+    const body = await this.call<any>('getNowPlaying')
+    return body.nowPlaying?.entry || []
+  }
+
+  /** Server version and round-trip time. */
+  async ping(): Promise<{ version: string | null; latencyMs: number }> {
+    const started = Date.now()
+    const body = await this.call<any>('ping')
+    return { version: body.serverVersion || null, latencyMs: Date.now() - started }
   }
 
   streamUrl(songId: string): string {

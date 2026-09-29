@@ -2,6 +2,7 @@ import * as Application from 'expo-application'
 import { startActivityAsync } from 'expo-intent-launcher'
 import { Directory, File, Paths } from 'expo-file-system'
 import { fetchWithTimeout } from './http'
+import { expectExternalScreen } from './appLock'
 
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/mBootx/SelfHost-hub/releases/latest'
 const FLAG_GRANT_READ_URI_PERMISSION = 1
@@ -93,6 +94,7 @@ export async function downloadUpdate(update: AvailableUpdate, onProgress: (fract
 
 /** Opens Android's installer on the downloaded APK; the user confirms the update there. */
 export async function openInstaller(update: AvailableUpdate): Promise<void> {
+  expectExternalScreen()
   await startActivityAsync('android.intent.action.VIEW', {
     data: new File(updatesDir, apkName(update.version)).contentUri,
     type: 'application/vnd.android.package-archive',

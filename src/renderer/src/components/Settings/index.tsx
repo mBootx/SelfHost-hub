@@ -113,6 +113,46 @@ function UpdatesRow(): JSX.Element {
   )
 }
 
+type TraySettings = Awaited<ReturnType<typeof window.api.tray.getSettings>>
+
+function DesktopRows(): JSX.Element | null {
+  const [settings, setSettings] = useState<TraySettings | null>(null)
+
+  useEffect(() => {
+    window.api.tray.getSettings().then(setSettings)
+  }, [])
+
+  async function update(next: Partial<TraySettings>): Promise<void> {
+    setSettings(await window.api.tray.setSettings(next))
+  }
+
+  if (!settings) return null
+  return (
+    <div className="space-y-4 rounded-lg border border-surface-border bg-surface-elevated p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold">Garder en arrière-plan</p>
+          <p className="text-xs text-gray-400">
+            Fermer la fenêtre laisse la musique jouer. L&apos;icône près de l&apos;horloge permet de la rouvrir ou de quitter.
+          </p>
+        </div>
+        <Switch checked={settings.closeToTray} onChange={(on) => update({ closeToTray: on })} label="Garder en arrière-plan" />
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold">Lancer au démarrage de Windows</p>
+          <p className="text-xs text-gray-400">Démarre discrètement, dans la zone de notification.</p>
+        </div>
+        <Switch
+          checked={settings.openAtLogin}
+          onChange={(on) => update({ openAtLogin: on })}
+          label="Lancer au démarrage de Windows"
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsModule(): JSX.Element {
   const navidromeStatus = useNavidromeStore((s) => s.status)
   const navidromeUsername = useNavidromeStore((s) => s.username)
@@ -266,6 +306,7 @@ export default function SettingsModule(): JSX.Element {
 
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Application</h2>
+          <DesktopRows />
           <UpdatesRow />
         </section>
       </div>

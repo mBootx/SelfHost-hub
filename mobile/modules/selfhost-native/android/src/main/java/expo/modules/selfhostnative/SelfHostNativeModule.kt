@@ -7,6 +7,9 @@ import expo.modules.audio.AudioPlayer
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
 import kotlin.math.roundToInt
 
 @OptIn(markerClass = [UnstableApi::class])
@@ -41,9 +44,33 @@ class SelfHostNativeModule : Module() {
       true
     }.runOnQueue(Queues.MAIN)
 
+    // Network I/O: stays on the module's background queue.
+    AsyncFunction("sendWakeOnLan") { mac: String, broadcast: String -> sendMagicPacket(mac, broadcast) }
+
     OnDestroy {
       equalizers.values.forEach { it.release() }
       equalizers.clear()
+    }
+  }
+
+  /**
+   * Wakes a sleeping machine on the local network: the "magic packet" (6 bytes of 0xFF, then its MAC
+   * address 16 times) sent as a UDP broadcast. Answers like the desktop app: { ok, error? }.
+   */
+  private fun sendMagicPacket(mac: String, broadcast: String): Map<String, Any> {
+    val hex = mac.replace(Regex("""[\s:.-]"""), "")
+    if (!Regex("[0-9a-fA-F]{12}").matches(hex)) return mapOf("ok" to false, "error" to "Adresse MAC invalide")
+    val macBytes = ByteArray(6) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+    val packet = ByteArray(6 + 16 * 6) { if (it < 6) 0xFF.toByte() else macBytes[(it - 6) % 6] }
+    return try {
+      val address = InetAddress.getByName(broadcast.trim().ifEmpty { "255.255.255.255" })
+      DatagramSocket().use { socket ->
+        socket.broadcast = true
+        socket.send(DatagramPacket(packet, packet.size, address, 9))
+      }
+      mapOf("ok" to true)
+    } catch (e: Exception) {
+      mapOf("ok" to false, "error" to (e.message ?: e.javaClass.simpleName))
     }
   }
 

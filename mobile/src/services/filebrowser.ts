@@ -101,6 +101,10 @@ export class FileBrowserClient {
     return this.source
   }
 
+  getUsername(): string {
+    return this.username
+  }
+
   async login(): Promise<void> {
     const params = new URLSearchParams({ username: this.username, recaptcha: '' })
     const res = await xhrRequest({

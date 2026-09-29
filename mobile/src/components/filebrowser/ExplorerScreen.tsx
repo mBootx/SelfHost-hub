@@ -17,6 +17,7 @@ import {
   Trash2
 } from 'lucide-react-native'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
+import { expectExternalScreen } from '@/services/appLock'
 import { useUploadStore } from '@/store/uploadStore'
 import { useDownloadStore } from '@/store/downloadStore'
 import { FBItem } from '@/services/filebrowser'
@@ -76,6 +77,7 @@ export default function ExplorerScreen() {
     try {
       const uri = await saveToDevice(item)
       const contentUri = new File(uri).contentUri
+      expectExternalScreen()
       await Linking.openURL(contentUri)
     } catch {
       Alert.alert('Impossible', "Aucune application ne peut ouvrir ce fichier, ou le téléchargement a échoué.")
@@ -99,6 +101,7 @@ export default function ExplorerScreen() {
 
   async function handlePickUpload(): Promise<void> {
     if (!client) return
+    expectExternalScreen()
     const result = await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true })
     if (result.canceled) return
     for (const asset of result.assets) {

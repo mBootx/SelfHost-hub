@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Music, FolderOpen, Download, HardDriveDownload, ChevronRight, Check, Cast, RefreshCw, Sparkles } from 'lucide-react-native'
+import { Music, FolderOpen, Download, HardDriveDownload, ChevronRight, Check, Cast, RefreshCw, Sparkles, Server } from 'lucide-react-native'
 import { installedVersion } from '@/services/appUpdate'
+import { useIsOwner } from '@/hooks/useIsOwner'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
 import AppearanceSection from '@/components/settings/AppearanceSection'
 import PlaybackSection from '@/components/settings/PlaybackSection'
+import CameraBackupSection from '@/components/settings/CameraBackupSection'
+import AppLockSection from '@/components/settings/AppLockSection'
 import { useUpdateStore } from '@/store/updateStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
@@ -77,6 +80,7 @@ function ServiceRow({
 
 export default function SettingsTab() {
   const router = useRouter()
+  const isOwner = useIsOwner()
   const navidromeStatus = useNavidromeStore((s) => s.status)
   const navidromeUsername = useNavidromeStore((s) => s.username)
   const navidromeLogout = useNavidromeStore((s) => s.logout)
@@ -179,6 +183,24 @@ export default function SettingsTab() {
           onLogout={downtifyLogout}
           onConnect={() => router.push('/downtify/connect')}
         />
+        {/* The server dashboard: only for the account that runs the server. */}
+        {isOwner && (
+          <Pressable
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            onPress={() => router.push('/server')}
+            accessibilityRole="button"
+            accessibilityLabel="Serveur"
+          >
+            <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
+              <Server size={20} color={colors.textSecondary} />
+            </View>
+            <View style={styles.rowInfo}>
+              <Text style={styles.rowTitle}>Serveur</Text>
+              <Text style={styles.rowMeta}>État des services, stockage, scan, réveil à distance</Text>
+            </View>
+            <ChevronRight size={18} color={colors.textMuted} />
+          </Pressable>
+        )}
 
         <View style={styles.sectionSpacer}>
           <SectionTitle>Contrôle à distance</SectionTitle>
@@ -286,6 +308,8 @@ export default function SettingsTab() {
 
         <AppearanceSection />
         <PlaybackSection />
+        <CameraBackupSection />
+        <AppLockSection />
 
         <View style={styles.sectionSpacer}>
           <SectionTitle>Stockage</SectionTitle>

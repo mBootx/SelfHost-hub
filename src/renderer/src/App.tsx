@@ -5,6 +5,7 @@ import ErrorBoundary from '@renderer/components/ErrorBoundary'
 import NavidromeModule from '@renderer/components/Navidrome'
 import FileBrowserModule from '@renderer/components/FileBrowser'
 import SettingsModule from '@renderer/components/Settings'
+import ServerDashboard from '@renderer/components/Server'
 import Player from '@renderer/components/Navidrome/Player'
 import UploadManager from '@renderer/components/FileBrowser/UploadManager'
 import ToastHost from '@renderer/components/Toast'
@@ -19,6 +20,21 @@ import { useRemoteStore } from '@renderer/store/remoteStore'
 import { useHistoryStore } from '@renderer/store/historyStore'
 import { useWhatsNewStore } from '@renderer/store/whatsNewStore'
 import { startPlaybackMemory } from '@renderer/services/playbackMemory'
+import { startScrobbler } from '@renderer/services/scrobbler'
+import { startDownloadWatcher } from '@renderer/services/downloadWatcher'
+import { useIsOwner } from '@renderer/hooks/useIsOwner'
+
+/** Only the server's owner gets the dashboard; anyone else landing here goes back to the music. */
+function ServerRoute(): JSX.Element | null {
+  const isOwner = useIsOwner()
+  if (isOwner === null) return null
+  if (!isOwner) return <Navigate to="/navidrome" replace />
+  return (
+    <ErrorBoundary label="Serveur">
+      <ServerDashboard />
+    </ErrorBoundary>
+  )
+}
 
 export default function App(): JSX.Element {
   const restoreNavidrome = useNavidromeStore((s) => s.restoreSession)
@@ -45,6 +61,8 @@ export default function App(): JSX.Element {
     loadPlaybackPrefs()
     // Before the player mounts (it waits for Navidrome), so it opens on the restored track.
     startPlaybackMemory()
+    startScrobbler()
+    startDownloadWatcher()
     checkWhatsNew()
   }, [])
 
@@ -78,6 +96,7 @@ export default function App(): JSX.Element {
                 </ErrorBoundary>
               }
             />
+            <Route path="/server" element={<ServerRoute />} />
             <Route
               path="/settings"
               element={

@@ -4,6 +4,7 @@ import { File } from 'expo-file-system'
 import * as Sharing from 'expo-sharing'
 import { Download, Share2, Trash2 } from 'lucide-react-native'
 import { useDownloadStore, DownloadedFile } from '@/store/downloadStore'
+import { expectExternalScreen } from '@/services/appLock'
 import { EmptyState } from '@/components/Screen'
 import { FBItem } from '@/services/filebrowser'
 import { iconFor } from './FileRow'
@@ -48,6 +49,7 @@ export default function DownloadsList() {
     try {
       // content:// rather than file://, which Android refuses to hand to other apps.
       const contentUri = new File(uriFor(file.filename)).contentUri
+      expectExternalScreen()
       await Linking.openURL(contentUri)
     } catch {
       Alert.alert('Impossible', "Aucune application ne peut ouvrir ce fichier.")
@@ -58,6 +60,7 @@ export default function DownloadsList() {
 
   async function share(file: DownloadedFile): Promise<void> {
     if (!(await Sharing.isAvailableAsync())) return
+    expectExternalScreen()
     await Sharing.shareAsync(uriFor(file.filename))
   }
 

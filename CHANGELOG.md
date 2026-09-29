@@ -6,6 +6,30 @@
 - **App icon:** SelfHost Hub has its own logo, a roof over a play button made of three linked nodes (music, files, downloads).
   - **Windows:** on the app, the installer, the taskbar and the window. The sidebar shows it in your accent colour.
   - **Android:** on the launcher (adaptive, round and themed icons) and the splash screen.
+- **Plays sync with Navidrome:** a song counts once you've heard half of it, or 4 minutes. Seeking and pauses don't count. Play counts and "Récemment écouté" on the home screen now follow you from one device to the other, and on to Last.fm or ListenBrainz if your server forwards them. Plays made offline are kept and sent when the server is back.
+- **New downloads show up right away:** when Downtify finishes a download, Navidrome is asked to scan for it, and the library reloads with a "Nouveaux titres ajoutés" message. An album finishing at once triggers a single scan. This needs a Navidrome admin account.
+- **Server dashboard** (only for the server owner's account):
+  - Each service's status, response time and version.
+  - Disk space, library size, and when the library was last scanned, with a button to scan now.
+  - Who is listening to what, and the Downtify queue.
+  - A Wake-on-LAN button to wake a sleeping server; the page then watches for it to come back.
+  - **Desktop:** "Serveur" in the sidebar. **Android:** Settings → Services → Serveur.
+- **Windows media controls:** the current song and its cover appear in the Windows volume panel, and the keyboard media keys (play/pause, next, previous) work even when the app isn't focused.
+- **System tray (desktop):**
+  - Closing the window keeps the music playing. The icon near the clock plays/pauses, skips, reopens the window or quits.
+  - Opening the app again brings the existing window back.
+  - A new option starts SelfHost Hub with Windows, straight into the tray. Both options are in Settings → Application.
+- **Camera backup (Android):** new photos and videos from the camera are uploaded to FileBrowser, sorted by year and month.
+  - Runs when you open the app, and in the background about every 15 minutes (Android decides exactly when).
+  - Wi-Fi only by default; photo locations are kept.
+  - When you turn it on, you choose between only the next photos or everything already on the phone.
+  - A file the server refuses is retried twice more, then skipped; a dropped connection just waits for the next run.
+- **App lock (Android):** a code (4 to 8 digits) or a pattern, drawn on the app's own screens.
+  - Optional fingerprint unlock. Face recognition is never used.
+  - Choose when it locks: immediately, or after 1, 5 or 15 minutes away. Opening a file, sharing or picking a file doesn't lock it.
+  - Five wrong tries pause input for 30 seconds, doubling each time after that.
+  - Forgot the code? The Navidrome or FileBrowser password saved on the phone turns the lock off.
+  - Music keeps playing while the app is locked.
 
 ## 2.1.0 — 2026-09-29
 
