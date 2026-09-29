@@ -9,6 +9,35 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '2.2.0',
+    items: [
+      {
+        title: 'Écoutes synchronisées',
+        text: "Vos écoutes sont envoyées à Navidrome : « Récemment écouté » et les compteurs d'écoute vous suivent d'un appareil à l'autre, même après une écoute hors ligne."
+      },
+      {
+        title: 'Nouveaux titres',
+        text: 'Quand Downtify termine un téléchargement, la bibliothèque se met à jour toute seule.'
+      },
+      {
+        title: 'Contrôles Windows',
+        text: 'Le titre et la pochette apparaissent dans le panneau de volume de Windows, et les touches multimédia du clavier fonctionnent.'
+      },
+      {
+        title: 'Zone de notification',
+        text: "Fermer la fenêtre laisse la musique jouer : l'icône près de l'horloge permet de la piloter. L'application peut aussi démarrer avec Windows (Réglages → Application)."
+      },
+      {
+        title: 'Serveur',
+        text: "Pour le propriétaire du serveur : un onglet avec l'état des services, l'espace disque, le scan de la bibliothèque et le réveil à distance."
+      },
+      {
+        title: 'Nouvelle icône',
+        text: 'SelfHost Hub a désormais son propre logo.'
+      }
+    ]
+  },
+  {
     version: '2.1.0',
     items: [
       {

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 — 2026-09-29
 
 ### Added
 - **App icon:** SelfHost Hub has its own logo, a roof over a play button made of three linked nodes (music, files, downloads).
