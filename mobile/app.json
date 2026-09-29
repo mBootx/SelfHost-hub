@@ -9,7 +9,6 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0a0a0a",
     "ios": {
-      "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.selfhosthub.mobile",
       "infoPlist": {
         "UIBackgroundModes": [
@@ -42,7 +41,7 @@
         {
           "backgroundColor": "#0a0a0a",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 96
         }
       ],
       "expo-secure-store",

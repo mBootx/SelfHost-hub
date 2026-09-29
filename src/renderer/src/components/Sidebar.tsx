@@ -4,6 +4,7 @@ import { useUIStore } from '@renderer/store/uiStore'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
+import AppLogo from './AppLogo'
 
 // Downtify has no destination of its own: its search folds into Navidrome's and
 // its queue/options live in Reglages, which also shows every service's status.
@@ -56,9 +57,7 @@ export default function Sidebar(): JSX.Element {
       }`}
     >
       <div className="flex items-center gap-2 px-4 py-5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent font-bold text-black">
-          H
-        </div>
+        <AppLogo className="h-8 w-8 shrink-0" />
         {!sidebarCollapsed && <span className="truncate font-semibold tracking-tight">SelfHost Hub</span>}
       </div>
 

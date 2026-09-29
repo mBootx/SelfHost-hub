@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-128 -128 768 768" width="768" height="768">
+  <title>SelfHost Hub</title>
+  <defs>
+    <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="512">
+      <stop offset="0" stop-color="#1b2721"/>
+      <stop offset="1" stop-color="#090c0b"/>
+    </linearGradient>
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="256" cy="287" r="235">
+      <stop offset="0" stop-color="#1DB954" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#1DB954" stop-opacity="0"/>
+    </radialGradient>
+    <!-- One gradient across the whole emblem, so the roof and the nodes share the same light. -->
+    <linearGradient id="green" gradientUnits="userSpaceOnUse" x1="150" y1="100" x2="370" y2="420">
+      <stop offset="0" stop-color="#4ADE80"/>
+      <stop offset="0.55" stop-color="#1DB954"/>
+      <stop offset="1" stop-color="#15803D"/>
+    </linearGradient>
+    <!-- Punches the centre out of each node, so they read as ports on the hub. -->
+    <mask id="holes" maskUnits="userSpaceOnUse" x="-128" y="-128" width="768" height="768">
+      <rect x="-128" y="-128" width="768" height="768" fill="#fff"/>
+      <circle cx="212" cy="238" r="11" fill="#000"/>
+      <circle cx="346" cy="314" r="11" fill="#000"/>
+      <circle cx="212" cy="390" r="11" fill="#000"/>
+    </mask>
+  </defs>
+  <rect x="-128" y="-128" width="768" height="768" fill="url(#bg)"/>
+  <rect x="-128" y="-128" width="768" height="768" fill="url(#glow)"/>
+</svg>

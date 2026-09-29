@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **App icon:** SelfHost Hub has its own logo, a roof over a play button made of three linked nodes (music, files, downloads).
+  - **Windows:** on the app, the installer, the taskbar and the window. The sidebar shows it in your accent colour.
+  - **Android:** on the launcher (adaptive, round and themed icons) and the splash screen.
+
 ## 2.1.0 — 2026-09-29
 
 ### Added
