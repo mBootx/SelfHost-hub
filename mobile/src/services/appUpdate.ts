@@ -21,7 +21,7 @@ function versionParts(version: string): number[] {
     .map((n) => parseInt(n, 10) || 0)
 }
 
-function isNewer(candidate: string, current: string): boolean {
+export function isNewer(candidate: string, current: string): boolean {
   const a = versionParts(candidate)
   const b = versionParts(current)
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
@@ -43,7 +43,7 @@ export function installedVersion(): string {
 /** The latest GitHub release, if it is newer than this install and ships an APK. */
 export async function findUpdate(): Promise<AvailableUpdate | null> {
   const res = await fetchWithTimeout(LATEST_RELEASE_URL, { headers: { Accept: 'application/vnd.github+json' } })
-  if (!res.ok) throw new Error(`GitHub a repondu ${res.status}`)
+  if (!res.ok) throw new Error(`GitHub a répondu ${res.status}`)
   const release = await res.json()
   const version = String(release.tag_name ?? '').replace(/^v/i, '')
   const apk = (release.assets ?? []).find((a: { name: string }) => a.name.endsWith('.apk'))
@@ -86,9 +86,9 @@ export async function downloadUpdate(update: AvailableUpdate, onProgress: (fract
     onProgress: ({ bytesWritten, totalBytes }) => onProgress(bytesWritten / (totalBytes || update.sizeBytes || 1))
   })
   const file = await task.downloadAsync()
-  if (!file) throw new Error('Telechargement interrompu')
+  if (!file) throw new Error('Téléchargement interrompu')
   file.rename(apkName(update.version))
-  if (!isDownloaded(update)) throw new Error('Fichier telecharge incomplet, reessayez')
+  if (!isDownloaded(update)) throw new Error('Fichier téléchargé incomplet, réessayez')
 }
 
 /** Opens Android's installer on the downloaded APK; the user confirms the update there. */

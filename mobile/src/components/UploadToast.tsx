@@ -57,7 +57,7 @@ export default function UploadToast({ bottomOffset = 0 }: { bottomOffset?: numbe
                   <View style={[styles.fill, { width: `${t.status === 'done' ? 100 : percent}%` }]} />
                 </View>
                 <Text style={styles.meta}>
-                  {t.status === 'done' ? 'Termine' : `${percent}%${t.speedBps > 0 ? ` - ${formatSpeed(t.speedBps)}` : ''}`}
+                  {t.status === 'done' ? 'Terminé' : `${percent}%${t.speedBps > 0 ? ` - ${formatSpeed(t.speedBps)}` : ''}`}
                 </Text>
               </>
             )}

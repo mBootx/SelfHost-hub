@@ -5,24 +5,7 @@ import {
   EQ_PRESETS,
   useAudioSettingsStore
 } from '@renderer/store/audioSettingsStore'
-
-function Switch({ checked, onChange, label }: { checked: boolean; onChange: (on: boolean) => void; label: string }): JSX.Element {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-surface-hover'}`}
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-    >
-      <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-          checked ? 'translate-x-5' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
-  )
-}
+import Switch from '@renderer/components/Switch'
 
 function formatFrequency(hz: number): string {
   return hz >= 1000 ? `${hz / 1000}k` : String(hz)
@@ -47,9 +30,9 @@ export default function PlaybackSection(): JSX.Element {
         <div className="space-y-5 rounded-lg border border-surface-border bg-surface-elevated p-4">
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-semibold">Fondu enchaine</p>
+              <p className="text-sm font-semibold">Fondu enchaîné</p>
               <span className="text-xs tabular-nums text-gray-400">
-                {crossfadeSeconds === 0 ? 'Desactive' : `${crossfadeSeconds} s`}
+                {crossfadeSeconds === 0 ? 'Désactivé' : `${crossfadeSeconds} s`}
               </span>
             </div>
             <input
@@ -61,17 +44,17 @@ export default function PlaybackSection(): JSX.Element {
               onChange={(e) => setCrossfade(Number(e.target.value))}
               className="range-accent w-full"
               style={{ '--range-progress': `${(crossfadeSeconds / CROSSFADE_MAX_S) * 100}%` } as React.CSSProperties}
-              aria-label="Duree du fondu enchaine"
+              aria-label="Durée du fondu enchaîné"
             />
             <p className="mt-2 text-xs text-gray-500">
-              Quand un titre se termine, le suivant commence en fondu par-dessus. Les changements manuels restent instantanes.
+              Quand un titre se termine, le suivant commence en fondu par-dessus. Les changements manuels restent instantanés.
             </p>
           </div>
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-semibold">Lecture sans blanc</p>
               <p className="text-xs text-gray-500">
-                Precharge le titre suivant pour l'enchainer sans silence quand le fondu est desactive.
+                Précharge le titre suivant pour l'enchaîner sans silence quand le fondu est désactivé.
               </p>
             </div>
             <Switch checked={gapless} onChange={setGapless} label="Lecture sans blanc" />
@@ -80,11 +63,11 @@ export default function PlaybackSection(): JSX.Element {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Egaliseur</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Égaliseur</h2>
         <div className="space-y-5 rounded-lg border border-surface-border bg-surface-elevated p-4">
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm font-semibold">Activer l'egaliseur</p>
-            <Switch checked={eqEnabled} onChange={setEqEnabled} label="Activer l'egaliseur" />
+            <p className="text-sm font-semibold">Activer l'égaliseur</p>
+            <Switch checked={eqEnabled} onChange={setEqEnabled} label="Activer l'égaliseur" />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {EQ_PRESETS.map((preset) => (
@@ -100,7 +83,7 @@ export default function PlaybackSection(): JSX.Element {
             ))}
             {eqPreset === 'custom' && (
               <span className={`rounded-full px-3 py-1 text-xs font-medium ${eqEnabled ? 'bg-accent text-black' : 'bg-surface-hover text-gray-400'}`}>
-                Personnalise
+                Personnalisé
               </span>
             )}
           </div>
@@ -127,7 +110,7 @@ export default function PlaybackSection(): JSX.Element {
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-500">En dB. Le volume global baisse d'autant que la bande la plus poussee pour eviter la saturation.</p>
+          <p className="text-xs text-gray-500">En dB. Le volume global baisse d'autant que la bande la plus poussée pour éviter la saturation.</p>
         </div>
       </section>
     </>

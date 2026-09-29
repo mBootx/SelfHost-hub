@@ -105,10 +105,10 @@ export class NavidromeClient {
     const url = `${this.baseUrl}/rest/${method}.view?${search.toString()}`
     const res = await window.api.net.request({ url, method: 'GET' })
     if (!res.ok) {
-      throw new ApiError(res.error || `Requete echouee (${res.status})`, res.status)
+      throw new ApiError(res.error || `Requête échouée (${res.status})`, res.status)
     }
     const body = res.data?.['subsonic-response']
-    if (!body) throw new ApiError('Reponse Navidrome invalide', res.status)
+    if (!body) throw new ApiError('Réponse Navidrome invalide', res.status)
     if (body.status === 'failed') {
       const code = body.error?.code
       throw new ApiError(body.error?.message || 'Erreur Navidrome', code === 40 ? 401 : 500)

@@ -10,7 +10,7 @@ import { useDowntifyStore } from '@renderer/store/downtifyStore'
 const NAV_ITEMS = [
   { to: '/navidrome', label: 'Navidrome', icon: Music },
   { to: '/filebrowser', label: 'FileBrowser', icon: FolderOpen },
-  { to: '/settings', label: 'Reglages', icon: Settings }
+  { to: '/settings', label: 'Réglages', icon: Settings }
 ]
 
 function StatusDot({ status }: { status: string }): JSX.Element {
@@ -87,7 +87,7 @@ export default function Sidebar(): JSX.Element {
                 )}
               </span>
               {!sidebarCollapsed && <span className="flex-1 truncate">{label}</span>}
-              {!sidebarCollapsed && (showIndicator ? <PlayingIndicator title="Lecture en arriere-plan" /> : <StatusDot status={statuses[to]} />)}
+              {!sidebarCollapsed && (showIndicator ? <PlayingIndicator title="Lecture en arrière-plan" /> : <StatusDot status={statuses[to]} />)}
             </NavLink>
           )
         })}
@@ -98,7 +98,7 @@ export default function Sidebar(): JSX.Element {
         className="mx-2 mb-4 flex items-center justify-center gap-2 rounded-md py-2 text-gray-400 transition-colors hover:bg-surface-hover hover:text-white"
       >
         {sidebarCollapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
-        {!sidebarCollapsed && <span className="text-xs">Reduire</span>}
+        {!sidebarCollapsed && <span className="text-xs">Réduire</span>}
       </button>
     </aside>
   )

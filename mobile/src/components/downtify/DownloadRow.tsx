@@ -33,7 +33,7 @@ export default function DownloadRow({ song }: { song: DowntifySong }) {
     try {
       await queueDownload(song)
     } catch (err: any) {
-      Alert.alert('Telechargement impossible', err?.message || 'Downtify n’a pas pu recuperer ce titre.')
+      Alert.alert('Téléchargement impossible', err?.message || 'Downtify n’a pas pu récupérer ce titre.')
     } finally {
       setPending(false)
     }
@@ -74,7 +74,7 @@ export default function DownloadRow({ song }: { song: DowntifySong }) {
             onPress={handleDownload}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={`Telecharger ${song.name}`}
+            accessibilityLabel={`Télécharger ${song.name}`}
           >
             <Download size={18} color={colors.textSecondary} />
           </Pressable>

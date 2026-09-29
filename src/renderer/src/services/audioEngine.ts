@@ -105,8 +105,11 @@ export class AudioEngine {
     this.handlers = handlers
   }
 
-  /** Makes `id` current: keeps it if a transition already started it, switches instantly if it was preloaded, else loads it. */
-  load(id: string, src: string, autoplay: boolean): void {
+  /**
+   * Makes `id` current: keeps it if a transition already started it, switches instantly if it was
+   * preloaded, else loads it. `startAt` (seconds) resumes a track part-way through.
+   */
+  load(id: string, src: string, autoplay: boolean, startAt = 0): void {
     const current = this.decks[this.active]
     if (current.trackId === id) {
       if (autoplay) this.play()
@@ -118,12 +121,15 @@ export class AudioEngine {
     if (other.trackId === id && other.ready) {
       this.stopDeck(current)
       this.active = otherIndex
-      other.el.currentTime = 0
+      other.el.currentTime = startAt
       this.setGain(other, 1)
     } else {
       current.trackId = id
       current.ready = false
       current.el.src = src
+      // Before metadata arrives this only records the start position; the element seeks there as
+      // soon as it can, and reports it as currentTime meanwhile.
+      if (startAt > 0) current.el.currentTime = startAt
       this.applyRate(current)
       this.setGain(current, 1)
     }

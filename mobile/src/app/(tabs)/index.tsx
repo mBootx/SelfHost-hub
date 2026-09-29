@@ -124,7 +124,7 @@ function HomeContent() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} colors={[colors.accent]} />
         }
       >
-        {isEmpty && <EmptyState icon={Music} title="Bibliotheque vide" hint="Tirez vers le bas pour recharger depuis le serveur." />}
+        {isEmpty && <EmptyState icon={Music} title="Bibliothèque vide" hint="Tirez vers le bas pour recharger depuis le serveur." />}
 
         {quickPlaylists.length > 0 && (
           <View style={styles.quickGrid}>
@@ -137,7 +137,7 @@ function HomeContent() {
         {history.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHead}>
-              <SectionTitle>Recemment ecoute</SectionTitle>
+              <SectionTitle>Récemment écouté</SectionTitle>
             </View>
             <FlatList
               horizontal
@@ -153,7 +153,7 @@ function HomeContent() {
         {recentAlbums.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHead}>
-              <SectionTitle>Ajouts recents</SectionTitle>
+              <SectionTitle>Ajouts récents</SectionTitle>
             </View>
             <FlatList
               horizontal

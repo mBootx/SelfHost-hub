@@ -25,7 +25,7 @@ export default function UpdatePrompt() {
       <View style={styles.row}>
         <Download size={16} color={colors.accent} />
         <Text style={styles.title} numberOfLines={1}>
-          Mise a jour {update.version} disponible
+          Mise à jour {update.version} disponible
         </Text>
         {!busy && (
           <Pressable onPress={dismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Plus tard">
@@ -38,7 +38,7 @@ export default function UpdatePrompt() {
           <View style={styles.track}>
             <View style={[styles.fill, { width: `${progress}%` }]} />
           </View>
-          <Text style={styles.meta}>Telechargement... {progress}%</Text>
+          <Text style={styles.meta}>Téléchargement... {progress}%</Text>
         </>
       ) : phase === 'installing' ? (
         <Text style={styles.meta}>Ouverture de l'installateur...</Text>
@@ -48,11 +48,11 @@ export default function UpdatePrompt() {
             {phase === 'error'
               ? error
               : readyToInstall
-                ? "Deja telechargee - Android vous demandera de confirmer l'installation."
+                ? "Déjà téléchargée - Android vous demandera de confirmer l'installation."
                 : `${sizeMb} Mo - Android vous demandera de confirmer l'installation.`}
           </Text>
           <Pressable style={({ pressed }) => [styles.button, pressed && styles.pressed]} onPress={install}>
-            <Text style={styles.buttonText}>{phase === 'error' ? 'Reessayer' : readyToInstall ? 'Installer' : 'Mettre a jour'}</Text>
+            <Text style={styles.buttonText}>{phase === 'error' ? 'Réessayer' : readyToInstall ? 'Installer' : 'Mettre à jour'}</Text>
           </Pressable>
         </>
       )}

@@ -97,7 +97,7 @@ export class RemoteHubClient {
         if (settled) return
         settled = true
         ws.close()
-        reject(new Error('Connexion expiree'))
+        reject(new Error('Connexion expirée'))
       }, 5000)
 
       ws.onopen = () => {
@@ -121,7 +121,7 @@ export class RemoteHubClient {
             resolve({ hubDeviceId: msg.hubDeviceId, hubDeviceName: msg.hubDeviceName })
           } else {
             ws.close()
-            reject(new Error(msg.reason === 'account-mismatch' ? 'Compte Navidrome different sur le PC' : 'Connexion refusee'))
+            reject(new Error(msg.reason === 'account-mismatch' ? 'Compte Navidrome différent sur le PC' : 'Connexion refusée'))
           }
           return
         }

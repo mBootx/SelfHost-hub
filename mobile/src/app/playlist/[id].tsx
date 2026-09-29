@@ -17,7 +17,7 @@ const SORT_OPTIONS: { key: SortMode; label: string }[] = [
   { key: 'default', label: 'Ordre' },
   { key: 'title', label: 'Titre' },
   { key: 'artist', label: 'Artiste' },
-  { key: 'duration', label: 'Duree' }
+  { key: 'duration', label: 'Durée' }
 ]
 
 /** A playlist slot; `key` stays valid as earlier slots are removed, unlike its index. */
@@ -65,7 +65,7 @@ export default function PlaylistScreen() {
         await removeFromPlaylist(id, index)
         serverEntries.current = serverEntries.current.filter((e) => e.key !== key)
         setEntries(serverEntries.current)
-        showToast('Retire de la playlist')
+        showToast('Retiré de la playlist')
       } catch {
         showToast('Impossible de retirer ce titre')
       } finally {
@@ -80,7 +80,7 @@ export default function PlaylistScreen() {
 
   function confirmDelete(): void {
     if (!id || !playlist) return
-    Alert.alert('Supprimer la playlist', `"${playlist.name}" sera definitivement supprimee.`, [
+    Alert.alert('Supprimer la playlist', `"${playlist.name}" sera définitivement supprimée.`, [
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Supprimer',
@@ -88,7 +88,7 @@ export default function PlaylistScreen() {
         onPress: async () => {
           try {
             await deletePlaylist(id)
-            showToast(`Playlist "${playlist.name}" supprimee`)
+            showToast(`Playlist "${playlist.name}" supprimée`)
             navigation.goBack()
           } catch (err: any) {
             showToast(err?.message || 'Impossible de supprimer la playlist')
@@ -166,7 +166,7 @@ export default function PlaylistScreen() {
               style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
               onPress={() => downloadTracks(songs, client)}
               accessibilityRole="button"
-              accessibilityLabel="Telecharger pour l'ecoute hors-ligne"
+              accessibilityLabel="Télécharger pour l'écoute hors-ligne"
             >
               <HardDriveDownload size={16} color={colors.textSecondary} />
             </Pressable>

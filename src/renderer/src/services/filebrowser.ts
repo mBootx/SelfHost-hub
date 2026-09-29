@@ -101,12 +101,12 @@ export class FileBrowserClient {
       } catch {
         // response body wasn't JSON, keep the default message
       }
-      throw new ApiError(message || 'Connexion echouee', res.status || 401)
+      throw new ApiError(message || 'Connexion échouée', res.status || 401)
     }
     const token = extractCookie(res.headers?.['set-cookie'], JWT_COOKIE_NAME)
     if (!token) {
       throw new ApiError(
-        "Session introuvable dans la reponse du serveur (l'authentification a deux facteurs n'est pas geree)",
+        "Session introuvable dans la réponse du serveur (l'authentification à deux facteurs n'est pas gérée)",
         500
       )
     }
@@ -143,7 +143,7 @@ export class FileBrowserClient {
       method: 'GET',
       headers: this.authHeaders()
     })
-    if (res.status === 401) throw new ApiError('Session expiree', 401)
+    if (res.status === 401) throw new ApiError('Session expirée', 401)
     if (!res.ok) throw new ApiError(res.error || 'Impossible de lister le dossier', res.status)
     const data = res.data || {}
     const folders = (data.folders || []).map((f: any) => ({ ...f, isDir: true }))
@@ -203,7 +203,7 @@ export class FileBrowserClient {
       headers: this.authHeaders(),
       method: 'POST'
     })
-    if (!res.ok) throw new ApiError("Echec de l'upload", res.status || 500)
+    if (!res.ok) throw new ApiError("Échec de l'upload", res.status || 500)
   }
 
   async pickFiles(): Promise<{ path: string; size: number }[]> {
@@ -242,7 +242,7 @@ export class FileBrowserClient {
       method: 'POST',
       headers: this.authHeaders()
     })
-    if (!res.ok) throw new ApiError('Creation du dossier impossible', res.status)
+    if (!res.ok) throw new ApiError('Création du dossier impossible', res.status)
   }
 
   async getSourcesUsage(): Promise<SourceUsage[]> {
@@ -251,7 +251,7 @@ export class FileBrowserClient {
       method: 'GET',
       headers: this.authHeaders()
     })
-    if (!res.ok) throw new ApiError("Impossible de recuperer l'espace disque", res.status)
+    if (!res.ok) throw new ApiError("Impossible de récupérer l'espace disque", res.status)
     const data = res.data || {}
     return Object.entries(data).map(([key, raw]) => {
       const v = raw as Record<string, any>
@@ -282,7 +282,7 @@ export class FileBrowserClient {
       method: 'GET',
       headers: this.authHeaders()
     })
-    if (!res.ok) throw new ApiError('Apercu impossible', res.status)
+    if (!res.ok) throw new ApiError('Aperçu impossible', res.status)
     return typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
   }
 }

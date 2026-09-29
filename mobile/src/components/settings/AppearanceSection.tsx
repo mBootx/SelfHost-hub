@@ -26,14 +26,14 @@ export default function AppearanceSection() {
   const changed = accent.toLowerCase() !== appearance.accent.toLowerCase() || background !== appearance.background
 
   function applyTheme(): void {
-    Alert.alert('Appliquer le theme', "L'application va redemarrer pour appliquer les couleurs ; la lecture en cours s'arretera.", [
+    Alert.alert('Appliquer le thème', "L'application va redémarrer pour appliquer les couleurs ; la lecture en cours s'arrêtera.", [
       { text: 'Annuler', style: 'cancel' },
       {
-        text: 'Redemarrer',
+        text: 'Redémarrer',
         onPress: () => {
           saveAppearance({ accent, background })
-          reloadAppAsync('Theme change').catch(() =>
-            Alert.alert('Theme enregistre', "Fermez puis rouvrez l'application pour l'appliquer.")
+          reloadAppAsync('Thème changé').catch(() =>
+            Alert.alert('Thème enregistré', "Fermez puis rouvrez l'application pour l'appliquer.")
           )
         }
       }
@@ -118,7 +118,7 @@ export default function AppearanceSection() {
             }}
             hitSlop={8}
           >
-            <Text style={styles.reset}>Theme d'origine</Text>
+            <Text style={styles.reset}>Thème d'origine</Text>
           </Pressable>
           <Pressable
             onPress={applyTheme}

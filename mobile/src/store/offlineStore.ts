@@ -110,7 +110,7 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
     } catch (err: any) {
       set((s) => {
         const { [song.id]: _removed, ...downloading } = s.downloading
-        return { downloading, errors: { ...s.errors, [song.id]: err?.message || 'Erreur de telechargement' } }
+        return { downloading, errors: { ...s.errors, [song.id]: err?.message || 'Erreur de téléchargement' } }
       })
     }
   },

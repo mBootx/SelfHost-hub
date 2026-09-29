@@ -114,7 +114,7 @@ export const useDowntifyStore = create<DowntifyState>((set, get) => ({
   // progress shown.
   queueDownload: async (song) => {
     const { client } = get()
-    if (!client) throw new Error('Downtify non connecte')
+    if (!client) throw new Error('Downtify non connecté')
     set((s) => ({ activeDownloads: s.activeDownloads + 1 }))
     get().startPolling()
     setTimeout(() => get().refreshQueue(), 500)
@@ -124,7 +124,7 @@ export const useDowntifyStore = create<DowntifyState>((set, get) => ({
 
   requestDownload: async (query, type) => {
     const { client } = get()
-    if (!client) throw new Error('Downtify non connecte')
+    if (!client) throw new Error('Downtify non connecté')
     const targets = await client.queueByQuery(query, type)
     set((s) => ({ activeDownloads: s.activeDownloads + targets.length }))
     get().startPolling()

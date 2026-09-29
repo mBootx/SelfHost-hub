@@ -28,7 +28,7 @@ export default function LoginScreen() {
     <LoginLayout
       icon={FolderOpen}
       accent={colors.filebrowser}
-      title="Connexion a FileBrowser"
+      title="Connexion à FileBrowser"
       subtitle="Interface OpenMediaVault"
       error={error}
       loading={loading}

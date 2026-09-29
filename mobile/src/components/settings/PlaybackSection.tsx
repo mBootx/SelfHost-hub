@@ -49,8 +49,8 @@ export default function PlaybackSection() {
       </View>
       <View style={styles.card}>
         <View style={styles.labelRow}>
-          <Text style={styles.label}>Fondu enchaine</Text>
-          <Text style={styles.value}>{crossfadeSeconds === 0 ? 'Desactive' : `${crossfadeSeconds} s`}</Text>
+          <Text style={styles.label}>Fondu enchaîné</Text>
+          <Text style={styles.value}>{crossfadeSeconds === 0 ? 'Désactivé' : `${crossfadeSeconds} s`}</Text>
         </View>
         <Slider
           value={crossfadeSeconds}
@@ -61,27 +61,27 @@ export default function PlaybackSection() {
           minimumTrackTintColor={colors.accent}
           maximumTrackTintColor={colors.hover}
           thumbTintColor="#ffffff"
-          accessibilityLabel="Duree du fondu enchaine"
+          accessibilityLabel="Durée du fondu enchaîné"
         />
         <Text style={styles.hint}>
-          Quand un titre se termine, le suivant commence en fondu par-dessus. Les changements manuels restent instantanes.
+          Quand un titre se termine, le suivant commence en fondu par-dessus. Les changements manuels restent instantanés.
         </Text>
         <View style={styles.divider} />
         <ToggleRow
           title="Lecture sans blanc"
-          hint="Precharge le titre suivant pour l'enchainer sans silence quand le fondu est desactive."
+          hint="Précharge le titre suivant pour l'enchaîner sans silence quand le fondu est désactivé."
           value={gapless}
           onChange={setGapless}
         />
       </View>
 
       <View style={styles.sectionGap}>
-        <SectionTitle>Egaliseur</SectionTitle>
+        <SectionTitle>Égaliseur</SectionTitle>
       </View>
       <View style={styles.card}>
         {eqBands ? (
           <>
-            <ToggleRow title="Activer l'egaliseur" value={eqEnabled} onChange={setEqEnabled} />
+            <ToggleRow title="Activer l'égaliseur" value={eqEnabled} onChange={setEqEnabled} />
             <View style={styles.presets}>
               {EQ_PRESETS.map((preset) => {
                 const selected = eqEnabled && eqPreset === preset.id
@@ -93,7 +93,7 @@ export default function PlaybackSection() {
               })}
               {eqPreset === 'custom' && (
                 <View style={[styles.chip, eqEnabled && styles.chipSelected]}>
-                  <Text style={[styles.chipText, eqEnabled && styles.chipTextSelected]}>Personnalise</Text>
+                  <Text style={[styles.chipText, eqEnabled && styles.chipTextSelected]}>Personnalisé</Text>
                 </View>
               )}
             </View>
@@ -122,7 +122,7 @@ export default function PlaybackSection() {
             </View>
           </>
         ) : (
-          <Text style={styles.hint}>L'egaliseur du systeme n'est pas disponible sur cet appareil.</Text>
+          <Text style={styles.hint}>L'égaliseur du système n'est pas disponible sur cet appareil.</Text>
         )}
       </View>
     </>

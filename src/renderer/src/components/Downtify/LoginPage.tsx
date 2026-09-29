@@ -32,8 +32,8 @@ export default function DowntifyLoginPage(): JSX.Element {
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-500">
             <Download className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold">Connexion a Downtify</h1>
-          <p className="text-center text-sm text-gray-400">Gestionnaire de telechargements</p>
+          <h1 className="text-xl font-bold">Connexion à Downtify</h1>
+          <p className="text-center text-sm text-gray-400">Gestionnaire de téléchargements</p>
         </div>
 
         <div className="space-y-3">
@@ -51,7 +51,7 @@ export default function DowntifyLoginPage(): JSX.Element {
 
         <label className="flex items-center gap-2 text-xs text-gray-400">
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-          Se souvenir de moi (chiffre localement)
+          Se souvenir de moi (chiffré localement)
         </label>
 
         {error && <p className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</p>}

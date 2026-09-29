@@ -41,6 +41,8 @@ class DeckEngine {
   private wantPlaying = false
   /** A requested play() that hasn't produced playback yet: replace() reports playing:false until the source loads. */
   private pendingPlay = false
+  /** A start position passed to load() that the player hasn't reported reaching yet (see reportedTime). */
+  private pendingSeek: { seconds: number; retried: boolean } | null = null
   private handlers: EngineHandlers | null = null
 
   constructor() {
@@ -58,8 +60,11 @@ class DeckEngine {
     this.handlers = handlers
   }
 
-  /** Makes `id` current: keeps it if a transition already started it, switches instantly if it was preloaded, else loads it. */
-  load(id: string, source: string, play: boolean): void {
+  /**
+   * Makes `id` current: keeps it if a transition already started it, switches instantly if it was
+   * preloaded, else loads it. `startAt` (seconds) resumes a track part-way through.
+   */
+  load(id: string, source: string, play: boolean, startAt = 0): void {
     if (this.trackIds[this.active] === id) {
       if (play) this.play()
       return
@@ -81,6 +86,11 @@ class DeckEngine {
       deck.volume = this.volume
     }
     this.finished[this.active] = false
+    this.pendingSeek = null
+    if (startAt > 0) {
+      this.pendingSeek = { seconds: startAt, retried: false }
+      this.decks[this.active].seekTo(startAt).catch(() => {})
+    }
     if (play) this.play()
     else this.pause()
   }
@@ -111,10 +121,12 @@ class DeckEngine {
 
   seekTo(seconds: number): void {
     this.finishFade()
+    this.pendingSeek = null
     this.decks[this.active].seekTo(seconds).catch(() => {})
   }
 
   restart(): void {
+    this.pendingSeek = null
     const deck = this.decks[this.active]
     this.wantPlaying = true
     this.pendingPlay = true
@@ -149,7 +161,7 @@ class DeckEngine {
       if (justFinished && this.fade?.from === index) this.finishFade()
       return
     }
-    this.handlers?.onProgress(status.currentTime, status.duration)
+    this.handlers?.onProgress(this.reportedTime(index, status), status.duration)
 
     // End of track must be handled before the mirroring below: the native status forces playing:false
     // on this tick, and letting that reach the store reads as "the user paused" - which is what
@@ -170,6 +182,29 @@ class DeckEngine {
     }
 
     this.checkTransition(status)
+  }
+
+  /**
+   * The playhead to show. While a start position from load() is pending it shows that position
+   * rather than the 0 the player reports before it gets there, so the progress bar doesn't jump.
+   */
+  private reportedTime(index: DeckIndex, status: AudioStatus): number {
+    const target = this.pendingSeek
+    if (!target) return status.currentTime
+    if (Math.abs(status.currentTime - target.seconds) < 1.5) {
+      this.pendingSeek = null
+      return status.currentTime
+    }
+    if (status.isLoaded) {
+      // A seek issued while the source was still loading can be lost: repeat it once, then give up.
+      if (target.retried) {
+        this.pendingSeek = null
+        return status.currentTime
+      }
+      target.retried = true
+      this.decks[index].seekTo(target.seconds).catch(() => {})
+    }
+    return target.seconds
   }
 
   private checkTransition(status: AudioStatus): void {
@@ -202,6 +237,7 @@ class DeckEngine {
     to.volume = 0
     this.active = toIndex
     this.finished[toIndex] = false
+    this.pendingSeek = null
     this.play()
     this.fade = { from: fromIndex, start: Date.now(), durationMs, timer: setInterval(() => this.stepFade(), FADE_STEP_MS) }
     this.handlers?.onAutoAdvance()
@@ -238,6 +274,7 @@ class DeckEngine {
       this.active = otherIndex
       other.volume = this.volume
       this.finished[otherIndex] = false
+      this.pendingSeek = null
       this.play()
       this.handlers?.onAutoAdvance()
       return

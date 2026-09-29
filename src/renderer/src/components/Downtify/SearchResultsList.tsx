@@ -34,7 +34,7 @@ export default function SearchResultsList({ songs, compact }: Props): JSX.Elemen
       await queueDownload(song)
       setDownloadedIds((prev) => new Set(prev).add(song.song_id))
     } catch (err: any) {
-      setError(err?.message || 'Telechargement impossible')
+      setError(err?.message || 'Téléchargement impossible')
     } finally {
       setDownloadingId(null)
     }
@@ -70,7 +70,7 @@ export default function SearchResultsList({ songs, compact }: Props): JSX.Elemen
             <button
               onClick={() => handleDownload(song)}
               disabled={isDownloading || isDone}
-              title={isDone ? 'Ajoute a la file Downtify' : 'Telecharger via Downtify'}
+              title={isDone ? 'Ajouté à la file Downtify' : 'Télécharger via Downtify'}
               className="shrink-0 rounded-full border border-surface-border p-2 text-gray-300 transition-colors hover:border-accent hover:text-accent disabled:opacity-60"
             >
               {isDownloading ? (

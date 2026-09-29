@@ -26,6 +26,7 @@ import { useHistoryStore } from '@renderer/store/historyStore'
 import { useToastStore } from '@renderer/store/toastStore'
 import { useAudioSettingsStore } from '@renderer/store/audioSettingsStore'
 import { getAudioEngine, seekTo } from '@renderer/services/playbackEngine'
+import { resumePosition } from '@renderer/services/playbackMemory'
 
 const SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.75]
 
@@ -169,8 +170,11 @@ export default function Player(): JSX.Element {
   useEffect(() => {
     if (!localSong || !client) return
     const src = getOfflineUrl(localSong.id) || client.streamUrl(localSong.id)
-    getAudioEngine().load(localSong.id, src, useNavidromeStore.getState().isPlaying)
-    recordHistory(localSong)
+    // A track restored from the last session picks up where it stopped. It was recorded in the
+    // history when it first played, so it isn't recorded again.
+    const resumeAt = resumePosition(localSong.id)
+    getAudioEngine().load(localSong.id, src, useNavidromeStore.getState().isPlaying, resumeAt ?? 0)
+    if (resumeAt === null) recordHistory(localSong)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localSong?.id])
 
@@ -392,7 +396,7 @@ export default function Player(): JSX.Element {
                       </button>
                     ))}
                   {deviceList.filter((d) => d.deviceId !== 'hub').length === 0 && (
-                    <p className="px-2 py-1.5 text-xs text-gray-500">Aucun autre appareil connecte.</p>
+                    <p className="px-2 py-1.5 text-xs text-gray-500">Aucun autre appareil connecté.</p>
                   )}
                 </div>
               )}
@@ -420,7 +424,7 @@ export default function Player(): JSX.Element {
           </button>
           <button
             onClick={() => handleSetVolume(volume > 0 ? 0 : 0.8)}
-            title={volume > 0 ? 'Muet' : 'Retablir le son'}
+            title={volume > 0 ? 'Muet' : 'Rétablir le son'}
             className="text-gray-400 transition-colors hover:text-white"
           >
             <VolumeIcon className="h-4 w-4" />
@@ -452,7 +456,7 @@ export default function Player(): JSX.Element {
                     onClick={() => {
                       clearQueue()
                       setConfirmClear(false)
-                      showToast('File de lecture videe')
+                      showToast('File de lecture vidée')
                     }}
                     className="rounded-full bg-red-500/20 px-2 py-0.5 font-semibold text-red-400 hover:bg-red-500/30"
                   >

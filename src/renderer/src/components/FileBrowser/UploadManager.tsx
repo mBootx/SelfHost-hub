@@ -28,9 +28,9 @@ export default function UploadManager(): JSX.Element | null {
   const activeCount = tasks.filter((t) => t.status === 'uploading').length
   const errorCount = tasks.filter((t) => t.status === 'error').length
 
-  let headline = 'Televersements termines'
-  if (activeCount > 0) headline = `Televersement de ${activeCount} fichier${activeCount > 1 ? 's' : ''}...`
-  else if (errorCount > 0) headline = `Termine avec ${errorCount} erreur${errorCount > 1 ? 's' : ''}`
+  let headline = 'Téléversements terminés'
+  if (activeCount > 0) headline = `Téléversement de ${activeCount} fichier${activeCount > 1 ? 's' : ''}...`
+  else if (errorCount > 0) headline = `Terminé avec ${errorCount} erreur${errorCount > 1 ? 's' : ''}`
 
   return (
     <div className="fixed bottom-4 right-4 z-40 w-80 overflow-hidden rounded-lg border border-surface-border bg-surface-elevated shadow-2xl animate-slide-up">
@@ -51,14 +51,14 @@ export default function UploadManager(): JSX.Element | null {
         <div className="flex shrink-0 items-center gap-1">
           <button
             onClick={() => setCollapsed((v) => !v)}
-            title={collapsed ? 'Deplier' : 'Reduire'}
+            title={collapsed ? 'Déplier' : 'Réduire'}
             className="rounded p-1 text-gray-400 hover:bg-surface-hover hover:text-white"
           >
             {collapsed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
           <button
             onClick={clearFinished}
-            title="Effacer les termines"
+            title="Effacer les terminés"
             className="rounded p-1 text-gray-400 hover:bg-surface-hover hover:text-white"
           >
             <X className="h-4 w-4" />
@@ -85,7 +85,7 @@ export default function UploadManager(): JSX.Element | null {
                 </div>
                 {t.status === 'error' ? (
                   <p className="truncate text-[11px] text-red-400" title={t.error}>
-                    {t.error || 'Echec du televersement'}
+                    {t.error || 'Échec du téléversement'}
                   </p>
                 ) : (
                   <>
@@ -96,7 +96,7 @@ export default function UploadManager(): JSX.Element | null {
                       />
                     </div>
                     <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500">
-                      <span>{t.status === 'done' ? 'Termine' : `${percent}%`}</span>
+                      <span>{t.status === 'done' ? 'Terminé' : `${percent}%`}</span>
                       {t.status === 'uploading' && t.speedBps > 0 && <span>{formatSpeed(t.speedBps)}</span>}
                     </div>
                   </>

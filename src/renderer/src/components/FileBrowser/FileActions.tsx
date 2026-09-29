@@ -27,7 +27,7 @@ export default function FileActions({ item, onRequestRename, onRequestDelete }: 
       {!item.isDir && (
         <button
           onClick={() => downloadAndRecord(client!, item)}
-          title="Telecharger"
+          title="Télécharger"
           className="text-gray-400 hover:text-white"
         >
           <Download className="h-4 w-4" />

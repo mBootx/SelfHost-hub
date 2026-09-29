@@ -35,7 +35,7 @@ export default function FilesTab() {
             onPress={() => setPane('downloads')}
             style={({ pressed }) => [styles.offlineLink, pressed && styles.pressed]}
           >
-            <Text style={styles.offlineLinkText}>Voir mes {downloadCount} fichiers telecharges</Text>
+            <Text style={styles.offlineLinkText}>Voir mes {downloadCount} fichiers téléchargés</Text>
           </Pressable>
         )}
         <LoginScreen />
@@ -49,7 +49,7 @@ export default function FilesTab() {
         {(
           [
             ['server', 'Serveur'],
-            ['downloads', downloadCount > 0 ? `Telechargements (${downloadCount})` : 'Telechargements']
+            ['downloads', downloadCount > 0 ? `Téléchargements (${downloadCount})` : 'Téléchargements']
           ] as [Pane, string][]
         ).map(([key, label]) => {
           const active = pane === key

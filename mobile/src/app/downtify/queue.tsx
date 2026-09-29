@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/Screen'
 import { colors, layout, radius, spacing } from '@/constants/theme'
 
 function statusLabel(status: string): string {
-  if (status === 'done') return 'Termine'
+  if (status === 'done') return 'Terminé'
   if (status === 'error') return 'Erreur'
   if (status === 'queued') return 'En attente'
   if (status === 'downloading') return 'En cours'
@@ -23,7 +23,7 @@ export default function DowntifyQueueScreen() {
   const clearQueue = useDowntifyStore((s) => s.clearQueue)
 
   useEffect(() => {
-    navigation.setOptions({ title: 'Telechargements' })
+    navigation.setOptions({ title: 'Téléchargements' })
     refreshQueue()
   }, [])
 
@@ -47,7 +47,7 @@ export default function DowntifyQueueScreen() {
         ) : null
       }
       ListEmptyComponent={
-        <EmptyState icon={Download} title="File vide" hint="Lancez un telechargement depuis l'onglet Recherche." />
+        <EmptyState icon={Download} title="File vide" hint="Lancez un téléchargement depuis l'onglet Recherche." />
       }
       renderItem={({ item }) => (
         <View style={styles.card}>

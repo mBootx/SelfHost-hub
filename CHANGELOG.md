@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.1.0 — 2026-09-29
+
+### Added
+- **Pick up where you left off:** closing and reopening the app brings back your queue and the track you were on, paused at the same second. Shuffle and repeat come back too.
+  - **Desktop:** the position is saved every second while playing, and again as the window closes.
+  - **Android:** the position is saved every two seconds while playing, and whenever you leave the app.
+- **"Nouveautés" window:** after each update, both apps show once what changed in the new version. You can reopen it from Settings → Application.
+
+### Improved
+- **French text now has its accents** in both apps: Réglages, Égaliseur, Bibliothèque, Mettre à jour...
+
+### Fixed
+- **Desktop:** the switches in Settings (Lecture sans blanc, Activer l'égaliseur, Contrôle à distance) no longer stick out of their track, and the knob now sits on the left when a switch is off.
+
 ## 2.0.0 — 2026-09-28
 
 ### Added

@@ -7,10 +7,10 @@ import { EmptyState } from '@/components/Screen'
 import { colors, radius, spacing } from '@/constants/theme'
 
 function statusLabel(status: string, error: string | null): string {
-  if (status === 'connected') return 'Connecte au PC'
-  if (status === 'connecting') return 'Recherche du PC sur le reseau...'
+  if (status === 'connected') return 'Connecté au PC'
+  if (status === 'connecting') return 'Recherche du PC sur le réseau...'
   if (status === 'error') return error || 'Connexion impossible'
-  return 'Desactive'
+  return 'Désactivé'
 }
 
 export default function DevicesScreen() {
@@ -33,7 +33,7 @@ export default function DevicesScreen() {
   const [connecting, setConnecting] = useState(false)
 
   useEffect(() => {
-    navigation.setOptions({ title: 'Controle a distance' })
+    navigation.setOptions({ title: 'Contrôle à distance' })
   }, [])
 
   useEffect(() => setNameDraft(deviceName), [deviceName])
@@ -53,7 +53,7 @@ export default function DevicesScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.row}>
         <View style={styles.rowInfo}>
-          <Text style={styles.rowTitle}>Activer le controle a distance</Text>
+          <Text style={styles.rowTitle}>Activer le contrôle à distance</Text>
           <Text style={styles.rowMeta}>{statusLabel(status, error)}</Text>
         </View>
         <Switch
@@ -67,14 +67,14 @@ export default function DevicesScreen() {
       {enabled && (
         <>
           <View style={styles.card}>
-            <Text style={styles.fieldLabel}>Nom de ce telephone</Text>
+            <Text style={styles.fieldLabel}>Nom de ce téléphone</Text>
             <TextInput
               style={styles.input}
               value={nameDraft}
               onChangeText={setNameDraft}
               onBlur={() => nameDraft.trim() && setDeviceName(nameDraft.trim())}
               autoCapitalize="words"
-              accessibilityLabel="Nom de ce telephone"
+              accessibilityLabel="Nom de ce téléphone"
             />
           </View>
 
@@ -116,7 +116,7 @@ export default function DevicesScreen() {
               >
                 <Smartphone size={18} color={selectedDeviceId === LOCAL_DEVICE_ID ? colors.accent : colors.textSecondary} />
                 <Text style={[styles.deviceName, selectedDeviceId === LOCAL_DEVICE_ID && styles.deviceNameActive]}>
-                  Ce telephone
+                  Ce téléphone
                 </Text>
               </Pressable>
 
@@ -181,8 +181,8 @@ export default function DevicesScreen() {
       {!enabled && (
         <EmptyState
           icon={Cast}
-          title="Controle a distance desactive"
-          hint="Active-le pour piloter ce telephone depuis le PC, ou l'inverse - meme reseau Wi-Fi requis."
+          title="Contrôle à distance désactivé"
+          hint="Active-le pour piloter ce téléphone depuis le PC, ou l'inverse - même réseau Wi-Fi requis."
         />
       )}
     </ScrollView>

@@ -9,6 +9,7 @@ import Player from '@renderer/components/Navidrome/Player'
 import UploadManager from '@renderer/components/FileBrowser/UploadManager'
 import ToastHost from '@renderer/components/Toast'
 import UpdateBanner from '@renderer/components/UpdateBanner'
+import WhatsNewModal from '@renderer/components/WhatsNewModal'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
@@ -16,6 +17,8 @@ import { useOfflineStore } from '@renderer/store/offlineStore'
 import { useDownloadStore } from '@renderer/store/downloadStore'
 import { useRemoteStore } from '@renderer/store/remoteStore'
 import { useHistoryStore } from '@renderer/store/historyStore'
+import { useWhatsNewStore } from '@renderer/store/whatsNewStore'
+import { startPlaybackMemory } from '@renderer/services/playbackMemory'
 
 export default function App(): JSX.Element {
   const restoreNavidrome = useNavidromeStore((s) => s.restoreSession)
@@ -26,6 +29,7 @@ export default function App(): JSX.Element {
   const loadDownloads = useDownloadStore((s) => s.loadFromDisk)
   const loadHistory = useHistoryStore((s) => s.loadFromDisk)
   const initRemote = useRemoteStore((s) => s.init)
+  const checkWhatsNew = useWhatsNewStore((s) => s.check)
   const navidromeConnected = useNavidromeStore((s) => s.status === 'connected')
 
   useEffect(() => {
@@ -39,6 +43,9 @@ export default function App(): JSX.Element {
     loadDownloads()
     loadHistory()
     loadPlaybackPrefs()
+    // Before the player mounts (it waits for Navidrome), so it opens on the restored track.
+    startPlaybackMemory()
+    checkWhatsNew()
   }, [])
 
   useEffect(() => {
@@ -74,7 +81,7 @@ export default function App(): JSX.Element {
             <Route
               path="/settings"
               element={
-                <ErrorBoundary label="Reglages">
+                <ErrorBoundary label="Réglages">
                   <SettingsModule />
                 </ErrorBoundary>
               }
@@ -92,11 +99,12 @@ export default function App(): JSX.Element {
         </ErrorBoundary>
       )}
       {/* Global so an upload keeps reporting progress even after leaving the FileBrowser tab. */}
-      <ErrorBoundary label="Televersements">
+      <ErrorBoundary label="Téléversements">
         <UploadManager />
       </ErrorBoundary>
       <ToastHost />
       <UpdateBanner />
+      <WhatsNewModal />
     </div>
   )
 }

@@ -33,7 +33,7 @@ const Line = memo(function Line({
     <button
       ref={innerRef}
       onClick={onPress}
-      title="Aller a ce passage"
+      title="Aller à ce passage"
       className={`block w-full text-left text-sm leading-snug transition-colors ${
         state === 'active'
           ? 'font-semibold text-accent'

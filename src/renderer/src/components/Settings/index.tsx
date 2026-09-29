@@ -5,9 +5,11 @@ import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
 import { useOfflineStore } from '@renderer/store/offlineStore'
 import { useRemoteStore } from '@renderer/store/remoteStore'
+import { useWhatsNewStore } from '@renderer/store/whatsNewStore'
 import DowntifyLoginPage from '@renderer/components/Downtify/LoginPage'
 import DowntifySettingsForm from '@renderer/components/Downtify/SettingsForm'
 import DownloadQueue from '@renderer/components/Downtify/DownloadQueue'
+import Switch from '@renderer/components/Switch'
 import AppearanceSection from './AppearanceSection'
 import PlaybackSection from './PlaybackSection'
 
@@ -45,7 +47,7 @@ function ServiceRow({
           onClick={onLogout}
           className="rounded-full border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-red-500 hover:text-red-400"
         >
-          Se deconnecter
+          Se déconnecter
         </button>
       )}
     </div>
@@ -58,6 +60,7 @@ function UpdatesRow(): JSX.Element {
   const [currentVersion, setCurrentVersion] = useState('')
   const [state, setState] = useState<UpdateState>('idle')
   const [latestVersion, setLatestVersion] = useState('')
+  const showWhatsNew = useWhatsNewStore((s) => s.showAll)
 
   useEffect(() => {
     window.api.updater.currentVersion().then(setCurrentVersion)
@@ -75,13 +78,13 @@ function UpdatesRow(): JSX.Element {
   }
 
   const messages: Record<UpdateState, string> = {
-    idle: 'Les mises a jour sont verifiees au demarrage puis toutes les 6 heures.',
+    idle: 'Les mises à jour sont vérifiées au démarrage puis toutes les 6 heures.',
     checking: 'Recherche...',
-    current: 'Vous avez la derniere version.',
-    downloading: `Version ${latestVersion} en cours de telechargement.`,
-    ready: `Version ${latestVersion} prete : elle s'installera a la fermeture.`,
-    dev: 'Indisponible en mode developpement.',
-    error: 'Verification impossible (hors ligne ?).'
+    current: 'Vous avez la dernière version.',
+    downloading: `Version ${latestVersion} en cours de téléchargement.`,
+    ready: `Version ${latestVersion} prête : elle s'installera à la fermeture.`,
+    dev: 'Indisponible en mode développement.',
+    error: 'Vérification impossible (hors ligne ?).'
   }
 
   return (
@@ -93,6 +96,12 @@ function UpdatesRow(): JSX.Element {
         <p className="text-sm font-semibold">SelfHost Hub {currentVersion && `v${currentVersion}`}</p>
         <p className="text-xs text-gray-400">{messages[state]}</p>
       </div>
+      <button
+        onClick={showWhatsNew}
+        className="rounded-full border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-accent hover:text-accent"
+      >
+        Nouveautés
+      </button>
       <button
         onClick={check}
         disabled={state === 'checking'}
@@ -134,7 +143,7 @@ export default function SettingsModule(): JSX.Element {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl space-y-8 p-6">
-        <h1 className="text-2xl font-bold tracking-tight">Reglages</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Réglages</h1>
 
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Services</h2>
@@ -143,7 +152,7 @@ export default function SettingsModule(): JSX.Element {
             accent="bg-accent text-black"
             name="Navidrome"
             connected={navidromeStatus === 'connected'}
-            subtitle={navidromeStatus === 'connected' ? `Connecte en tant que ${navidromeUsername}` : 'Non connecte'}
+            subtitle={navidromeStatus === 'connected' ? `Connecté en tant que ${navidromeUsername}` : 'Non connecté'}
             onLogout={navidromeLogout}
           />
           <ServiceRow
@@ -151,7 +160,7 @@ export default function SettingsModule(): JSX.Element {
             accent="bg-blue-500 text-white"
             name="FileBrowser"
             connected={filebrowserStatus === 'connected'}
-            subtitle={filebrowserStatus === 'connected' ? 'Connecte' : 'Non connecte'}
+            subtitle={filebrowserStatus === 'connected' ? 'Connecté' : 'Non connecté'}
             onLogout={filebrowserLogout}
           />
           <ServiceRow
@@ -159,7 +168,7 @@ export default function SettingsModule(): JSX.Element {
             accent="bg-orange-500 text-white"
             name="Downtify"
             connected={downtifyConnected}
-            subtitle={downtifyConnected ? 'Resultats integres a la recherche Navidrome' : 'Non connecte'}
+            subtitle={downtifyConnected ? 'Résultats intégrés à la recherche Navidrome' : 'Non connecté'}
             onLogout={downtifyLogout}
           />
         </section>
@@ -168,37 +177,26 @@ export default function SettingsModule(): JSX.Element {
         <PlaybackSection />
 
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Controle a distance</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Contrôle à distance</h2>
           <div className="flex items-center gap-4 rounded-lg border border-surface-border bg-surface-elevated p-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-500 text-white">
               <Cast className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Piloter cet ordinateur depuis le telephone</p>
+              <p className="text-sm font-semibold">Piloter cet ordinateur depuis le téléphone</p>
               <p className="text-xs text-gray-400">
                 {remoteRunning
-                  ? `En ecoute sur ${remoteAddress || '?'}${
+                  ? `En écoute sur ${remoteAddress || '?'}${
                       remoteDeviceCount > 0
-                        ? ` - ${remoteDeviceCount} appareil${remoteDeviceCount > 1 ? 's' : ''} connecte${remoteDeviceCount > 1 ? 's' : ''}`
+                        ? ` - ${remoteDeviceCount} appareil${remoteDeviceCount > 1 ? 's' : ''} connecté${remoteDeviceCount > 1 ? 's' : ''}`
                         : ''
                     }`
                   : remoteEnabled
-                    ? 'En attente de connexion a Navidrome...'
-                    : 'Desactive - meme reseau Wi-Fi requis'}
+                    ? 'En attente de connexion à Navidrome...'
+                    : 'Désactivé - même réseau Wi-Fi requis'}
               </p>
             </div>
-            <button
-              onClick={() => setRemoteEnabled(!remoteEnabled)}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${remoteEnabled ? 'bg-accent' : 'bg-surface-hover'}`}
-              role="switch"
-              aria-checked={remoteEnabled}
-            >
-              <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                  remoteEnabled ? 'translate-x-5' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
+            <Switch checked={remoteEnabled} onChange={setRemoteEnabled} label="Contrôle à distance" />
           </div>
           {remoteEnabled && (
             <div className="flex items-center gap-3 rounded-lg border border-surface-border bg-surface-elevated p-4">
@@ -224,19 +222,19 @@ export default function SettingsModule(): JSX.Element {
           <>
             <section className="space-y-3">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                File de telechargement{activeDownloads > 0 ? ` (${activeDownloads} en cours)` : ''}
+                File de téléchargement{activeDownloads > 0 ? ` (${activeDownloads} en cours)` : ''}
               </h2>
               <DownloadQueue />
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Options de telechargement</h2>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Options de téléchargement</h2>
               <DowntifySettingsForm />
             </section>
           </>
         ) : (
           <section className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Connexion a Downtify</h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Connexion à Downtify</h2>
             <div className="overflow-hidden rounded-lg border border-surface-border">
               <DowntifyLoginPage />
             </div>
@@ -252,7 +250,7 @@ export default function SettingsModule(): JSX.Element {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">Titres hors-ligne</p>
               <p className="text-xs text-gray-400">
-                {offlineIds.length === 0 ? 'Aucun titre telecharge' : `${offlineIds.length} titres sur cet ordinateur`}
+                {offlineIds.length === 0 ? 'Aucun titre téléchargé' : `${offlineIds.length} titres sur cet ordinateur`}
               </p>
             </div>
             {offlineIds.length > 0 && (

@@ -75,7 +75,7 @@ function FavoritesContent() {
               {!!error && <Text style={styles.error}>{error}</Text>}
 
               {!error && isEmpty && (
-                <EmptyState icon={Heart} title="Aucun favori" hint="Les titres et albums que vous aimez sur Navidrome apparaitront ici." />
+                <EmptyState icon={Heart} title="Aucun favori" hint="Les titres et albums que vous aimez sur Navidrome apparaîtront ici." />
               )}
 
               {favorites.albums.length > 0 && (

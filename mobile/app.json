@@ -2,7 +2,7 @@
   "expo": {
     "name": "SelfHost Hub",
     "slug": "selfhost-hub-mobile",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "selfhosthub",
@@ -26,7 +26,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 5,
+      "versionCode": 6,
       "permissions": [
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ]

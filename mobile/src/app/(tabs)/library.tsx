@@ -51,7 +51,7 @@ function LibraryContent() {
   const [menuPlaylist, setMenuPlaylist] = useState<NDPlaylist | null>(null)
 
   function confirmDeletePlaylist(playlist: NDPlaylist): void {
-    Alert.alert('Supprimer la playlist', `"${playlist.name}" sera definitivement supprimee.`, [
+    Alert.alert('Supprimer la playlist', `"${playlist.name}" sera définitivement supprimée.`, [
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Supprimer',
@@ -59,7 +59,7 @@ function LibraryContent() {
         onPress: async () => {
           try {
             await deletePlaylist(playlist.id)
-            showToast(`Playlist "${playlist.name}" supprimee`)
+            showToast(`Playlist "${playlist.name}" supprimée`)
           } catch (err: any) {
             showToast(err?.message || 'Impossible de supprimer la playlist')
           }
@@ -79,10 +79,10 @@ function LibraryContent() {
     try {
       const playlist = await createPlaylist(name)
       setShowNewPlaylist(false)
-      showToast(`Playlist "${playlist.name}" creee`)
+      showToast(`Playlist "${playlist.name}" créée`)
       router.push({ pathname: '/playlist/[id]', params: { id: playlist.id } })
     } catch {
-      showToast('Impossible de creer la playlist')
+      showToast('Impossible de créer la playlist')
     } finally {
       setCreatingPlaylist(false)
     }
@@ -95,7 +95,7 @@ function LibraryContent() {
   return (
     <Screen>
       <ScreenHeader
-        title="Bibliotheque"
+        title="Bibliothèque"
         action={
           subTab === 'playlists' ? (
             <Pressable
@@ -157,7 +157,7 @@ function LibraryContent() {
           refreshControl={refreshControl}
           showsVerticalScrollIndicator={false}
           {...LIST_PERF}
-          ListEmptyComponent={<EmptyState icon={ListMusic} title="Aucune playlist" hint="Appuyez sur + pour en creer une." />}
+          ListEmptyComponent={<EmptyState icon={ListMusic} title="Aucune playlist" hint="Appuyez sur + pour en créer une." />}
           renderItem={({ item }) => <PlaylistTile playlist={item} onLongPress={() => setMenuPlaylist(item)} />}
         />
       ) : (
@@ -179,7 +179,7 @@ function LibraryContent() {
       <PromptModal
         visible={showNewPlaylist}
         title="Nouvelle playlist"
-        confirmLabel={creatingPlaylist ? 'Creation...' : 'Creer'}
+        confirmLabel={creatingPlaylist ? 'Création...' : 'Créer'}
         onCancel={() => setShowNewPlaylist(false)}
         onConfirm={handleCreatePlaylist}
       />

@@ -96,7 +96,7 @@ function PreviewModal({ item, onClose }: { item: FBItem; onClose: () => void }):
           <div className="flex shrink-0 items-center gap-3">
             <button
               onClick={() => downloadAndRecord(client, item)}
-              title="Telecharger"
+              title="Télécharger"
               className="text-gray-400 hover:text-white"
             >
               <DownloadIcon className="h-4 w-4" />
@@ -138,7 +138,7 @@ function PreviewModal({ item, onClose }: { item: FBItem; onClose: () => void }):
           {!type.includes('image') && !type.includes('video') && !type.includes('audio') && !pdf && !type.includes('text') && (
             <div className="flex flex-col items-center gap-3 py-12 text-gray-500">
               <FileIcon className="h-12 w-12" />
-              <p className="text-sm">Aucun apercu disponible pour ce type de fichier.</p>
+              <p className="text-sm">Aucun aperçu disponible pour ce type de fichier.</p>
             </div>
           )}
         </div>
@@ -194,7 +194,7 @@ export default function FileExplorer(): JSX.Element {
           await client.uploadLocalFile(f.path, destDir, f.name, id)
           markUploadDone(id)
         } catch (err: any) {
-          markUploadError(id, err?.message || 'Echec du televersement')
+          markUploadError(id, err?.message || 'Échec du téléversement')
         }
       })
     )
@@ -228,9 +228,9 @@ export default function FileExplorer(): JSX.Element {
       try {
         await client.rename(draggedItemPath, newPath)
         await refresh()
-        showToast(`Deplace vers "${folder.name}"`)
+        showToast(`Déplacé vers "${folder.name}"`)
       } catch (err: any) {
-        showToast(err?.message || 'Impossible de deplacer cet element')
+        showToast(err?.message || 'Impossible de déplacer cet élément')
       }
       return
     }
@@ -256,9 +256,9 @@ export default function FileExplorer(): JSX.Element {
     try {
       await client.createFolder(`${currentPath}/${name}`)
       await refresh()
-      showToast(`Dossier "${name}" cree`)
+      showToast(`Dossier "${name}" créé`)
     } catch (err: any) {
-      showToast(err?.message || 'Impossible de creer le dossier')
+      showToast(err?.message || 'Impossible de créer le dossier')
     } finally {
       setPrompt(null)
     }
@@ -278,7 +278,7 @@ export default function FileExplorer(): JSX.Element {
     try {
       await client.rename(item.path, `${parent}/${name}`)
       await refresh()
-      showToast(`Renomme en "${name}"`)
+      showToast(`Renommé en "${name}"`)
     } catch (err: any) {
       showToast(err?.message || 'Impossible de renommer')
     } finally {
@@ -291,7 +291,7 @@ export default function FileExplorer(): JSX.Element {
     try {
       await client.remove(item.path)
       await refresh()
-      showToast(`"${item.name}" supprime`)
+      showToast(`"${item.name}" supprimé`)
     } catch (err: any) {
       showToast(err?.message || 'Impossible de supprimer')
     } finally {
@@ -302,7 +302,7 @@ export default function FileExplorer(): JSX.Element {
   function handleCopyLinkItem(item: FBItem): void {
     if (!client) return
     navigator.clipboard.writeText(client.rawUrl(item.path))
-    showToast('Lien copie')
+    showToast('Lien copié')
   }
 
   function buildContextMenuItems(item: FBItem | null): ContextMenuItem[] {
@@ -315,11 +315,11 @@ export default function FileExplorer(): JSX.Element {
     }
     const openItem: ContextMenuItem = item.isDir
       ? { label: 'Ouvrir', icon: FolderOpen, onClick: () => navigate(item.path) }
-      : { label: 'Apercu', icon: Eye, onClick: () => setPreview(item) }
+      : { label: 'Aperçu', icon: Eye, onClick: () => setPreview(item) }
     const items: ContextMenuItem[] = [openItem]
     if (!item.isDir) {
       items.push({
-        label: 'Telecharger',
+        label: 'Télécharger',
         icon: DownloadIcon,
         onClick: () => {
           if (client) downloadAndRecord(client, item)
@@ -383,7 +383,7 @@ export default function FileExplorer(): JSX.Element {
           <button
             onClick={() => goBack()}
             disabled={!canGoBack}
-            title="Precedent"
+            title="Précédent"
             className="rounded-full p-1.5 text-gray-400 transition-colors hover:bg-surface-hover hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -412,7 +412,7 @@ export default function FileExplorer(): JSX.Element {
           onClick={() => logout()}
           className="flex items-center gap-1.5 rounded-full border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-red-500 hover:text-red-400"
         >
-          <LogOut className="h-3.5 w-3.5" /> Se deconnecter
+          <LogOut className="h-3.5 w-3.5" /> Se déconnecter
         </button>
       </div>
 
@@ -471,7 +471,7 @@ export default function FileExplorer(): JSX.Element {
       <div className="relative min-h-0 flex-1 overflow-y-auto px-6 pb-6">
         {dragOver && (
           <div className="pointer-events-none absolute inset-4 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-accent bg-accent/10 text-sm font-medium text-accent">
-            Deposez les fichiers pour les uploader dans {currentPath === '/' ? 'la racine' : basename(currentPath)}
+            Déposez les fichiers pour les uploader dans {currentPath === '/' ? 'la racine' : basename(currentPath)}
           </div>
         )}
 
@@ -488,7 +488,7 @@ export default function FileExplorer(): JSX.Element {
               <tr className="border-b border-surface-border text-left text-xs uppercase tracking-wide text-gray-500">
                 <th className="py-2 font-medium">Nom</th>
                 <th className="py-2 font-medium">Taille</th>
-                <th className="py-2 font-medium">Modifie</th>
+                <th className="py-2 font-medium">Modifié</th>
                 <th className="py-2 font-medium"></th>
               </tr>
             </thead>
@@ -565,7 +565,7 @@ export default function FileExplorer(): JSX.Element {
         {!loading && filtered.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-16 text-gray-500">
             <FolderOpen className="h-10 w-10" />
-            <p className="text-sm">{filter ? 'Aucun resultat pour cette recherche.' : 'Ce dossier est vide.'}</p>
+            <p className="text-sm">{filter ? 'Aucun résultat pour cette recherche.' : 'Ce dossier est vide.'}</p>
           </div>
         )}
       </div>
@@ -585,14 +585,14 @@ export default function FileExplorer(): JSX.Element {
         open={!!prompt}
         title={prompt?.mode === 'rename' ? 'Renommer' : 'Nouveau dossier'}
         initialValue={prompt?.mode === 'rename' ? prompt.item.name : ''}
-        confirmLabel={prompt?.mode === 'rename' ? 'Renommer' : 'Creer'}
+        confirmLabel={prompt?.mode === 'rename' ? 'Renommer' : 'Créer'}
         onCancel={() => setPrompt(null)}
         onConfirm={(name) => (prompt?.mode === 'rename' ? handleRename(prompt.item, name) : handleNewFolder(name))}
       />
       <ConfirmModal
         open={!!deleteTarget}
         title="Supprimer ?"
-        description={deleteTarget ? `"${deleteTarget.name}" sera definitivement supprime.` : ''}
+        description={deleteTarget ? `"${deleteTarget.name}" sera définitivement supprimé.` : ''}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => (deleteTarget ? handleDeleteItem(deleteTarget) : undefined)}
       />

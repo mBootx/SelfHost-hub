@@ -95,8 +95,8 @@ export default function LyricsView({
         <View style={styles.emptyIcon}>
           <MicVocal size={26} color={colors.textMuted} />
         </View>
-        <Text style={styles.emptyTitle}>Aucune parole trouvee</Text>
-        <Text style={styles.emptyHint}>Lancez une recherche elargie pour retrouver les paroles et la pochette.</Text>
+        <Text style={styles.emptyTitle}>Aucune parole trouvée</Text>
+        <Text style={styles.emptyHint}>Lancez une recherche élargie pour retrouver les paroles et la pochette.</Text>
         <Pressable
           style={({ pressed }) => [styles.searchButton, (searching || pressed) && styles.pressed]}
           onPress={onAutoSearch}

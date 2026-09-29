@@ -22,7 +22,7 @@ const SORT_LABELS: Record<SortMode, string> = {
   default: 'Ordre de la playlist',
   title: 'Titre (A-Z)',
   artist: 'Artiste (A-Z)',
-  duration: 'Duree (croissante)'
+  duration: 'Durée (croissante)'
 }
 
 function formatDuration(sec: number): string {
@@ -50,7 +50,7 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
   async function handleDeletePlaylist(): Promise<void> {
     try {
       await deletePlaylist(playlistId)
-      showToast(`Playlist "${playlist?.name}" supprimee`)
+      showToast(`Playlist "${playlist?.name}" supprimée`)
       onDeleted()
     } catch (err: any) {
       showToast(err?.message || 'Impossible de supprimer la playlist')
@@ -89,7 +89,7 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
     try {
       await removeFromPlaylist(playlistId, index)
       setSongs((prev) => prev.filter((_, i) => i !== index))
-      showToast('Retire de la playlist')
+      showToast('Retiré de la playlist')
     } catch {
       showToast("Impossible de retirer ce titre")
     } finally {
@@ -122,7 +122,7 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
             </button>
             <button
               onClick={() => downloadTracks(songs, client)}
-              title="Telecharger la playlist pour ecoute hors-ligne"
+              title="Télécharger la playlist pour écoute hors-ligne"
               className="flex items-center gap-2 rounded-full border border-surface-border px-4 py-2 text-sm text-gray-300 transition-colors hover:border-accent hover:text-accent"
             >
               <HardDriveDownload className="h-4 w-4" /> Hors-ligne
@@ -193,7 +193,7 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
       <ConfirmModal
         open={confirmingDelete}
         title="Supprimer la playlist ?"
-        description={`"${playlist?.name}" sera definitivement supprimee.`}
+        description={`"${playlist?.name}" sera définitivement supprimée.`}
         onCancel={() => setConfirmingDelete(false)}
         onConfirm={handleDeletePlaylist}
       />

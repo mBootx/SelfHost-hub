@@ -98,7 +98,7 @@ function SearchContent() {
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
-          accessibilityLabel="Rechercher dans la bibliotheque et sur Downtify"
+          accessibilityLabel="Rechercher dans la bibliothèque et sur Downtify"
         />
         {query.length > 0 && (
           <Pressable onPress={() => setQuery('')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Effacer">
@@ -119,15 +119,15 @@ function SearchContent() {
             title="Rechercher"
             hint={
               downtify
-                ? 'Cherche dans votre bibliotheque et sur Downtify. Deux lettres minimum.'
-                : 'Cherche dans votre bibliotheque. Deux lettres minimum.'
+                ? 'Cherche dans votre bibliothèque et sur Downtify. Deux lettres minimum.'
+                : 'Cherche dans votre bibliothèque. Deux lettres minimum.'
             }
           />
         )}
 
         {searched && searching && <ActivityIndicator color={colors.accent} style={styles.loader} />}
 
-        {searched && !searching && !hasAny && <EmptyState icon={X} title={`Aucun resultat pour "${query.trim()}"`} />}
+        {searched && !searching && !hasAny && <EmptyState icon={X} title={`Aucun résultat pour "${query.trim()}"`} />}
 
         {!searching && results.artists.length > 0 && (
           <View style={styles.section}>
@@ -151,7 +151,7 @@ function SearchContent() {
 
         {!searching && results.songs.length > 0 && client && (
           <View style={styles.section}>
-            <SectionTitle>Dans votre bibliotheque</SectionTitle>
+            <SectionTitle>Dans votre bibliothèque</SectionTitle>
             {results.songs.map((song, i) => (
               <TrackRow
                 key={song.id}
@@ -169,7 +169,7 @@ function SearchContent() {
           <View style={styles.section}>
             <View style={styles.downtifyTitle}>
               <CloudDownload size={17} color={colors.downtify} />
-              <Text style={styles.downtifyTitleText}>A telecharger</Text>
+              <Text style={styles.downtifyTitleText}>À télécharger</Text>
             </View>
             {downloadable.map((song) => (
               <DownloadRow key={song.song_id} song={song} />

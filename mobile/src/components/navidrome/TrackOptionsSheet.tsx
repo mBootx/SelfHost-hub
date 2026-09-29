@@ -28,14 +28,14 @@ export default function TrackOptionsSheet() {
           }
         },
         {
-          label: 'Ajouter a la file',
+          label: 'Ajouter à la file',
           icon: ListEnd,
           onPress: () => {
             addToQueue([song])
-            showToast('Ajoute a la file de lecture')
+            showToast('Ajouté à la file de lecture')
           }
         },
-        { label: 'Ajouter a une playlist', icon: ListPlus, onPress: () => openPlaylistPicker(song) },
+        { label: 'Ajouter à une playlist', icon: ListPlus, onPress: () => openPlaylistPicker(song) },
         {
           label: song.starred ? 'Retirer des favoris' : 'Ajouter aux favoris',
           icon: Heart,
@@ -43,7 +43,7 @@ export default function TrackOptionsSheet() {
             if (!client) return
             if (song.starred) await client.unstar(song.id)
             else await client.star(song.id)
-            showToast(song.starred ? 'Retire des favoris' : 'Ajoute aux favoris')
+            showToast(song.starred ? 'Retiré des favoris' : 'Ajouté aux favoris')
           }
         },
         ...(song.albumId

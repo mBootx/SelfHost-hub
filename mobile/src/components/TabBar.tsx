@@ -12,11 +12,11 @@ type IconComponent = React.ComponentType<{ size?: number; color?: string; stroke
  */
 const TABS: Record<string, { icon: IconComponent; label: string; name: string }> = {
   index: { icon: Home, label: 'Accueil', name: 'Accueil' },
-  library: { icon: Library, label: 'Biblio', name: 'Bibliotheque' },
+  library: { icon: Library, label: 'Biblio', name: 'Bibliothèque' },
   favorites: { icon: Heart, label: 'Favoris', name: 'Favoris' },
   search: { icon: Search, label: 'Recherche', name: 'Recherche' },
   files: { icon: FolderOpen, label: 'Fichiers', name: 'Fichiers' },
-  settings: { icon: Settings, label: 'Reglages', name: 'Reglages' }
+  settings: { icon: Settings, label: 'Réglages', name: 'Réglages' }
 }
 
 export default function TabBar({ state, navigation, insets }: BottomTabBarProps) {

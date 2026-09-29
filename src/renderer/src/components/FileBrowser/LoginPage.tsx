@@ -34,7 +34,7 @@ export default function FileBrowserLoginPage(): JSX.Element {
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500">
             <FolderOpen className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold">Connexion a FileBrowser</h1>
+          <h1 className="text-xl font-bold">Connexion à FileBrowser</h1>
           <p className="text-center text-sm text-gray-400">Interface OpenMediaVault</p>
         </div>
 
@@ -72,7 +72,7 @@ export default function FileBrowserLoginPage(): JSX.Element {
 
         <label className="flex items-center gap-2 text-xs text-gray-400">
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-          Se souvenir de moi (chiffre localement)
+          Se souvenir de moi (chiffré localement)
         </label>
 
         {error && <p className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</p>}

@@ -14,7 +14,7 @@ export const EQ_PRESETS: { id: string; label: string; gains: number[] }[] = [
   { id: 'vocal', label: 'Voix', gains: [-2, -2, -1, 1, 3, 4, 3, 1, 0, -1] },
   { id: 'rock', label: 'Rock', gains: [4, 3, 2, 0, -1, -1, 1, 3, 4, 4] },
   { id: 'pop', label: 'Pop', gains: [-1, 0, 2, 3, 3, 2, 0, -1, -1, -1] },
-  { id: 'electronic', label: 'Electro', gains: [5, 4, 1, 0, -2, 1, 0, 2, 4, 5] },
+  { id: 'electronic', label: 'Électro', gains: [5, 4, 1, 0, -2, 1, 0, 2, 4, 5] },
   { id: 'jazz', label: 'Jazz', gains: [3, 2, 1, 2, -1, -1, 0, 1, 2, 3] },
   { id: 'classical', label: 'Classique', gains: [4, 3, 2, 1, -1, -1, 0, 2, 3, 4] },
   { id: 'acoustic', label: 'Acoustique', gains: [3, 3, 2, 1, 1, 1, 2, 2, 2, 1] }

@@ -21,9 +21,9 @@ export default function DownloadsHistory(): JSX.Element {
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-hover">
           <Download className="h-6 w-6 text-gray-500" />
         </div>
-        <p className="text-sm font-medium text-gray-400">Aucun telechargement</p>
+        <p className="text-sm font-medium text-gray-400">Aucun téléchargement</p>
         <p className="max-w-xs text-xs text-gray-500">
-          Les fichiers recuperes depuis le serveur apparaitront ici, avec l&apos;endroit ou vous les avez enregistres.
+          Les fichiers récupérés depuis le serveur apparaîtront ici, avec l&apos;endroit où vous les avez enregistrés.
         </p>
       </div>
     )

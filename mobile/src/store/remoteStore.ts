@@ -166,7 +166,7 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => ({
       storage.loadPref<boolean>('remote.enabled'),
       storage.loadPref<string>('remote.deviceName')
     ])
-    set({ deviceId, deviceName: deviceName || Device.modelName || 'Telephone', enabled: !!enabled })
+    set({ deviceId, deviceName: deviceName || Device.modelName || 'Téléphone', enabled: !!enabled })
 
     if (!subscribedToPlayback) {
       subscribedToPlayback = true
@@ -214,7 +214,7 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => ({
 
     const ip = await discoverHub(accountHash)
     if (!ip) {
-      set({ status: 'error', error: 'PC introuvable sur le reseau (meme Wi-Fi requis)' })
+      set({ status: 'error', error: 'PC introuvable sur le réseau (même Wi-Fi requis)' })
       return
     }
     await get().connectManual(ip)
@@ -223,7 +223,7 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => ({
   connectManual: async (ip) => {
     const accountHash = await computeAccountHash()
     if (!accountHash) {
-      set({ status: 'error', error: "Connectez-vous d'abord a Navidrome" })
+      set({ status: 'error', error: "Connectez-vous d'abord à Navidrome" })
       return false
     }
     set({ status: 'connecting', error: null })

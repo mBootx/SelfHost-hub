@@ -73,7 +73,7 @@ export default function DowntifySettingsForm(): JSX.Element | null {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-400">Qualite</label>
+          <label className="mb-1 block text-xs font-medium text-gray-400">Qualité</label>
           <select
             value={settings.bitrate}
             onChange={(e) => setSettings({ ...settings, bitrate: e.target.value })}
@@ -124,7 +124,7 @@ export default function DowntifySettingsForm(): JSX.Element | null {
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-medium text-gray-400">Telechargements paralleles</label>
+        <label className="mb-1 block text-xs font-medium text-gray-400">Téléchargements parallèles</label>
         <select
           value={settings.max_parallel_downloads}
           onChange={(e) => setSettings({ ...settings, max_parallel_downloads: Number(e.target.value) })}
@@ -144,7 +144,7 @@ export default function DowntifySettingsForm(): JSX.Element | null {
           checked={settings.download_lyrics}
           onChange={(e) => setSettings({ ...settings, download_lyrics: e.target.checked })}
         />
-        Telecharger les paroles (embarquees + .lrc)
+        Télécharger les paroles (embarquées + .lrc)
       </label>
       <label className="flex items-center gap-2 text-xs text-gray-300">
         <input
@@ -152,7 +152,7 @@ export default function DowntifySettingsForm(): JSX.Element | null {
           checked={settings.generate_m3u}
           onChange={(e) => setSettings({ ...settings, generate_m3u: e.target.checked })}
         />
-        Generer un fichier M3U pour les playlists
+        Générer un fichier M3U pour les playlists
       </label>
       <label className="flex items-center gap-2 text-xs text-gray-300">
         <input
@@ -171,7 +171,7 @@ export default function DowntifySettingsForm(): JSX.Element | null {
         >
           {saving ? 'Enregistrement...' : 'Enregistrer'}
         </button>
-        {saved && <span className="text-xs text-accent">Enregistre</span>}
+        {saved && <span className="text-xs text-accent">Enregistré</span>}
       </div>
     </div>
   )

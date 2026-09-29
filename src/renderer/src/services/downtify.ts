@@ -118,7 +118,7 @@ export class DowntifyClient {
   async queueByQuery(query: string, type: 'track' | 'album'): Promise<DowntifySong[]> {
     const results = await this.searchSongs(query)
     if (results.length === 0) {
-      throw new ApiError(`Aucun resultat trouve pour ${type === 'album' ? 'cet album' : 'ce titre'}`, 404)
+      throw new ApiError(`Aucun résultat trouvé pour ${type === 'album' ? 'cet album' : 'ce titre'}`, 404)
     }
     const targets =
       type === 'track'

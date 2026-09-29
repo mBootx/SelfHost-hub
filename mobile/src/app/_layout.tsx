@@ -6,8 +6,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import PlaybackController from '@/components/PlaybackController'
 import PlayerOverlay from '@/components/PlayerOverlay'
 import UpdatePrompt from '@/components/UpdatePrompt'
+import WhatsNewModal from '@/components/WhatsNewModal'
 import { pruneStaleDownloads } from '@/services/appUpdate'
+import { startPlaybackMemory } from '@/services/playbackMemory'
 import { useUpdateStore } from '@/store/updateStore'
+import { useWhatsNewStore } from '@/store/whatsNewStore'
 import { useAudioSettingsStore } from '@/store/audioSettingsStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
@@ -53,6 +56,7 @@ export default function RootLayout() {
   const loadHistory = useHistoryStore((s) => s.loadFromDisk)
   const checkForUpdate = useUpdateStore((s) => s.check)
   const loadAudioSettings = useAudioSettingsStore((s) => s.load)
+  const checkWhatsNew = useWhatsNewStore((s) => s.check)
 
   useEffect(() => {
     restoreNavidrome()
@@ -65,9 +69,11 @@ export default function RootLayout() {
     loadHistory()
     loadPlaybackPrefs()
     loadAudioSettings()
+    startPlaybackMemory()
     // Keeps a downloaded APK that is still newer than this install, so retrying an update doesn't re-download it.
     pruneStaleDownloads()
     checkForUpdate()
+    checkWhatsNew()
   }, [])
 
   // Keyed on a real 'background' event, not AppState.currentState, which Android can
@@ -108,6 +114,7 @@ export default function RootLayout() {
       </Stack>
       <PlayerOverlay />
       <UpdatePrompt />
+      <WhatsNewModal />
     </GestureHandlerRootView>
   )
 }

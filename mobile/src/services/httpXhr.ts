@@ -51,8 +51,8 @@ export function xhrRequest(config: XhrRequestConfig): Promise<XhrResponse> {
       }
       resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data, headers })
     }
-    xhr.onerror = () => resolve({ ok: false, status: 0, data: null, headers: {}, error: 'Erreur reseau' })
-    xhr.ontimeout = () => resolve({ ok: false, status: 0, data: null, headers: {}, error: 'Delai depasse' })
+    xhr.onerror = () => resolve({ ok: false, status: 0, data: null, headers: {}, error: 'Erreur réseau' })
+    xhr.ontimeout = () => resolve({ ok: false, status: 0, data: null, headers: {}, error: 'Délai dépassé' })
     xhr.send(config.data !== undefined ? JSON.stringify(config.data) : undefined)
   })
 }

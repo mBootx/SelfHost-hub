@@ -123,6 +123,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   stopHub()
+  // localStorage reaches disk lazily; this makes sure the playback position saved on close is kept.
+  session.defaultSession.flushStorageData()
   if (process.platform !== 'darwin') app.quit()
 })
 
@@ -345,7 +347,7 @@ function registerIpc(): void {
   // connections (see remoteHub.ts), so it hosts the local WebSocket hub that
   // phones on the same LAN connect to.
   ipcMain.handle('remote:start', (_e, args: { accountHash: string; deviceName: string }) => {
-    if (!mainWindow) return { ok: false, error: 'Fenetre indisponible' }
+    if (!mainWindow) return { ok: false, error: 'Fenêtre indisponible' }
     return startHub({ window: mainWindow, accountHash: args.accountHash, deviceName: args.deviceName })
   })
   ipcMain.handle('remote:stop', () => {

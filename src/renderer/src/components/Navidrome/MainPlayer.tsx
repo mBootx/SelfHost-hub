@@ -101,7 +101,7 @@ export default function MainPlayer(): JSX.Element {
   async function handleDeletePlaylist(playlist: NDPlaylist): Promise<void> {
     try {
       await deletePlaylist(playlist.id)
-      showToast(`Playlist "${playlist.name}" supprimee`)
+      showToast(`Playlist "${playlist.name}" supprimée`)
     } catch (err: any) {
       showToast(err?.message || 'Impossible de supprimer la playlist')
     } finally {
@@ -322,7 +322,7 @@ export default function MainPlayer(): JSX.Element {
             <div>
               <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
                 <Download className="h-4 w-4 text-accent" />
-                Pas dans votre bibliotheque ? Telecharger via Downtify
+                Pas dans votre bibliothèque ? Télécharger via Downtify
               </h2>
               {downtifySearching ? (
                 <p className="text-sm text-gray-400">Recherche sur Downtify...</p>
@@ -437,7 +437,7 @@ export default function MainPlayer(): JSX.Element {
       <div className="animate-fade-in space-y-8 p-6">
         {history.length > 0 && (
           <div>
-            <h2 className="mb-3 text-lg font-semibold">Recemment ecoute</h2>
+            <h2 className="mb-3 text-lg font-semibold">Récemment écouté</h2>
             <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1">
               {history.slice(0, 12).map((h, i) => (
                 <button
@@ -465,7 +465,7 @@ export default function MainPlayer(): JSX.Element {
           </div>
         )}
         <div>
-          <h2 className="mb-4 text-xl font-bold">Ajouts recents</h2>
+          <h2 className="mb-4 text-xl font-bold">Ajouts récents</h2>
           <AlbumGrid albums={recentAlbums} onSelect={setSelectedAlbum} />
         </div>
       </div>
@@ -489,7 +489,7 @@ export default function MainPlayer(): JSX.Element {
           <button
             onClick={() => setShowRightPanel((v) => !v)}
             className={`rounded-full p-2 transition-colors ${showRightPanel ? 'text-accent' : 'text-gray-400 hover:text-white'}`}
-            title="Details"
+            title="Détails"
           >
             <PanelRight className="h-4 w-4" />
           </button>
@@ -498,7 +498,7 @@ export default function MainPlayer(): JSX.Element {
             onClick={() => logout()}
             className="flex items-center gap-1.5 rounded-full border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-red-500 hover:text-red-400"
           >
-            <LogOut className="h-3.5 w-3.5" /> Se deconnecter
+            <LogOut className="h-3.5 w-3.5" /> Se déconnecter
           </button>
         </div>
       </div>
@@ -608,7 +608,7 @@ export default function MainPlayer(): JSX.Element {
       <ConfirmModal
         open={!!playlistToDelete}
         title="Supprimer la playlist ?"
-        description={playlistToDelete ? `"${playlistToDelete.name}" sera definitivement supprimee.` : ''}
+        description={playlistToDelete ? `"${playlistToDelete.name}" sera définitivement supprimée.` : ''}
         onCancel={() => setPlaylistToDelete(null)}
         onConfirm={() => (playlistToDelete ? handleDeletePlaylist(playlistToDelete) : undefined)}
       />

@@ -24,9 +24,9 @@ export default function PlaylistPickerSheet() {
       await addSongsToPlaylist(playlistId, [song.id])
       setAddedTo((prev) => new Set(prev).add(playlistId))
       const name = playlists.find((p) => p.id === playlistId)?.name
-      showToast(name ? `Ajoute a "${name}"` : 'Ajoute a la playlist')
+      showToast(name ? `Ajouté à "${name}"` : 'Ajouté à la playlist')
     } catch {
-      showToast("Impossible d'ajouter a la playlist")
+      showToast("Impossible d'ajouter à la playlist")
     }
   }
 
@@ -36,9 +36,9 @@ export default function PlaylistPickerSheet() {
     try {
       const playlist = await createPlaylist(name, [song.id])
       setAddedTo((prev) => new Set(prev).add(playlist.id))
-      showToast(`Playlist "${playlist.name}" creee`)
+      showToast(`Playlist "${playlist.name}" créée`)
     } catch {
-      showToast('Impossible de creer la playlist')
+      showToast('Impossible de créer la playlist')
     }
   }
 
@@ -54,7 +54,7 @@ export default function PlaylistPickerSheet() {
           <View style={styles.sheet} onStartShouldSetResponder={() => true}>
             <View style={styles.header}>
               <Text style={styles.title} numberOfLines={1}>
-                Ajouter "{song?.title}" a...
+                Ajouter "{song?.title}" à...
               </Text>
               <Pressable onPress={handleClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Fermer">
                 <X size={18} color={colors.textSecondary} />
@@ -88,7 +88,7 @@ export default function PlaylistPickerSheet() {
       <PromptModal
         visible={showPrompt}
         title="Nouvelle playlist"
-        confirmLabel="Creer"
+        confirmLabel="Créer"
         onCancel={() => setShowPrompt(false)}
         onConfirm={handleCreate}
       />

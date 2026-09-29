@@ -69,7 +69,7 @@ export default function DownloadsList() {
   }
 
   function confirmClear(): void {
-    Alert.alert('Tout supprimer', `Supprimer les ${files.length} fichiers telecharges ?`, [
+    Alert.alert('Tout supprimer', `Supprimer les ${files.length} fichiers téléchargés ?`, [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Supprimer', style: 'destructive', onPress: () => clear() }
     ])
@@ -94,8 +94,8 @@ export default function DownloadsList() {
       ListEmptyComponent={
         <EmptyState
           icon={Download}
-          title="Aucun telechargement"
-          hint="Les fichiers que vous telechargez depuis le serveur restent ici, meme hors-ligne."
+          title="Aucun téléchargement"
+          hint="Les fichiers que vous téléchargez depuis le serveur restent ici, même hors-ligne."
         />
       }
       renderItem={({ item }) => (

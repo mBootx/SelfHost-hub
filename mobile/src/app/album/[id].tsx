@@ -87,7 +87,7 @@ export default function AlbumScreen() {
               style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
               onPress={() => downloadTracks(songs, client)}
               accessibilityRole="button"
-              accessibilityLabel="Telecharger pour l'ecoute hors-ligne"
+              accessibilityLabel="Télécharger pour l'écoute hors-ligne"
             >
               <HardDriveDownload size={16} color={colors.textSecondary} />
             </Pressable>
@@ -96,7 +96,7 @@ export default function AlbumScreen() {
                 style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
                 onPress={() => requestDownload(`${album?.artist} - ${album?.name}`, 'album')}
                 accessibilityRole="button"
-                accessibilityLabel="Envoyer a Downtify"
+                accessibilityLabel="Envoyer à Downtify"
               >
                 <Download size={16} color={colors.textSecondary} />
               </Pressable>

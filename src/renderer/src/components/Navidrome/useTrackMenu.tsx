@@ -45,14 +45,14 @@ export function useTrackMenu(): {
                 }
               },
               {
-                label: 'Ajouter a la file',
+                label: 'Ajouter à la file',
                 icon: ListEnd,
                 onClick: () => {
                   addToQueue([state.song])
-                  showToast('Ajoute a la file de lecture')
+                  showToast('Ajouté à la file de lecture')
                 }
               },
-              { label: 'Ajouter a une playlist', icon: ListPlus, onClick: () => setAddToPlaylistSong(state.song) },
+              { label: 'Ajouter à une playlist', icon: ListPlus, onClick: () => setAddToPlaylistSong(state.song) },
               {
                 label: state.song.starred ? 'Retirer des favoris' : 'Ajouter aux favoris',
                 icon: Heart,
@@ -60,7 +60,7 @@ export function useTrackMenu(): {
                   if (!client) return
                   if (state.song.starred) await client.unstar(state.song.id)
                   else await client.star(state.song.id)
-                  showToast(state.song.starred ? 'Retire des favoris' : 'Ajoute aux favoris')
+                  showToast(state.song.starred ? 'Retiré des favoris' : 'Ajouté aux favoris')
                 }
               }
             ]}

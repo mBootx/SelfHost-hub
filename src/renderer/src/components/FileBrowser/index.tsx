@@ -25,7 +25,7 @@ export default function FileBrowserModule(): JSX.Element {
             onClick={() => setPane('downloads')}
             className="border-b border-surface-border py-2 text-center text-xs text-accent hover:underline"
           >
-            Voir mes {downloadCount} telechargements
+            Voir mes {downloadCount} téléchargements
           </button>
         )}
         <div className="min-h-0 flex-1">
@@ -41,7 +41,7 @@ export default function FileBrowserModule(): JSX.Element {
         {(
           [
             ['server', 'Serveur'],
-            ['downloads', downloadCount > 0 ? `Telechargements (${downloadCount})` : 'Telechargements']
+            ['downloads', downloadCount > 0 ? `Téléchargements (${downloadCount})` : 'Téléchargements']
           ] as [Pane, string][]
         ).map(([key, label]) => (
           <button

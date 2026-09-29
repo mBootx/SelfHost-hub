@@ -35,7 +35,7 @@ export default function AppearanceSection(): JSX.Element {
               )
             })}
             <label
-              title="Couleur personnalisee"
+              title="Couleur personnalisée"
               style={isCustomAccent ? { backgroundColor: accent } : undefined}
               className={`relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-dashed border-gray-500 transition-transform hover:scale-110 ${
                 isCustomAccent ? 'border-solid ring-2 ring-white ring-offset-2 ring-offset-surface-elevated' : ''
@@ -47,7 +47,7 @@ export default function AppearanceSection(): JSX.Element {
                 value={accent}
                 onChange={(e) => setAccent(e.target.value)}
                 className="absolute inset-0 cursor-pointer opacity-0"
-                aria-label="Couleur personnalisee"
+                aria-label="Couleur personnalisée"
               />
             </label>
           </div>
@@ -81,7 +81,7 @@ export default function AppearanceSection(): JSX.Element {
         </div>
 
         <button onClick={reset} className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-white">
-          <RotateCcw className="h-3.5 w-3.5" /> Revenir au theme d'origine
+          <RotateCcw className="h-3.5 w-3.5" /> Revenir au thème d'origine
         </button>
       </div>
     </section>

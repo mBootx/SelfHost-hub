@@ -80,7 +80,7 @@ export default function AlbumView({ client, albumId }: Props): JSX.Element {
             </button>
             <button
               onClick={() => downloadTracks(songs, client)}
-              title="Telecharger l'album pour ecoute hors-ligne"
+              title="Télécharger l'album pour écoute hors-ligne"
               className="flex items-center gap-2 rounded-full border border-surface-border px-4 py-2 text-sm text-gray-300 transition-colors hover:border-accent hover:text-accent"
             >
               <HardDriveDownload className="h-4 w-4" /> Hors-ligne
@@ -90,7 +90,7 @@ export default function AlbumView({ client, albumId }: Props): JSX.Element {
                 onClick={() => requestDownload(`${album?.artist} - ${album?.name}`, 'album')}
                 className="flex items-center gap-2 rounded-full border border-surface-border px-4 py-2 text-sm text-gray-300 transition-colors hover:border-accent hover:text-accent"
               >
-                <Download className="h-4 w-4" /> Telecharger l'album
+                <Download className="h-4 w-4" /> Télécharger l'album
               </button>
             )}
           </div>

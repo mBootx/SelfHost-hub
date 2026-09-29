@@ -12,8 +12,8 @@ function StatusBadge({ status }: { status: QueueStatus }): JSX.Element {
   }
   const labels: Record<string, string> = {
     queued: 'En attente',
-    downloading: 'Telechargement',
-    done: 'Termine',
+    downloading: 'Téléchargement',
+    done: 'Terminé',
     error: 'Erreur'
   }
   const style = styles[status] || 'bg-gray-500/20 text-gray-300'
@@ -27,7 +27,7 @@ export default function DownloadQueue(): JSX.Element {
   const clearQueue = useDowntifyStore((s) => s.clearQueue)
 
   if (queue.length === 0) {
-    return <p className="py-8 text-center text-sm text-gray-500">Aucun telechargement en cours.</p>
+    return <p className="py-8 text-center text-sm text-gray-500">Aucun téléchargement en cours.</p>
   }
 
   return (

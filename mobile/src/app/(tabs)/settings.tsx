@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Music, FolderOpen, Download, HardDriveDownload, ChevronRight, Check, Cast, RefreshCw } from 'lucide-react-native'
+import { Music, FolderOpen, Download, HardDriveDownload, ChevronRight, Check, Cast, RefreshCw, Sparkles } from 'lucide-react-native'
 import { installedVersion } from '@/services/appUpdate'
+import { useWhatsNewStore } from '@/store/whatsNewStore'
 import AppearanceSection from '@/components/settings/AppearanceSection'
 import PlaybackSection from '@/components/settings/PlaybackSection'
 import { useUpdateStore } from '@/store/updateStore'
@@ -56,16 +57,16 @@ function ServiceRow({
           style={({ pressed }) => [styles.pillButton, pressed && styles.pressed]}
           onPress={onLogout}
           accessibilityRole="button"
-          accessibilityLabel={`Se deconnecter de ${name}`}
+          accessibilityLabel={`Se déconnecter de ${name}`}
         >
-          <Text style={styles.pillText}>Deconnexion</Text>
+          <Text style={styles.pillText}>Déconnexion</Text>
         </Pressable>
       ) : onConnect ? (
         <Pressable
           style={({ pressed }) => [styles.pillButton, styles.pillPrimary, pressed && styles.pressed]}
           onPress={onConnect}
           accessibilityRole="button"
-          accessibilityLabel={`Se connecter a ${name}`}
+          accessibilityLabel={`Se connecter à ${name}`}
         >
           <Text style={[styles.pillText, { color: '#000' }]}>Connecter</Text>
         </Pressable>
@@ -100,12 +101,13 @@ export default function SettingsTab() {
   const updatePhase = useUpdateStore((s) => s.phase)
   const availableUpdate = useUpdateStore((s) => s.update)
   const checkForUpdate = useUpdateStore((s) => s.check)
-  const [updateMessage, setUpdateMessage] = useState('Verifiees au demarrage, au plus une fois par heure.')
+  const showWhatsNew = useWhatsNewStore((s) => s.showAll)
+  const [updateMessage, setUpdateMessage] = useState('Vérifiées au démarrage, au plus une fois par heure.')
 
   async function handleCheckUpdate(): Promise<void> {
     const outcome = await checkForUpdate(true)
-    if (outcome === 'current') setUpdateMessage('Vous avez la derniere version.')
-    else if (outcome === 'error') setUpdateMessage('Verification impossible (hors ligne ?).')
+    if (outcome === 'current') setUpdateMessage('Vous avez la dernière version.')
+    else if (outcome === 'error') setUpdateMessage('Vérification impossible (hors ligne ?).')
   }
 
   useEffect(() => {
@@ -121,7 +123,7 @@ export default function SettingsTab() {
     setSavingSettings(true)
     try {
       await downtifyClient.updateSettings(dtSettings)
-      Alert.alert('Options', 'Enregistrees avec succes.')
+      Alert.alert('Options', 'Enregistrées avec succès.')
     } catch (err: any) {
       Alert.alert('Erreur', err?.message || 'Enregistrement impossible')
     } finally {
@@ -130,7 +132,7 @@ export default function SettingsTab() {
   }
 
   function confirmClearOffline(): void {
-    Alert.alert('Vider le cache hors-ligne', `Supprimer les ${offlineIds.length} titres telecharges sur cet appareil ?`, [
+    Alert.alert('Vider le cache hors-ligne', `Supprimer les ${offlineIds.length} titres téléchargés sur cet appareil ?`, [
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Supprimer',
@@ -146,7 +148,7 @@ export default function SettingsTab() {
 
   return (
     <Screen>
-      <ScreenHeader title="Reglages" />
+      <ScreenHeader title="Réglages" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <SectionTitle>Services</SectionTitle>
         <ServiceRow
@@ -155,7 +157,7 @@ export default function SettingsTab() {
           accent={colors.accent}
           name="Navidrome"
           connected={navidromeStatus === 'connected'}
-          subtitle={navidromeStatus === 'connected' ? `Connecte en tant que ${navidromeUsername}` : 'Non connecte'}
+          subtitle={navidromeStatus === 'connected' ? `Connecté en tant que ${navidromeUsername}` : 'Non connecté'}
           onLogout={navidromeLogout}
         />
         <ServiceRow
@@ -164,7 +166,7 @@ export default function SettingsTab() {
           accent={colors.filebrowser}
           name="FileBrowser"
           connected={fileBrowserStatus === 'connected'}
-          subtitle={fileBrowserStatus === 'connected' ? 'Connecte' : 'Non connecte'}
+          subtitle={fileBrowserStatus === 'connected' ? 'Connecté' : 'Non connecté'}
           onLogout={fileBrowserLogout}
         />
         <ServiceRow
@@ -173,19 +175,19 @@ export default function SettingsTab() {
           accent={colors.downtify}
           name="Downtify"
           connected={downtifyStatus === 'connected'}
-          subtitle={downtifyStatus === 'connected' ? 'Resultats integres a la recherche' : 'Non connecte'}
+          subtitle={downtifyStatus === 'connected' ? 'Résultats intégrés à la recherche' : 'Non connecté'}
           onLogout={downtifyLogout}
           onConnect={() => router.push('/downtify/connect')}
         />
 
         <View style={styles.sectionSpacer}>
-          <SectionTitle>Controle a distance</SectionTitle>
+          <SectionTitle>Contrôle à distance</SectionTitle>
         </View>
         <Pressable
           style={({ pressed }) => [styles.row, pressed && styles.pressed]}
           onPress={() => router.push('/devices')}
           accessibilityRole="button"
-          accessibilityLabel="Controle a distance"
+          accessibilityLabel="Contrôle à distance"
         >
           <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
             <Cast size={20} color={colors.textSecondary} />
@@ -194,12 +196,12 @@ export default function SettingsTab() {
             <Text style={styles.rowTitle}>Appareils</Text>
             <Text style={styles.rowMeta}>
               {!remoteEnabled
-                ? 'Desactive'
+                ? 'Désactivé'
                 : remoteStatus === 'connected'
-                  ? 'Connecte au PC'
+                  ? 'Connecté au PC'
                   : remoteStatus === 'connecting'
                     ? 'Recherche en cours...'
-                    : 'Active - non connecte'}
+                    : 'Activé - non connecté'}
             </Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
@@ -208,26 +210,26 @@ export default function SettingsTab() {
         {downtifyStatus === 'connected' && (
           <>
             <View style={styles.sectionSpacer}>
-              <SectionTitle>Telechargements</SectionTitle>
+              <SectionTitle>Téléchargements</SectionTitle>
             </View>
 
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               onPress={() => router.push('/downtify/queue')}
               accessibilityRole="button"
-              accessibilityLabel="Voir la file de telechargement"
+              accessibilityLabel="Voir la file de téléchargement"
             >
               <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
                 <Download size={20} color={colors.textSecondary} />
               </View>
               <View style={styles.rowInfo}>
-                <Text style={styles.rowTitle}>File de telechargement</Text>
+                <Text style={styles.rowTitle}>File de téléchargement</Text>
                 <Text style={styles.rowMeta}>
                   {activeDownloads > 0
                     ? `${activeDownloads} en cours`
                     : downtifyQueue.length > 0
                       ? `${downtifyQueue.length} dans l'historique`
-                      : 'Aucun telechargement'}
+                      : 'Aucun téléchargement'}
                 </Text>
               </View>
               <ChevronRight size={18} color={colors.textMuted} />
@@ -243,13 +245,13 @@ export default function SettingsTab() {
                   autoCapitalize="none"
                   accessibilityLabel="Format"
                 />
-                <Text style={styles.fieldLabel}>Qualite (kbps)</Text>
+                <Text style={styles.fieldLabel}>Qualité (kbps)</Text>
                 <TextInput
                   style={styles.input}
                   value={dtSettings.bitrate}
                   onChangeText={(v) => setDtSettings({ ...dtSettings, bitrate: v })}
                   autoCapitalize="none"
-                  accessibilityLabel="Qualite en kbps"
+                  accessibilityLabel="Qualité en kbps"
                 />
                 <Text style={styles.fieldLabel}>Format du nom de fichier</Text>
                 <TextInput
@@ -295,7 +297,7 @@ export default function SettingsTab() {
           <View style={styles.rowInfo}>
             <Text style={styles.rowTitle}>Titres hors-ligne</Text>
             <Text style={styles.rowMeta}>
-              {offlineIds.length === 0 ? 'Aucun titre telecharge' : `${offlineIds.length} titres sur cet appareil`}
+              {offlineIds.length === 0 ? 'Aucun titre téléchargé' : `${offlineIds.length} titres sur cet appareil`}
             </Text>
           </View>
           {offlineIds.length > 0 && (
@@ -332,11 +334,26 @@ export default function SettingsTab() {
             onPress={handleCheckUpdate}
             disabled={updatePhase === 'checking' || updatePhase === 'downloading' || updatePhase === 'installing'}
             accessibilityRole="button"
-            accessibilityLabel="Rechercher des mises a jour"
+            accessibilityLabel="Rechercher des mises à jour"
           >
             <Text style={styles.pillText}>Rechercher</Text>
           </Pressable>
         </View>
+        <Pressable
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          onPress={showWhatsNew}
+          accessibilityRole="button"
+          accessibilityLabel="Nouveautés"
+        >
+          <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
+            <Sparkles size={20} color={colors.textSecondary} />
+          </View>
+          <View style={styles.rowInfo}>
+            <Text style={styles.rowTitle}>Nouveautés</Text>
+            <Text style={styles.rowMeta}>Ce qui a changé dans les dernières versions.</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </Pressable>
       </ScrollView>
     </Screen>
   )

@@ -28,9 +28,9 @@ export default function AddToPlaylistModal({ songs, onClose }: Props): JSX.Eleme
       )
       setAddedTo((prev) => new Set(prev).add(playlistId))
       const name = playlists.find((p) => p.id === playlistId)?.name
-      showToast(name ? `Ajoute a "${name}"` : 'Ajoute a la playlist')
+      showToast(name ? `Ajouté à "${name}"` : 'Ajouté à la playlist')
     } catch (err: any) {
-      setError(err?.message || "Impossible d'ajouter a la playlist")
+      setError(err?.message || "Impossible d'ajouter à la playlist")
     }
   }
 
@@ -45,10 +45,10 @@ export default function AddToPlaylistModal({ songs, onClose }: Props): JSX.Eleme
         songs.map((s) => s.id)
       )
       setAddedTo((prev) => new Set(prev).add(playlist.id))
-      showToast(`Playlist "${playlist.name}" creee`)
+      showToast(`Playlist "${playlist.name}" créée`)
       setNewName('')
     } catch (err: any) {
-      setError(err?.message || 'Impossible de creer la playlist')
+      setError(err?.message || 'Impossible de créer la playlist')
     } finally {
       setCreating(false)
     }
@@ -62,7 +62,7 @@ export default function AddToPlaylistModal({ songs, onClose }: Props): JSX.Eleme
       >
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">
-            Ajouter {songs.length > 1 ? `${songs.length} titres` : `"${songs[0]?.title}"`} a une playlist
+            Ajouter {songs.length > 1 ? `${songs.length} titres` : `"${songs[0]?.title}"`} à une playlist
           </h2>
           <button onClick={onClose} className="rounded p-1 text-gray-400 hover:text-white" aria-label="Fermer">
             <X className="h-4 w-4" />
@@ -99,7 +99,7 @@ export default function AddToPlaylistModal({ songs, onClose }: Props): JSX.Eleme
             disabled={creating || !newName.trim()}
             className="flex shrink-0 items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-accent-hover disabled:opacity-60"
           >
-            <Plus className="h-3.5 w-3.5" /> Creer
+            <Plus className="h-3.5 w-3.5" /> Créer
           </button>
         </form>
       </div>

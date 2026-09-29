@@ -132,7 +132,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
 
   createPlaylist: async (name, songIds) => {
     const { client } = get()
-    if (!client) throw new Error('Non connecte')
+    if (!client) throw new Error('Non connecté')
     const playlist = await client.createPlaylist(name, songIds)
     set((s) => ({ playlists: [...s.playlists, playlist] }))
     return playlist
@@ -277,7 +277,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
 
   deletePlaylist: async (playlistId) => {
     const { client } = get()
-    if (!client) throw new Error('Non connecte')
+    if (!client) throw new Error('Non connecté')
     await client.deletePlaylist(playlistId)
     set((s) => ({ playlists: s.playlists.filter((p) => p.id !== playlistId) }))
   },

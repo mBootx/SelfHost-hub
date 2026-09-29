@@ -71,7 +71,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       // Back from the installer without updating (a successful install restarts the app instead).
       set({ phase: 'available' })
     } catch (err: any) {
-      set({ phase: 'error', error: err?.message || 'La mise a jour a echoue', readyToInstall: isDownloaded(update) })
+      set({ phase: 'error', error: err?.message || 'La mise à jour a échoué', readyToInstall: isDownloaded(update) })
     }
   },
 

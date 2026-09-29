@@ -78,7 +78,7 @@ export default function ExplorerScreen() {
       const contentUri = new File(uri).contentUri
       await Linking.openURL(contentUri)
     } catch {
-      Alert.alert('Impossible', "Aucune application ne peut ouvrir ce fichier, ou le telechargement a echoue.")
+      Alert.alert('Impossible', "Aucune application ne peut ouvrir ce fichier, ou le téléchargement a échoué.")
     } finally {
       setOpening(false)
     }
@@ -124,18 +124,18 @@ export default function ExplorerScreen() {
   function buildMenuItems(item: FBItem): ActionSheetItem[] {
     const openItem: ActionSheetItem = item.isDir
       ? { label: 'Ouvrir', icon: FolderOpen, onPress: () => navigate(item.path) }
-      : { label: 'Apercu', icon: Eye, onPress: () => handleItemPress(item) }
+      : { label: 'Aperçu', icon: Eye, onPress: () => handleItemPress(item) }
     const list: ActionSheetItem[] = [openItem]
     if (!item.isDir) {
       list.push({
-        label: 'Telecharger',
+        label: 'Télécharger',
         icon: Download,
         onPress: async () => {
           try {
             await saveToDevice(item)
-            Alert.alert('Telecharge', `"${item.name}" est disponible dans l'onglet Telechargements.`)
+            Alert.alert('Téléchargé', `"${item.name}" est disponible dans l'onglet Téléchargements.`)
           } catch {
-            Alert.alert('Echec', 'Le telechargement a echoue.')
+            Alert.alert('Échec', 'Le téléchargement a échoué.')
           }
         }
       })
@@ -229,7 +229,7 @@ export default function ExplorerScreen() {
       <PromptModal
         visible={creatingFolder}
         title="Nouveau dossier"
-        confirmLabel="Creer"
+        confirmLabel="Créer"
         onCancel={() => setCreatingFolder(false)}
         onConfirm={handleCreateFolder}
       />

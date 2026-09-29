@@ -29,8 +29,8 @@ export default function LoginScreen() {
       icon={Music}
       accent={colors.accent}
       iconColor="#000"
-      title="Connexion a Navidrome"
-      subtitle="Votre serveur de musique auto-heberge"
+      title="Connexion à Navidrome"
+      subtitle="Votre serveur de musique auto-hébergé"
       error={error}
       loading={loading}
       onSubmit={handleSubmit}

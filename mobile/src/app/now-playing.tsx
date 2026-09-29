@@ -175,7 +175,7 @@ export default function NowPlayingScreen() {
         })
         if (res) {
           setLyrics(res)
-          found.push(res.synced ? 'paroles synchronisees' : 'paroles')
+          found.push(res.synced ? 'paroles synchronisées' : 'paroles')
         }
       }
       // Navidrome already having art wins; only go looking when it has none and
@@ -192,7 +192,7 @@ export default function NowPlayingScreen() {
     }
     Alert.alert(
       'Recherche automatique',
-      found.length > 0 ? `Trouve : ${found.join(' et ')}.` : 'Rien trouve pour ce titre.'
+      found.length > 0 ? `Trouvé : ${found.join(' et ')}.` : 'Rien trouvé pour ce titre.'
     )
   }
 
@@ -288,7 +288,7 @@ export default function NowPlayingScreen() {
                     onPress={() => {
                       clearQueue()
                       setConfirmClearQueue(false)
-                      showToast('File de lecture videe')
+                      showToast('File de lecture vidée')
                     }}
                     hitSlop={8}
                   >

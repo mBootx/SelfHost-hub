@@ -26,8 +26,8 @@ export default function LoginScreen() {
     <LoginLayout
       icon={Download}
       accent={colors.downtify}
-      title="Connexion a Downtify"
-      subtitle="Gestionnaire de telechargements"
+      title="Connexion à Downtify"
+      subtitle="Gestionnaire de téléchargements"
       error={error}
       loading={loading}
       onSubmit={handleSubmit}

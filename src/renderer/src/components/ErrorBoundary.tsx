@@ -29,7 +29,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             <AlertTriangle className="h-8 w-8 text-red-400" />
           </div>
           <div>
-            <p className="text-lg font-semibold">{this.props.label} a rencontre une erreur</p>
+            <p className="text-lg font-semibold">{this.props.label} a rencontré une erreur</p>
             <p className="mt-1 max-w-sm text-sm text-gray-400">{this.state.error.message}</p>
           </div>
           <button
@@ -37,7 +37,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             className="flex items-center gap-2 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-black transition-colors hover:bg-accent-hover"
           >
             <RotateCw className="h-4 w-4" />
-            Reessayer
+            Réessayer
           </button>
         </div>
       )

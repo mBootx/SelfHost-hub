@@ -60,7 +60,7 @@ export const useUploadStore = create<UploadState>((set, get) => ({
     } catch (err: any) {
       set((s) => ({
         tasks: s.tasks.map((t) =>
-          t.id === id ? { ...t, status: 'error', error: err?.message || 'Echec du televersement', speedBps: 0 } : t
+          t.id === id ? { ...t, status: 'error', error: err?.message || 'Échec du téléversement', speedBps: 0 } : t
         )
       }))
     }

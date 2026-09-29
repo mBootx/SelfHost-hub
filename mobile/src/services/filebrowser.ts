@@ -113,12 +113,12 @@ export class FileBrowserClient {
       if (res.status === 0) throw new ApiError(res.error || 'Serveur injoignable', 0)
       let message = res.status === 401 || res.status === 403 ? 'Identifiants invalides' : res.error
       if (res.data?.message) message = res.data.message
-      throw new ApiError(message || 'Connexion echouee', res.status || 401)
+      throw new ApiError(message || 'Connexion échouée', res.status || 401)
     }
     const token = extractCookie(res.headers['set-cookie'], JWT_COOKIE_NAME)
     if (!token) {
       throw new ApiError(
-        "Session introuvable dans la reponse du serveur (l'authentification a deux facteurs n'est pas geree)",
+        "Session introuvable dans la réponse du serveur (l'authentification à deux facteurs n'est pas gérée)",
         500
       )
     }
@@ -152,7 +152,7 @@ export class FileBrowserClient {
       url: `${this.baseUrl}/api/resources?${params.toString()}`,
       headers: this.authHeaders()
     })
-    if (res.status === 401) throw new ApiError('Session expiree', 401)
+    if (res.status === 401) throw new ApiError('Session expirée', 401)
     if (!res.ok) throw new ApiError(res.error || 'Impossible de lister le dossier', res.status)
     const data = res.data || {}
     const folders = (data.folders || []).map((f: any) => ({ ...f, isDir: true }))
@@ -191,7 +191,7 @@ export class FileBrowserClient {
       onProgress: onProgress ? ({ bytesWritten, totalBytes }) => onProgress(bytesWritten, totalBytes) : undefined
     })
     const file = await task.downloadAsync()
-    if (!file) throw new ApiError('Telechargement interrompu', 0)
+    if (!file) throw new ApiError('Téléchargement interrompu', 0)
     return file.uri
   }
 
@@ -216,7 +216,7 @@ export class FileBrowserClient {
     })
     const result = await task.uploadAsync()
     if (!result || result.status < 200 || result.status >= 300) {
-      throw new ApiError("Echec de l'upload", result?.status || 500)
+      throw new ApiError("Échec de l'upload", result?.status || 500)
     }
   }
 
@@ -252,7 +252,7 @@ export class FileBrowserClient {
       method: 'POST',
       headers: this.authHeaders()
     })
-    if (!res.ok) throw new ApiError('Creation du dossier impossible', res.status)
+    if (!res.ok) throw new ApiError('Création du dossier impossible', res.status)
   }
 
   async getSourcesUsage(): Promise<SourceUsage[]> {
@@ -260,7 +260,7 @@ export class FileBrowserClient {
       url: `${this.baseUrl}/api/settings/sources`,
       headers: this.authHeaders()
     })
-    if (!res.ok) throw new ApiError("Impossible de recuperer l'espace disque", res.status)
+    if (!res.ok) throw new ApiError("Impossible de récupérer l'espace disque", res.status)
     const data = res.data || {}
     return Object.entries(data).map(([key, raw]) => {
       const v = raw as Record<string, any>
@@ -290,7 +290,7 @@ export class FileBrowserClient {
       url: `${this.baseUrl}/api/resources/download?${params.toString()}`,
       headers: this.authHeaders()
     })
-    if (!res.ok) throw new ApiError('Apercu impossible', res.status)
+    if (!res.ok) throw new ApiError('Aperçu impossible', res.status)
     return typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
   }
 }

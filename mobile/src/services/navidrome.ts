@@ -110,10 +110,10 @@ export class NavidromeClient {
     } catch (err) {
       throw new ApiError(err instanceof Error ? err.message : 'Serveur injoignable', 0)
     }
-    if (!res.ok) throw new ApiError(`Requete echouee (${res.status})`, res.status)
+    if (!res.ok) throw new ApiError(`Requête échouée (${res.status})`, res.status)
     const json = await res.json().catch(() => null)
     const body = json?.['subsonic-response']
-    if (!body) throw new ApiError('Reponse Navidrome invalide', res.status)
+    if (!body) throw new ApiError('Réponse Navidrome invalide', res.status)
     if (body.status === 'failed') {
       const code = body.error?.code
       throw new ApiError(body.error?.message || 'Erreur Navidrome', code === 40 ? 401 : 500)

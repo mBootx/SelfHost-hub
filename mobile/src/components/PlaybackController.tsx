@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { engine, ensureAudioMode, onRemoteCommand } from '@/services/playbackEngine'
+import { resumePosition } from '@/services/playbackMemory'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useOfflineStore } from '@/store/offlineStore'
 import { useArtworkStore } from '@/store/artworkStore'
@@ -70,12 +71,17 @@ export default function PlaybackController(): null {
   // itself lives in the store, so they drive the same actions as the in-app buttons.
   useEffect(() => onRemoteCommand((command) => (command === 'next' ? next() : prev())), [next, prev])
 
+  // Also re-run when the client first appears: a queue restored from the last session is in place
+  // before Navidrome has reconnected.
   useEffect(() => {
     if (!song || !client) return
-    engine.load(song.id, getOfflineUri(song.id) || client.streamUrl(song.id), useNavidromeStore.getState().isPlaying)
-    recordHistory(song)
+    // A track restored from the last session picks up where it stopped. It was recorded in the
+    // history when it first played, so it isn't recorded again.
+    const resumeAt = resumePosition(song.id)
+    engine.load(song.id, getOfflineUri(song.id) || client.streamUrl(song.id), useNavidromeStore.getState().isPlaying, resumeAt ?? 0)
+    if (resumeAt === null) recordHistory(song)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [song?.id])
+  }, [song?.id, !!client])
 
   useEffect(() => {
     if (!client) return
