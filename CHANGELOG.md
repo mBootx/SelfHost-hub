@@ -5,6 +5,13 @@
 ### Added
 - **Cover art in the Now Bar (Android):** the current song's cover is now the Now Bar's background and the lock screen picture. The next song's cover is downloaded in advance, so skipping shows it straight away instead of a moment later.
 
+### Improved
+- **Now Playing screen (Android), redone in the style of Spotify's:**
+  - The cover now fills the width of the screen. Under it: the title with a heart to add the song to your favourites, a slim seek bar (elapsed and remaining time) and the playback buttons. The whole page takes its colour from the cover.
+  - The lyrics are a card under the player, showing the lines around the one being sung. Tap it and it grows into the full lyrics: they follow the song, tapping a line jumps to it, and the play bar stays at the bottom. The Back button closes the lyrics first.
+  - Under the playback buttons: output device, playback speed, download and queue. The "…" menu has add to playlist, favourites, go to the album and the automatic search for lyrics and cover.
+  - On a short phone the cover gives up height before the buttons do, so everything stays on the first screen.
+
 ### Fixed
 - **Samsung Now Bar and lock screen controls (Android):**
   - Skipping a song no longer closes the Now Bar, and it keeps working after many skips. Before, every song change rebuilt the media session and Android's media service refused the new one, so the Now Bar was left showing a dead session: no buttons, and play/pause did nothing.

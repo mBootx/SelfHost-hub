@@ -7,9 +7,13 @@ import { colors } from '@/constants/theme'
 interface Props {
   song: NDSong
   client: NavidromeClient
+  /** Icon size; the default suits a list row. */
+  size?: number
+  /** Colour of the not-yet-downloaded icon: the muted grey is too dim over a coloured backdrop. */
+  idleColor?: string
 }
 
-export default function OfflineButton({ song, client }: Props) {
+export default function OfflineButton({ song, client, size = 18, idleColor = colors.textMuted }: Props) {
   const isOffline = useOfflineStore((s) => !!s.tracks[song.id])
   const downloading = useOfflineStore((s) => s.downloading[song.id])
   const downloadTrack = useOfflineStore((s) => s.downloadTrack)
@@ -26,14 +30,14 @@ export default function OfflineButton({ song, client }: Props) {
   if (isOffline) {
     return (
       <Pressable style={styles.button} onPress={() => removeOffline(song.id)} hitSlop={8}>
-        <CircleCheck size={18} color={colors.accent} />
+        <CircleCheck size={size} color={colors.accent} />
       </Pressable>
     )
   }
 
   return (
     <Pressable style={styles.button} onPress={() => downloadTrack(song, client)} hitSlop={8}>
-      <HardDriveDownload size={18} color={colors.textMuted} />
+      <HardDriveDownload size={size} color={idleColor} />
     </Pressable>
   )
 }

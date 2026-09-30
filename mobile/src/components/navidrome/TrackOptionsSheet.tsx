@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router'
 import { ListEnd, ListStart, ListPlus, Disc3, Heart } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useTrackSheetStore } from '@/store/trackSheetStore'
+import { isStarred, useStarStore } from '@/store/starStore'
 import { usePlaylistPickerStore } from '@/store/playlistPickerStore'
 import { useToastStore } from '@/store/toastStore'
 import ActionSheet, { ActionSheetItem } from '@/components/ActionSheet'
@@ -16,6 +17,8 @@ export default function TrackOptionsSheet() {
   const addToQueue = useNavidromeStore((s) => s.addToQueue)
   const openPlaylistPicker = usePlaylistPickerStore((s) => s.open)
   const showToast = useToastStore((s) => s.show)
+  const starred = useStarStore((s) => (song ? isStarred(s, song) : false))
+  const toggleStar = useStarStore((s) => s.toggle)
 
   const items: ActionSheetItem[] = song
     ? [
@@ -37,13 +40,11 @@ export default function TrackOptionsSheet() {
         },
         { label: 'Ajouter à une playlist', icon: ListPlus, onPress: () => openPlaylistPicker(song) },
         {
-          label: song.starred ? 'Retirer des favoris' : 'Ajouter aux favoris',
+          label: starred ? 'Retirer des favoris' : 'Ajouter aux favoris',
           icon: Heart,
           onPress: async () => {
             if (!client) return
-            if (song.starred) await client.unstar(song.id)
-            else await client.star(song.id)
-            showToast(song.starred ? 'Retiré des favoris' : 'Ajouté aux favoris')
+            if (await toggleStar(song, client)) showToast(starred ? 'Retiré des favoris' : 'Ajouté aux favoris')
           }
         },
         ...(song.albumId

@@ -1,5 +1,7 @@
 package expo.modules.selfhostnative
 
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.media.audiofx.Equalizer
 import android.os.Handler
 import android.os.Looper
@@ -9,6 +11,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import expo.modules.audio.AudioPlayer
 import expo.modules.audio.service.NowPlayingArtwork
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -58,6 +61,12 @@ class SelfHostNativeModule : Module() {
     // Loads a cover into the cache the Now Bar reads from, so the skip that brings that track up shows its
     // picture at once instead of after a download.
     Function("prefetchArtwork") { url: String -> NowPlayingArtwork.prefetch(url) }
+
+    // The dominant colour of a cover ("#rrggbb", or null), for the Now Playing background. It goes through the
+    // cover cache the Now Bar fills for the same URL, so the picture is usually already downloaded.
+    AsyncFunction("getCoverColor") { url: String, promise: Promise ->
+      NowPlayingArtwork.request(url) { art -> promise.resolve(art?.let { dominantColor(it.bitmap) }) }
+    }
 
     // The volume ramp of a crossfade runs here, on the main thread's clock. As a JS setInterval it stopped
     // whenever the app was off screen (React Native pauses its timers then): with the screen off nothing
@@ -141,6 +150,48 @@ class SelfHostNativeModule : Module() {
   private fun stopCrossfade() {
     fadeStep?.let { mainHandler.removeCallbacks(it) }
     fadeStep = null
+  }
+
+  /**
+   * What a cover is mostly "about": pixels fall into buckets of 4 bits per channel and each counts by how vivid
+   * it is, so the coloured part of a cover beats the black or white around it (a dark cover with a tiny bright
+   * logo still comes out dark). Returns "#rrggbb", or null when there is nothing but near-black.
+   */
+  private fun dominantColor(source: Bitmap): String? {
+    val side = 32
+    val small = Bitmap.createScaledBitmap(source, side, side, true)
+    val pixels = IntArray(side * side)
+    small.getPixels(pixels, 0, side, 0, 0, side, side)
+    // The source is shared with the notification: only a copy made here may be recycled.
+    if (small !== source) small.recycle()
+
+    val weight = FloatArray(4096)
+    val red = FloatArray(4096)
+    val green = FloatArray(4096)
+    val blue = FloatArray(4096)
+    val hsv = FloatArray(3)
+    for (pixel in pixels) {
+      val r = Color.red(pixel)
+      val g = Color.green(pixel)
+      val b = Color.blue(pixel)
+      Color.RGBToHSV(r, g, b, hsv)
+      if (hsv[2] < 0.1f) continue
+      val w = 0.05f + hsv[1] * hsv[2]
+      val bucket = ((r shr 4) shl 8) or ((g shr 4) shl 4) or (b shr 4)
+      weight[bucket] += w
+      red[bucket] += r * w
+      green[bucket] += g * w
+      blue[bucket] += b * w
+    }
+    var best = -1
+    for (i in weight.indices) if (weight[i] > 0f && (best < 0 || weight[i] > weight[best])) best = i
+    if (best < 0) return null
+    return String.format(
+      "#%02x%02x%02x",
+      (red[best] / weight[best]).roundToInt(),
+      (green[best] / weight[best]).roundToInt(),
+      (blue[best] / weight[best]).roundToInt()
+    )
   }
 
   // ExoPlayer must be read on its own (main) thread, hence Queues.MAIN on the functions above.

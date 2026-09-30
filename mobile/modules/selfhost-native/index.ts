@@ -28,6 +28,11 @@ interface SelfHostNative {
   startCrossfade?(outgoing: AudioPlayer, incoming: AudioPlayer, durationMs: number, volume: number): boolean
   /** Stops a crossfade where it is, leaving the volumes as they are. */
   cancelCrossfade?(): void
+  /**
+   * The dominant colour of the cover at url ("#rrggbb"), or null if it can't be had. Uses the same cover cache
+   * as the Now Bar. Missing from older installed builds.
+   */
+  getCoverColor?(url: string): Promise<string | null>
 }
 
 /** Null when the native side isn't linked (Expo Go, web), so callers can hide the feature instead of crashing. */
