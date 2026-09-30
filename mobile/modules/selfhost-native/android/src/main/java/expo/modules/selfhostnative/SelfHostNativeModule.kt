@@ -4,6 +4,7 @@ import android.media.audiofx.Equalizer
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import expo.modules.audio.AudioPlayer
+import expo.modules.audio.service.NowPlayingArtwork
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -43,6 +44,10 @@ class SelfHostNativeModule : Module() {
       equalizer.enabled = enabled
       true
     }.runOnQueue(Queues.MAIN)
+
+    // Loads a cover into the cache the Now Bar reads from, so the skip that brings that track up shows its
+    // picture at once instead of after a download.
+    Function("prefetchArtwork") { url: String -> NowPlayingArtwork.prefetch(url) }
 
     // Network I/O: stays on the module's background queue.
     AsyncFunction("sendWakeOnLan") { mac: String, broadcast: String -> sendMagicPacket(mac, broadcast) }

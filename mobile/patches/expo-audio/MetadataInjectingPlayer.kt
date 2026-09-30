@@ -14,6 +14,10 @@ import java.util.IdentityHashMap
 // MediaSession reads artwork from Player.mediaMetadata, but expo-audio lock-screen metadata can
 // change independently of the underlying MediaItem. This wrapper lets the session observe those
 // metadata updates without replacing the active media item on the real ExoPlayer instance.
+//
+// The cover goes in as bytes (see NowPlayingArtwork) rather than only as a URL: with just a URL, Media3
+// publishes the track without a picture and adds it when its own download ends, so a Now Bar that was
+// already drawn never gets one.
 @UnstableApi
 internal class MetadataInjectingPlayer(
   player: Player,
@@ -26,6 +30,7 @@ internal class MetadataInjectingPlayer(
   private val handler = Handler(applicationLooper)
   private val listeners = IdentityHashMap<Player.Listener, Player.Listener>()
   private var injectedMetadata: Metadata? = null
+  private var injectedArtwork: ByteArray? = null
 
   // expo-audio feeds ExoPlayer one media item at a time - the real play queue lives
   // in JavaScript - so ExoPlayer reports "no next/previous track" and every system
@@ -41,6 +46,11 @@ internal class MetadataInjectingPlayer(
       .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
       .build()
   }
+
+  // A stop from the Now Bar, a headset or the notification would leave ExoPlayer idle, and expo-audio's
+  // play() can't bring it back (nothing prepares it again): the song would never play until it is
+  // reloaded. The real queue lives in JavaScript, so treat stop as pause.
+  override fun stop() = pause()
 
   override fun hasNextMediaItem(): Boolean = onRemoteSkip != null || super.hasNextMediaItem()
 
@@ -79,24 +89,28 @@ internal class MetadataInjectingPlayer(
 
   override fun getMediaMetadata(): MediaMetadata {
     val metadata = injectedMetadata
+    val artwork = injectedArtwork
     return super.getMediaMetadata()
       .buildUpon()
       .setTitle(metadata?.title)
       .setArtist(metadata?.artist)
       .setAlbumTitle(metadata?.albumTitle)
       .setArtworkUri(metadata?.artworkUrl?.toString()?.toUri())
-      .setArtworkData(null, null)
+      // Also replaces any picture ExoPlayer found in the audio file's own tags.
+      .setArtworkData(artwork, if (artwork != null) MediaMetadata.PICTURE_TYPE_FRONT_COVER else null)
       .build()
   }
 
-  fun updateMetadata(metadata: Metadata?) {
+  /** [artwork] is the encoded cover of [metadata]'s track, or null while it is still being loaded. */
+  fun updateMetadata(metadata: Metadata?, artwork: ByteArray? = null) {
     if (Looper.myLooper() != applicationLooper) {
-      handler.post { updateMetadata(metadata) }
+      handler.post { updateMetadata(metadata, artwork) }
       return
     }
 
     val previousMetadata = mediaMetadata
     injectedMetadata = metadata
+    injectedArtwork = artwork
     val newMetadata = mediaMetadata
 
     if (previousMetadata == newMetadata) {

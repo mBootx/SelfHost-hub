@@ -60,6 +60,11 @@ class DeckEngine {
     this.handlers = handlers
   }
 
+  /** Takes the lock screen / Now Bar controls down, for when there is nothing left to play. */
+  clearNowPlaying(): void {
+    for (const deck of this.decks) deck.clearLockScreenControls()
+  }
+
   /**
    * Makes `id` current: keeps it if a transition already started it, switches instantly if it was
    * preloaded, else loads it. `startAt` (seconds) resumes a track part-way through.

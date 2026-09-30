@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Cover art in the Now Bar (Android):** the current song's cover is now the Now Bar's background and the lock screen picture. The next song's cover is downloaded in advance, so skipping shows it straight away instead of a moment later.
+
+### Fixed
+- **Samsung Now Bar and lock screen controls (Android):**
+  - Skipping a song no longer closes the Now Bar, and it keeps working after many skips. Before, every song change rebuilt the media session and Android's media service refused the new one, so the Now Bar was left showing a dead session: no buttons, and play/pause did nothing.
+  - One session now lasts the whole listening session and follows the music from one player to the next, including on crossfades and gapless changes.
+  - "Stop" from a headset or the Now Bar now pauses, instead of leaving the song unable to play again.
+  - Clearing the queue takes the Now Bar down with it.
+
 ## 2.2.0 — 2026-09-29
 
 ### Added

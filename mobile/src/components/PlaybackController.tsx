@@ -1,12 +1,18 @@
 import { useEffect } from 'react'
 import { engine, ensureAudioMode, onRemoteCommand } from '@/services/playbackEngine'
 import { resumePosition } from '@/services/playbackMemory'
+import type { NavidromeClient, NDSong } from '@/services/navidrome'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useOfflineStore } from '@/store/offlineStore'
 import { useArtworkStore } from '@/store/artworkStore'
 import { useHistoryStore } from '@/store/historyStore'
 import { useAudioSettingsStore } from '@/store/audioSettingsStore'
 import SelfHostNative from '../../modules/selfhost-native'
+
+/** The picture the lock screen and Now Bar show for a song: its Navidrome cover, else one the user picked. */
+function lockScreenArtwork(song: NDSong, client: NavidromeClient, override?: string): string | undefined {
+  return song.coverArt || song.albumId ? client.coverArtUrl(song.coverArt || song.albumId || song.id, 512) : override
+}
 
 /**
  * Invisible component that wires the Zustand player state to the audio engine (services/playbackEngine).
@@ -92,7 +98,9 @@ export default function PlaybackController(): null {
   // Kept separate from the track-load effect above: artworkOverride resolves asynchronously (a
   // user-triggered search that can finish after playback started), and re-running this must only
   // refresh the Now Bar's metadata, never reload the track. After a crossfade or gapless handoff the
-  // new track plays on the other deck, which becomes the lock screen's player here.
+  // new track plays on the other deck, which becomes the lock screen's player here. The native side
+  // (patches/expo-audio) keeps one media session across all of this, so calling it again is cheap and
+  // the Now Bar stays open.
   useEffect(() => {
     if (!song || !client) return
     // Stock expo-audio strips COMMAND_SEEK_TO_NEXT/PREVIOUS from its MediaSession,
@@ -105,14 +113,23 @@ export default function PlaybackController(): null {
         title: song.title,
         artist: song.artist,
         albumTitle: song.album,
-        artworkUrl:
-          song.coverArt || song.albumId
-            ? client.coverArtUrl(song.coverArt || song.albumId || song.id, 512)
-            : artworkOverride
+        artworkUrl: lockScreenArtwork(song, client, artworkOverride)
       },
       { showSeekForward: true, showSeekBackward: true }
     )
   }, [song, client, artworkOverride])
+
+  // The next track's cover is downloaded ahead of time, so skipping to it shows its picture on the
+  // Now Bar straight away rather than after a download.
+  const nextArtwork = client && nextSong ? lockScreenArtwork(nextSong, client) : undefined
+  useEffect(() => {
+    if (nextArtwork) SelfHostNative?.prefetchArtwork?.(nextArtwork)
+  }, [nextArtwork])
+
+  // Nothing left to play (queue cleared, signed out): the Now Bar goes too, instead of showing the last song.
+  useEffect(() => {
+    if (!song) engine.clearNowPlaying()
+  }, [song])
 
   useEffect(() => {
     if (isPlaying) engine.play()
