@@ -20,6 +20,14 @@ interface SelfHostNative {
   sendWakeOnLan?(mac: string, broadcast: string): Promise<WakeResult>
   /** Downloads a cover ahead of time for the lock screen / Now Bar. Missing from older installed builds. */
   prefetchArtwork?(url: string): void
+  /**
+   * Crossfades two players on the main thread, so it keeps going with the app off screen (JS timers don't).
+   * Ramps incoming up to volume and outgoing down to silence over durationMs, then pauses outgoing.
+   * Returns true once started. Missing from older installed builds.
+   */
+  startCrossfade?(outgoing: AudioPlayer, incoming: AudioPlayer, durationMs: number, volume: number): boolean
+  /** Stops a crossfade where it is, leaving the volumes as they are. */
+  cancelCrossfade?(): void
 }
 
 /** Null when the native side isn't linked (Expo Go, web), so callers can hide the feature instead of crashing. */

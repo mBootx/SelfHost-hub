@@ -11,6 +11,10 @@
   - One session now lasts the whole listening session and follows the music from one player to the next, including on crossfades and gapless changes.
   - "Stop" from a headset or the Now Bar now pauses, instead of leaving the song unable to play again.
   - Clearing the queue takes the Now Bar down with it.
+- **Crossfade and gapless playback (Android):**
+  - The crossfade now happens with the screen off. It ran on a timer that Android freezes as soon as the app leaves the screen, so the new song stayed silent until the old one ended, then jumped in at full volume part-way through.
+  - The next song no longer starts 15 seconds or more in. After a song ended on its own, its player kept playing the next song silently during the preload, so it was already well into the song when it took over.
+  - Pausing from the Now Bar, the lock screen or a headset in the middle of a crossfade now stops both songs, instead of letting the old one play on.
 
 ## 2.2.0 — 2026-09-29
 

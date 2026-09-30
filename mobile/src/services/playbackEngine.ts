@@ -1,4 +1,5 @@
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer, AudioStatus } from 'expo-audio'
+import SelfHostNative from '../../modules/selfhost-native'
 
 type DeckIndex = 0 | 1
 
@@ -20,12 +21,26 @@ export interface EngineHandlers {
 /** How long before the fade window the next track starts buffering. */
 const PRELOAD_LEAD_S = 20
 const FADE_STEP_MS = 50
+/** A fade running natively ends by itself; JS only tidies up once this much time has passed after its end. */
+const FADE_GRACE_MS = 400
+/** The track taking over must be at its start: further in than this and its deck ran ahead of the handover. */
+const START_TOLERANCE_S = 1
 
 /**
  * Two expo-audio players ("decks") at module scope, so playback survives navigation. One plays the
  * current track; the other preloads the next one so it can crossfade in, or start the moment the
  * current one ends (gapless). expo-audio holds audio focus for the whole app rather than per
  * player, so both can play at once during a crossfade.
+ *
+ * Two things this relies on, both learned the hard way:
+ * - Only the current deck and the one fading out may play. An ExoPlayer that reaches the end of
+ *   its track keeps "play when ready" switched on, so a source loaded into it later starts by
+ *   itself. A deck is therefore paused before it preloads, and one found playing on the side is
+ *   paused. Without that, the next song ran silently for the 20 s of preload and then took over
+ *   part-way through.
+ * - The fade itself runs natively (selfhost-native). React Native stops JS timers whenever the
+ *   app is off screen, so a setInterval ramp never moved with the screen off: the new song sat
+ *   silent until the old one ended, then came in at full volume part-way through.
  */
 class DeckEngine {
   readonly decks: [AudioPlayer, AudioPlayer]
@@ -33,7 +48,8 @@ class DeckEngine {
   private finished: [boolean, boolean] = [false, false]
   private active: DeckIndex = 0
   private next: NextTrack | null = null
-  private fade: { from: DeckIndex; start: number; durationMs: number; timer: ReturnType<typeof setInterval> } | null = null
+  /** timer is null while the ramp runs natively. */
+  private fade: { from: DeckIndex; start: number; durationMs: number; timer: ReturnType<typeof setInterval> | null } | null = null
   private crossfadeSeconds = 0
   private gapless = true
   private volume = 1
@@ -82,6 +98,7 @@ class DeckEngine {
       this.trackIds[this.active] = null
       this.active = otherIndex
       other.volume = this.volume
+      if (startAt <= 0) this.rewindIfAhead(other)
     } else {
       const deck = this.decks[this.active]
       this.trackIds[this.active] = id
@@ -160,10 +177,15 @@ class DeckEngine {
   }
 
   private onStatus(index: DeckIndex, status: AudioStatus): void {
+    // Statuses keep coming with the screen off and timers do not: this is what ends a fade whose time is up.
+    if (this.fade && Date.now() - this.fade.start >= this.fade.durationMs + FADE_GRACE_MS) this.finishFade()
     const justFinished = status.didJustFinish && !this.finished[index]
     this.finished[index] = status.didJustFinish
     if (index !== this.active) {
       if (justFinished && this.fade?.from === index) this.finishFade()
+      // Only the current deck and the one fading out may play. Anything else that starts up on its own
+      // (a preloaded source, an audio-focus resume) is stopped at once.
+      else if (status.playing && this.fade?.from !== index) this.decks[index].pause()
       return
     }
     this.handlers?.onProgress(this.reportedTime(index, status), status.duration)
@@ -181,7 +203,10 @@ class DeckEngine {
       // before loading finished and be silently dropped.
       if (status.playing) this.pendingPlay = false
       else if (status.isLoaded && this.wantPlaying) this.decks[index].play()
-    } else if (!this.fade && status.playing !== this.wantPlaying) {
+    } else if (status.playing !== this.wantPlaying) {
+      // Play/pause from outside the app's buttons. One that lands mid-crossfade also ends the fade, so the
+      // outgoing track doesn't carry on by itself after the user paused.
+      this.finishFade()
       this.wantPlaying = status.playing
       this.handlers?.onExternalPlayState(status.playing)
     }
@@ -220,6 +245,11 @@ class DeckEngine {
     if (this.crossfadeSeconds > 0 && remaining <= this.crossfadeSeconds) this.startCrossfade(remaining)
   }
 
+  /** The preloaded track has to start from its first second: if its deck ran ahead of the handover, rewind it. */
+  private rewindIfAhead(deck: AudioPlayer): void {
+    if (deck.currentTime > START_TOLERANCE_S) deck.seekTo(0).catch(() => {})
+  }
+
   private preloadNext(): void {
     const next = this.next
     const otherIndex = (1 - this.active) as DeckIndex
@@ -227,6 +257,8 @@ class DeckEngine {
     const deck = this.decks[otherIndex]
     this.trackIds[otherIndex] = next.id
     this.finished[otherIndex] = false
+    // Paused first (see the class comment): a deck that finished a track would start this one by itself.
+    deck.pause()
     deck.volume = 0
     deck.replace(next.source)
     deck.shouldCorrectPitch = true
@@ -239,13 +271,29 @@ class DeckEngine {
     if (!this.next || this.trackIds[toIndex] !== this.next.id || !to.isLoaded) return
     const fromIndex = this.active
     const durationMs = Math.max(500, Math.min(this.crossfadeSeconds, remaining) * 1000)
+    this.rewindIfAhead(to)
     to.volume = 0
     this.active = toIndex
     this.finished[toIndex] = false
     this.pendingSeek = null
     this.play()
-    this.fade = { from: fromIndex, start: Date.now(), durationMs, timer: setInterval(() => this.stepFade(), FADE_STEP_MS) }
+    const native = this.startNativeFade(this.decks[fromIndex], to, durationMs)
+    this.fade = {
+      from: fromIndex,
+      start: Date.now(),
+      durationMs,
+      timer: native ? null : setInterval(() => this.stepFade(), FADE_STEP_MS)
+    }
     this.handlers?.onAutoAdvance()
+  }
+
+  /** Hands the volume ramp to the native side, which keeps running with the screen off. False if it can't. */
+  private startNativeFade(from: AudioPlayer, to: AudioPlayer, durationMs: number): boolean {
+    try {
+      return SelfHostNative?.startCrossfade?.(from, to, durationMs, this.volume) === true
+    } catch {
+      return false
+    }
   }
 
   /** Equal-power ramps keep the perceived loudness flat through the middle of the crossfade. */
@@ -262,7 +310,8 @@ class DeckEngine {
   private finishFade(): void {
     const fade = this.fade
     if (!fade) return
-    clearInterval(fade.timer)
+    if (fade.timer) clearInterval(fade.timer)
+    else SelfHostNative?.cancelCrossfade?.()
     this.fade = null
     this.decks[fade.from].pause()
     this.trackIds[fade.from] = null
@@ -275,8 +324,11 @@ class DeckEngine {
     const other = this.decks[otherIndex]
     // Gapless handoff - also the fallback when a crossfade window was missed (seek, slow preload).
     if (next && (this.gapless || this.crossfadeSeconds > 0) && this.trackIds[otherIndex] === next.id && other.isLoaded) {
+      // Paused, not just ended: it keeps "play when ready" on and would start the next source it is given.
+      this.decks[this.active].pause()
       this.trackIds[this.active] = null
       this.active = otherIndex
+      this.rewindIfAhead(other)
       other.volume = this.volume
       this.finished[otherIndex] = false
       this.pendingSeek = null
