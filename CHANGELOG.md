@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.3.0 — 2026-09-30
 
 ### Added
 - **Cover art in the Now Bar (Android):** the current song's cover is now the Now Bar's background and the lock screen picture. The next song's cover is downloaded in advance, so skipping shows it straight away instead of a moment later.

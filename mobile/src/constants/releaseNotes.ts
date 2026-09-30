@@ -9,6 +9,35 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '2.3.0',
+    items: [
+      {
+        title: 'Écran de lecture refait',
+        text: "La pochette occupe toute la largeur, avec le titre, un cœur pour les favoris, la barre de progression et les boutons. La page prend la couleur de la pochette."
+      },
+      {
+        title: 'Paroles en carte',
+        text: "Les paroles forment une carte sous le lecteur. Touchez-la pour les afficher en grand : elles suivent le morceau, et toucher une ligne y emmène."
+      },
+      {
+        title: 'Onglet Photos',
+        text: 'Vos photos sauvegardées en grille, mois par mois : affichage en grand, tri, recherche, sélection et suppression.'
+      },
+      {
+        title: 'Sauvegarde par compte',
+        text: "Les photos sont rangées dans un dossier à votre nom (/backups/photos/votre-compte). L'onglet Photos propose de déplacer les anciennes sauvegardes."
+      },
+      {
+        title: 'Fondu enchaîné réparé',
+        text: 'Le fondu fonctionne aussi écran éteint, et le titre suivant démarre bien au début.'
+      },
+      {
+        title: 'Now Bar Samsung',
+        text: 'Passer un titre ne ferme plus la Now Bar, qui affiche maintenant la pochette.'
+      }
+    ]
+  },
+  {
     version: '2.2.0',
     items: [
       {
