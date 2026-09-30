@@ -86,6 +86,8 @@ export class FileBrowserClient {
   private password: string
   private token: string | null = null
   private source: string | null = null
+  /** The account's name as the server spells it; what was typed at login may differ in case. */
+  private accountName: string | null = null
 
   constructor(config: FileBrowserConfig) {
     this.baseUrl = config.url.replace(/\/+$/, '')
@@ -103,6 +105,11 @@ export class FileBrowserClient {
 
   getUsername(): string {
     return this.username
+  }
+
+  /** The name the server knows this account by: what the account's backup folder is called after. */
+  getAccountName(): string {
+    return this.accountName || this.username
   }
 
   async login(): Promise<void> {
@@ -135,6 +142,9 @@ export class FileBrowserClient {
       url: `${this.baseUrl}/api/users?id=self`,
       headers: this.authHeaders()
     })
+    if (selfRes.ok && typeof selfRes.data?.username === 'string' && selfRes.data.username.trim()) {
+      this.accountName = selfRes.data.username.trim()
+    }
     if (selfRes.ok && Array.isArray(selfRes.data?.scopes) && selfRes.data.scopes.length > 0) {
       this.source = selfRes.data.scopes[0].name
       return
@@ -179,6 +189,18 @@ export class FileBrowserClient {
       auth: this.token || ''
     })
     return `${this.baseUrl}/api/resources/download?${params.toString()}`
+  }
+
+  /** Server-generated small preview; callers fall back to rawUrl() if the server can't produce one. */
+  thumbnailUrl(path: string): string {
+    const params = new URLSearchParams({
+      source: this.source || '',
+      path,
+      size: 'small',
+      inline: 'true',
+      auth: this.token || ''
+    })
+    return `${this.baseUrl}/api/preview?${params.toString()}`
   }
 
   async downloadToDevice(

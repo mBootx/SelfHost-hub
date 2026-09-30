@@ -9,6 +9,7 @@ import * as TaskManager from 'expo-task-manager'
 import { expectExternalScreen } from '@/services/appLock'
 import { ApiError, FileBrowserClient } from '@/services/filebrowser'
 import { storage } from '@/services/storage'
+import { VaultError, vaultRootFor } from '@/services/photoVault'
 import { useCameraBackupStore } from '@/store/cameraBackupStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 
@@ -78,6 +79,11 @@ async function getClient(): Promise<FileBrowserClient | null> {
   return client
 }
 
+/** The signed-in account's own backup folder: the folder setting with the account's name in place of {user}. */
+function backupRoot(client: FileBrowserClient): string {
+  return vaultRootFor(useCameraBackupStore.getState().settings.folder, client.getAccountName())
+}
+
 function monthFolder(root: string, takenAt: number): string {
   const date = new Date(takenAt)
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -100,6 +106,8 @@ type Outcome = 'sent' | 'file-problem' | 'signed-out' | 'stop'
 
 /** What a failed upload says about the run: skip this file, or stop until the server or network is back. */
 function classify(err: unknown): { outcome: Outcome; message: string } {
+  // A backup folder that can't be used (a setting that leaves the account's area, say) affects every file.
+  if (err instanceof VaultError) return { outcome: 'stop', message: `dossier de sauvegarde invalide : ${err.message}` }
   if (err instanceof ApiError) {
     if (err.status === 413) return { outcome: 'file-problem', message: 'fichier trop volumineux pour le serveur' }
     if (err.status === 401 || err.status === 403) return { outcome: 'signed-out', message: 'FileBrowser a refusé la connexion' }
@@ -126,8 +134,8 @@ async function sendOne(
     // Deleted meanwhile, or unreadable: a problem with this file only.
     return { outcome: 'file-problem', message: errorMessage(err) }
   }
-  const folder = monthFolder(useCameraBackupStore.getState().settings.folder, meta.creationTime)
   try {
+    const folder = monthFolder(backupRoot(client), meta.creationTime)
     await ensureFolder(client, folder, folders)
     await client.uploadLocalFile(info.uri, folder, info.filename)
     return { outcome: 'sent', message: '' }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl, Alert, Linking, ActivityIndicator } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import { File } from 'expo-file-system'
@@ -21,6 +21,9 @@ import { expectExternalScreen } from '@/services/appLock'
 import { useUploadStore } from '@/store/uploadStore'
 import { useDownloadStore } from '@/store/downloadStore'
 import { FBItem } from '@/services/filebrowser'
+import { hidePeerFolders } from '@/services/photoVault'
+import { useCameraBackupStore } from '@/store/cameraBackupStore'
+import { useIsOwner } from '@/hooks/useIsOwner'
 import FileRow, { isPdf } from './FileRow'
 import PreviewModal from './PreviewModal'
 import UsageMeter from './UsageMeter'
@@ -53,6 +56,16 @@ export default function ExplorerScreen() {
   const [renaming, setRenaming] = useState<FBItem | null>(null)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [opening, setOpening] = useState(false)
+
+  // Inside the central photo-backup folder an account is shown only its own sub-folder. The server's scope
+  // for the account is what really keeps other accounts out; this just doesn't list what isn't theirs.
+  // The server's owner sees everything.
+  const backupFolder = useCameraBackupStore((s) => s.settings.folder)
+  const isOwner = useIsOwner()
+  const shownItems = useMemo(
+    () => (isOwner || !client ? items : hidePeerFolders(items, currentPath, backupFolder, client.getAccountName())),
+    [items, currentPath, backupFolder, client, isOwner]
+  )
 
   if (!client) return <View style={styles.container} />
 
@@ -196,7 +209,7 @@ export default function ExplorerScreen() {
         </View>
       ) : (
         <FlatList
-          data={items}
+          data={shownItems}
           keyExtractor={(i) => i.path}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}

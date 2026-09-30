@@ -1,0 +1,341 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { useFocusEffect, useRouter } from 'expo-router'
+import { ArrowUpDown, CloudOff, Images, Search, ShieldAlert } from 'lucide-react-native'
+import ActionSheet, { ActionSheetItem } from '@/components/ActionSheet'
+import LoginScreen from '@/components/filebrowser/LoginScreen'
+import LegacyBackups from '@/components/photos/LegacyBackups'
+import PhotoTile from '@/components/photos/PhotoTile'
+import PhotoViewer from '@/components/photos/PhotoViewer'
+import { SearchField, SelectionBar } from '@/components/photos/PhotosChrome'
+import { EmptyState, Screen, ScreenHeader } from '@/components/Screen'
+import { buildRows, filterPhotos, GridRow, SORT_LABELS, SortKey, sortPhotos } from '@/services/photoLayout'
+import { Photo, vaultRootFor } from '@/services/photoVault'
+import { useCameraBackupStore } from '@/store/cameraBackupStore'
+import { useFileBrowserStore } from '@/store/filebrowserStore'
+import { usePhotosStore } from '@/store/photosStore'
+import { useToastStore } from '@/store/toastStore'
+import { colors, layout, spacing } from '@/constants/theme'
+
+/** The grid runs edge to edge with a hairline between tiles, like a phone's own gallery. */
+const GAP = 2
+/** Coming back to the tab re-reads the folder only if it was read longer ago than this. */
+const STALE_MS = 60_000
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count > 1 ? many : one}`
+}
+
+/**
+ * The signed-in account's backed-up photos. The folder is worked out from the account's own name and
+ * nothing else (see photoVault), so there is no way from here to reach anyone else's photos; what FileBrowser
+ * lets the account see is the server's side of that, configured with the account's scope.
+ */
+export default function PhotosTab() {
+  const router = useRouter()
+  const { width } = useWindowDimensions()
+  const client = useFileBrowserStore((s) => s.client)
+  const connection = useFileBrowserStore((s) => s.status)
+  const template = useCameraBackupStore((s) => s.settings.folder)
+  const loadSettings = useCameraBackupStore((s) => s.load)
+
+  const photos = usePhotosStore((s) => s.photos)
+  const status = usePhotosStore((s) => s.status)
+  const videos = usePhotosStore((s) => s.videos)
+  const incomplete = usePhotosStore((s) => s.incomplete)
+  const error = usePhotosStore((s) => s.error)
+  const load = usePhotosStore((s) => s.load)
+  const remove = usePhotosStore((s) => s.remove)
+  const showToast = useToastStore((s) => s.show)
+
+  const [sort, setSort] = useState<SortKey>('newest')
+  const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [sortSheet, setSortSheet] = useState(false)
+  const [selection, setSelection] = useState<ReadonlySet<string>>(new Set())
+  const [viewerAt, setViewerAt] = useState<number | null>(null)
+
+  useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
+
+  // The account's own folder: the setting with the account's name in it. A setting that can't make a valid
+  // folder is reported instead of used.
+  const vault = useMemo(() => {
+    if (!client) return null
+    try {
+      return { root: vaultRootFor(template, client.getAccountName()), problem: null }
+    } catch (err) {
+      return { root: null, problem: err instanceof Error ? err.message : 'Dossier invalide' }
+    }
+  }, [client, template])
+  const root = vault?.root ?? null
+
+  // Signing out, or into another account, must not leave the previous account's photos in memory.
+  useEffect(() => {
+    if (!client) usePhotosStore.getState().reset()
+  }, [client])
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!client || !root) return
+      const { root: loadedRoot, loadedAt, status: current } = usePhotosStore.getState()
+      const stale = loadedRoot !== root || loadedAt === null || Date.now() - loadedAt > STALE_MS
+      if (stale && current !== 'loading') load(client, root)
+    }, [client, root, load])
+  )
+
+  const visible = useMemo(() => sortPhotos(filterPhotos(photos, query), sort), [photos, query, sort])
+  const columns = width >= 600 ? 5 : 3
+  const size = Math.floor((width - GAP * (columns - 1)) / columns)
+  const rows = useMemo(() => buildRows(visible, columns, sort === 'newest' || sort === 'oldest'), [visible, columns, sort])
+
+  const selecting = selection.size > 0
+  const selectingRef = useRef(selecting)
+  selectingRef.current = selecting
+
+  const toggle = useCallback((photo: Photo) => {
+    setSelection((previous) => {
+      const next = new Set(previous)
+      if (next.has(photo.path)) next.delete(photo.path)
+      else next.add(photo.path)
+      return next
+    })
+  }, [])
+  const open = useCallback(
+    (index: number, photo: Photo) => {
+      if (selectingRef.current) toggle(photo)
+      else setViewerAt(index)
+    },
+    [toggle]
+  )
+
+  // Back leaves the selection first, as in any gallery.
+  useEffect(() => {
+    if (!selecting) return
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      setSelection(new Set())
+      return true
+    })
+    return () => subscription.remove()
+  }, [selecting])
+
+  function confirmDelete(paths: string[]): void {
+    const one = paths.length === 1
+    Alert.alert(
+      one ? 'Supprimer cette photo ?' : `Supprimer ${paths.length} photos ?`,
+      `${one ? 'Elle sera supprimée' : 'Elles seront supprimées'} définitivement du serveur. Les copies restées sur votre téléphone ne sont pas touchées.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', style: 'destructive', onPress: () => void deletePaths(paths) }
+      ]
+    )
+  }
+
+  async function deletePaths(paths: string[]): Promise<void> {
+    if (!client) return
+    const result = await remove(client, paths)
+    setSelection(new Set())
+    if (result.failed > 0) {
+      Alert.alert('Suppression incomplète', `${result.failed} sur ${paths.length} n'ont pas pu être supprimées${result.message ? ` : ${result.message}` : ''}.`)
+    } else {
+      showToast(plural(result.deleted, 'photo supprimée', 'photos supprimées'))
+    }
+  }
+
+  const renderRow = useCallback(
+    ({ item }: { item: GridRow }) => {
+      if (item.kind === 'header') {
+        return (
+          <View style={styles.monthHeader}>
+            <Text style={styles.monthTitle}>{item.title}</Text>
+            <Text style={styles.monthCount}>{item.count}</Text>
+          </View>
+        )
+      }
+      return (
+        <View style={styles.row}>
+          {item.photos.map((photo, i) => (
+            <PhotoTile
+              key={photo.path}
+              photo={photo}
+              client={client!}
+              size={size}
+              index={item.firstIndex + i}
+              selecting={selecting}
+              selected={selection.has(photo.path)}
+              onPress={open}
+              onLongPress={toggle}
+            />
+          ))}
+        </View>
+      )
+    },
+    [client, size, selecting, selection, open, toggle]
+  )
+
+  if (connection === 'connecting') {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      </Screen>
+    )
+  }
+  if (connection !== 'connected' || !client) {
+    return (
+      <Screen>
+        <LoginScreen />
+      </Screen>
+    )
+  }
+
+  const retry = (
+    <Pressable style={styles.button} onPress={() => root && load(client, root)} accessibilityRole="button">
+      <Text style={styles.buttonText}>Réessayer</Text>
+    </Pressable>
+  )
+  let body: React.ReactNode
+  if (vault?.problem) {
+    body = <EmptyState icon={ShieldAlert} title="Dossier de sauvegarde invalide" hint={`${vault.problem}. Corrigez-le dans Réglages, rubrique Sauvegarde des photos.`} />
+  } else if (status === 'error' && photos.length === 0 && error) {
+    const offline = error.code === 'offline'
+    const title = error.code === 'denied' ? 'Accès refusé' : error.code === 'unauthorized' ? 'Session expirée' : offline ? 'Serveur injoignable' : 'Chargement impossible'
+    const hint =
+      error.code === 'denied'
+        ? "Votre compte FileBrowser n'a pas accès à ce dossier de photos. Demandez à l'administrateur du serveur de vérifier sa portée."
+        : error.code === 'unauthorized'
+          ? "Reconnectez-vous à FileBrowser depuis l'onglet Fichiers."
+          : offline
+            ? 'Vérifiez votre connexion, puis réessayez.'
+            : error.message
+    body = (
+      <View>
+        <EmptyState icon={offline ? CloudOff : ShieldAlert} title={title} hint={hint} />
+        <View style={styles.centerButton}>{retry}</View>
+      </View>
+    )
+  } else if (photos.length === 0 && status !== 'ready') {
+    body = (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    )
+  } else if (photos.length === 0) {
+    body = (
+      <View>
+        <EmptyState icon={Images} title="Aucune photo sauvegardée" hint="Activez la sauvegarde automatique dans Réglages : vos photos apparaîtront ici." />
+        <View style={styles.centerButton}>
+          <Pressable style={styles.button} onPress={() => router.navigate('/settings')} accessibilityRole="button">
+            <Text style={styles.buttonText}>Ouvrir les réglages</Text>
+          </Pressable>
+        </View>
+      </View>
+    )
+  } else if (visible.length === 0) {
+    body = <EmptyState icon={Search} title="Aucun résultat" hint="Aucune photo ne correspond à cette recherche." />
+  } else {
+    body = (
+      <FlatList
+        data={rows}
+        keyExtractor={(row) => row.key}
+        renderItem={renderRow}
+        extraData={selection}
+        initialNumToRender={8}
+        maxToRenderPerBatch={6}
+        windowSize={9}
+        removeClippedSubviews
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: layout.contentBottom }}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={() => root && load(client, root)} tintColor={colors.accent} colors={[colors.accent]} />}
+        ListFooterComponent={
+          videos > 0 || incomplete ? (
+            <View style={styles.footer}>
+              {videos > 0 && (
+                <Text style={styles.footerText}>
+                  {plural(videos, 'vidéo sauvegardée n’est pas affichée', 'vidéos sauvegardées ne sont pas affichées')} ici.
+                </Text>
+              )}
+              {incomplete && <Text style={styles.footerText}>Certains dossiers n’ont pas pu être lus : la liste peut être incomplète.</Text>}
+            </View>
+          ) : null
+        }
+      />
+    )
+  }
+
+  const count = plural(photos.length, 'photo', 'photos')
+  const subtitle =
+    photos.length === 0 && status !== 'ready'
+      ? 'Chargement…'
+      : `${query ? `${visible.length} sur ${count}` : count} · ${SORT_LABELS[sort]}${status === 'loading' ? ' · actualisation…' : ''}`
+
+  return (
+    <Screen>
+      {selecting ? (
+        <SelectionBar count={selection.size} onClear={() => setSelection(new Set())} onDelete={() => confirmDelete([...selection])} />
+      ) : (
+        <>
+          <ScreenHeader
+            title="Photos"
+            action={
+              <View style={styles.actions}>
+                <Pressable onPress={() => setSearching((on) => !on)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Rechercher">
+                  <Search size={22} color={searching ? colors.accent : colors.text} />
+                </Pressable>
+                <Pressable onPress={() => setSortSheet(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Trier les photos">
+                  <ArrowUpDown size={22} color={colors.text} />
+                </Pressable>
+              </View>
+            }
+          />
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </>
+      )}
+      {searching && !selecting && (
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          onClose={() => {
+            setQuery('')
+            setSearching(false)
+          }}
+        />
+      )}
+      {root && <LegacyBackups client={client} root={root} onMoved={() => load(client, root)} />}
+      {body}
+
+      <ActionSheet
+        visible={sortSheet}
+        title="Trier par"
+        items={(Object.keys(SORT_LABELS) as SortKey[]).map<ActionSheetItem>((key) => ({
+          label: `${key === sort ? '✓ ' : ''}${SORT_LABELS[key]}`,
+          icon: ArrowUpDown,
+          onPress: () => setSort(key)
+        }))}
+        onClose={() => setSortSheet(false)}
+      />
+      {viewerAt !== null && (
+        <PhotoViewer photos={visible} client={client} startIndex={viewerAt} onClose={() => setViewerAt(null)} onDelete={(photo) => confirmDelete([photo.path])} />
+      )}
+    </Screen>
+  )
+}
+
+const styles = StyleSheet.create({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centerButton: { alignItems: 'center', marginTop: spacing.sm },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  subtitle: { flexShrink: 0, color: colors.textMuted, fontSize: 12, lineHeight: 16, paddingHorizontal: spacing.lg, marginTop: -spacing.sm, marginBottom: spacing.md },
+  row: { flexDirection: 'row', gap: GAP, marginBottom: GAP },
+  monthHeader: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  monthTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  monthCount: { color: colors.textMuted, fontSize: 12 },
+  footer: { padding: spacing.lg, gap: spacing.xs },
+  footerText: { color: colors.textMuted, fontSize: 12, textAlign: 'center' },
+  button: { backgroundColor: colors.accent, borderRadius: 999, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm + 2 },
+  buttonText: { color: '#000000', fontWeight: '800', fontSize: 14 }
+})

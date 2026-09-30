@@ -11,6 +11,7 @@ import {
   runCameraBackup
 } from '@/services/cameraBackup'
 import { expectExternalScreen } from '@/services/appLock'
+import { USER_TOKEN, vaultRootFor } from '@/services/photoVault'
 import { colors, radius, spacing } from '@/constants/theme'
 
 function openAndroidSettings(): void {
@@ -44,6 +45,7 @@ export default function CameraBackupSection() {
   const error = useCameraBackupStore((s) => s.error)
   const saveSettings = useCameraBackupStore((s) => s.saveSettings)
   const fileBrowserConnected = useFileBrowserStore((s) => s.status === 'connected')
+  const client = useFileBrowserStore((s) => s.client)
 
   const [folderDraft, setFolderDraft] = useState(settings.folder)
   const [busy, setBusy] = useState(false)
@@ -89,8 +91,33 @@ export default function CameraBackupSection() {
 
   function saveFolder(): void {
     const folder = normalizeFolder(folderDraft)
+    // A folder the vault would refuse (one that climbs out with "..", say) is never saved.
+    try {
+      vaultRootFor(folder, 'compte')
+    } catch (err) {
+      Alert.alert('Dossier invalide', err instanceof Error ? err.message : 'Ce dossier ne peut pas être utilisé.')
+      setFolderDraft(settings.folder)
+      return
+    }
     setFolderDraft(folder)
     if (folder !== settings.folder) saveSettings({ folder })
+  }
+
+  /** Where this account's photos go, for the line under the field; null while nobody is signed in to FileBrowser. */
+  let destination: { path: string } | { problem: string } | null = null
+  if (client) {
+    try {
+      destination = { path: vaultRootFor(settings.folder, client.getAccountName()) }
+    } catch (err) {
+      destination = { problem: err instanceof Error ? err.message : 'Dossier invalide' }
+    }
+  }
+  const organisedByAccount = settings.folder.includes(USER_TOKEN)
+
+  /** Moves a folder chosen by hand onto the per-account layout; the photos already there can then be moved over. */
+  function organiseByAccount(): void {
+    const previous = settings.folder
+    saveSettings({ folder: DEFAULT_BACKUP_FOLDER, legacyFolder: previous !== DEFAULT_BACKUP_FOLDER ? previous : settings.legacyFolder })
   }
 
   let status: string
@@ -129,8 +156,8 @@ export default function CameraBackupSection() {
           )}
         </View>
         <Text style={styles.hint}>
-          Les photos et vidéos de l&apos;appareil photo sont envoyées dans FileBrowser, rangées par année et par mois. En
-          arrière-plan, Android relance la sauvegarde environ tous les quarts d&apos;heure.
+          Les photos et vidéos de l&apos;appareil photo sont envoyées dans FileBrowser, dans un dossier à votre nom, rangées par
+          année et par mois. En arrière-plan, Android relance la sauvegarde environ tous les quarts d&apos;heure.
         </Text>
 
         {settings.enabled && (
@@ -165,6 +192,29 @@ export default function CameraBackupSection() {
               autoCorrect={false}
               accessibilityLabel="Dossier de sauvegarde sur le serveur"
             />
+            <Text style={styles.folderHint}>
+              {USER_TOKEN} est remplacé par le nom de votre compte : chaque compte a son propre dossier, et l&apos;onglet Photos ne
+              montre que le vôtre.
+            </Text>
+            {destination && (
+              <Text style={'problem' in destination ? styles.warning : styles.destination}>
+                {'problem' in destination ? `Dossier invalide : ${destination.problem}` : `Vos photos vont dans : ${destination.path}/AAAA/MM`}
+              </Text>
+            )}
+            {!organisedByAccount && (
+              <Pressable
+                style={({ pressed }) => [styles.pillButton, styles.standalone, pressed && styles.pressed]}
+                onPress={organiseByAccount}
+                accessibilityRole="button"
+                accessibilityLabel="Ranger les photos par compte"
+              >
+                <Text style={styles.pillText}>Ranger par compte ({DEFAULT_BACKUP_FOLDER})</Text>
+              </Pressable>
+            )}
+            <Text style={styles.folderHint}>
+              Pour que les autres comptes ne puissent pas lire ce dossier, c&apos;est le serveur qui doit les en empêcher : limitez
+              chaque compte à son dossier dans FileBrowser (la « portée » du compte).
+            </Text>
 
             <View style={styles.toggleRow}>
               <View style={styles.toggleText}>
@@ -215,6 +265,8 @@ const styles = StyleSheet.create({
   value: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
   hint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.sm, lineHeight: 17 },
   warning: { color: colors.warning, fontSize: 12, marginTop: spacing.sm, lineHeight: 17 },
+  folderHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: -spacing.xs, marginBottom: spacing.sm },
+  destination: { color: colors.textSecondary, fontSize: 12, lineHeight: 17, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   fieldLabel: { color: colors.textSecondary, fontSize: 12, marginBottom: spacing.xs },
   input: {

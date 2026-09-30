@@ -1,12 +1,12 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import type { BottomTabBarProps } from 'expo-router/js-tabs'
-import { Home, Library, Heart, Search, FolderOpen, Settings } from 'lucide-react-native'
+import { Home, Library, Heart, Search, FolderOpen, Images, Settings } from 'lucide-react-native'
 import { colors, layout, spacing } from '@/constants/theme'
 
 type IconComponent = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>
 
 /**
- * Six labels won't all fit at phone widths, so only the active tab is labelled -
+ * Seven labels won't all fit at phone widths, so only the active tab is labelled -
  * it has the whole slot to itself - and the rest just go from muted to accent.
  * `name` is the untruncated screen reader text.
  */
@@ -16,6 +16,7 @@ const TABS: Record<string, { icon: IconComponent; label: string; name: string }>
   favorites: { icon: Heart, label: 'Favoris', name: 'Favoris' },
   search: { icon: Search, label: 'Recherche', name: 'Recherche' },
   files: { icon: FolderOpen, label: 'Fichiers', name: 'Fichiers' },
+  photos: { icon: Images, label: 'Photos', name: 'Photos' },
   settings: { icon: Settings, label: 'Réglages', name: 'Réglages' }
 }
 

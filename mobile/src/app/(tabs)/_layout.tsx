@@ -26,6 +26,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="favorites" options={{ title: 'Favoris' }} />
         <Tabs.Screen name="search" options={{ title: 'Recherche' }} />
         <Tabs.Screen name="files" options={{ title: 'Fichiers' }} />
+        <Tabs.Screen name="photos" options={{ title: 'Photos' }} />
         <Tabs.Screen name="settings" options={{ title: 'Réglages' }} />
       </Tabs>
     </View>

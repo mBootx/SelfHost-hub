@@ -4,6 +4,10 @@
 
 ### Added
 - **Cover art in the Now Bar (Android):** the current song's cover is now the Now Bar's background and the lock screen picture. The next song's cover is downloaded in advance, so skipping shows it straight away instead of a moment later.
+- **Photos tab (Android):** your backed-up photos in a grid, month by month, between Fichiers and Réglages.
+  - Tap a photo to see it full size and swipe to the next; long-press to select several.
+  - Sort by date, name or size, search by name, and delete photos from the server: for good, after a confirmation. The copies on your phone are not touched.
+  - It only ever shows your own account's photos. Videos are backed up as before but not shown here.
 
 ### Improved
 - **Now Playing screen (Android), redone in the style of Spotify's:**
@@ -11,6 +15,11 @@
   - The lyrics are a card under the player, showing the lines around the one being sung. Tap it and it grows into the full lyrics: they follow the song, tapping a line jumps to it, and the play bar stays at the bottom. The Back button closes the lyrics first.
   - Under the playback buttons: output device, playback speed, download and queue. The "…" menu has add to playlist, favourites, go to the album and the automatic search for lyrics and cover.
   - On a short phone the cover gives up height before the buttons do, so everything stays on the first screen.
+- **Photo backup is organised by account (Android):** photos now go to `/backups/photos/<your account>/year/month` instead of the shared `/Appareil photo` folder.
+  - The folder is a setting in Réglages; `{user}` stands for the account's name. A folder you chose yourself is kept, with a button to switch it to the per-account layout.
+  - If you were on the old default, the Photos tab offers to move the photos already there: moved, not copied, into the same year/month folders, and nothing is overwritten.
+  - In the file browser, the other accounts' folders inside the central folder are hidden (the server's owner sees everything).
+  - This is tidiness, not the lock: for other accounts to be kept out for real, limit each FileBrowser account to its own folder on the server (the account's scope).
 
 ### Fixed
 - **Samsung Now Bar and lock screen controls (Android):**
