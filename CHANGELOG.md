@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.1 — 2026-10-01
+
+### Fixed
+- **Photos that were backed up did not show up, or only the old ones did (Android):**
+  - The backup now sends the **newest photos first**, then older ones, and photos before videos. Before, a big first backup went from the oldest photo forward, so for hours (or days, on a large camera roll) the gallery showed only old pictures while the latest ones were still waiting at the end of the queue.
+  - **One file that keeps failing no longer blocks the ones behind it.** A timeout or a server error on a single file used to stop every run at that same file, so nothing newer was ever sent. Now the app checks whether the server still answers: if it does, the failure is held against that file (three tries, then it is given up on); if it doesn't, the run stops and nothing is held against any file. A server that answers but refuses every upload stops the run after three files.
+  - **The Photos tab keeps up with the backup.** Opening the tab, or coming back to the app while it is open, looks for new photos on the phone and starts sending them; pulling down does the same. Photos sent meanwhile appear every few seconds, and once more when the run ends. It used to read the server once and then show that list for a minute, whatever was uploaded after.
+  - **Old photos show up without moving them.** Photos still in the old backup folder (`/Appareil photo`) appear in the Photos tab along with the others, and can be deleted from there. A photo present in both places is shown once. Moving them into your own folder is now optional, a button in Réglages (Sauvegarde des photos) instead of a banner in the Photos tab, and nothing depends on it.
+
+### Added
+- **Backup status above the photos (Android):** one line says where the backup stands, so a missing photo can be explained: sending (with the file and how far along), waiting for Wi-Fi, how many files are waiting, refused by the server (with the reason), access to photos denied, or backup turned off. It has the matching button: send now, send anyway over mobile data (once, the "Wi-Fi only" setting stays), authorise, try again, turn on.
+- **Files the server would not take can be tried again.** After three failures a file is given up on, as before, but the app now remembers it ("3 files not sent") and offers to send it again, from the status line or from Réglages, for example after raising the upload limit of a reverse proxy.
+
 ## 2.3.0 — 2026-09-30
 
 ### Added

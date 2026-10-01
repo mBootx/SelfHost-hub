@@ -9,6 +9,31 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '2.3.1',
+    items: [
+      {
+        title: 'Photos : les plus récentes d’abord',
+        text: "La sauvegarde envoie maintenant les photos les plus récentes en premier, puis les plus anciennes, les photos avant les vidéos. Avant, les dernières photos arrivaient en dernier."
+      },
+      {
+        title: 'Un fichier bloqué ne bloque plus le reste',
+        text: "Si un fichier n'arrive pas à partir, la sauvegarde continue avec les suivants au lieu de s'arrêter. Les fichiers refusés par le serveur peuvent être renvoyés d'un geste."
+      },
+      {
+        title: 'Onglet Photos à jour',
+        text: "À l'ouverture, l'onglet cherche les nouvelles photos du téléphone et les affiche au fur et à mesure de leur envoi. Tirez vers le bas pour actualiser."
+      },
+      {
+        title: 'État de la sauvegarde',
+        text: "Une ligne au-dessus des photos indique où en est l'envoi : en cours, en attente du Wi-Fi, refusé par le serveur… avec le bouton qui correspond."
+      },
+      {
+        title: 'Anciennes photos visibles',
+        text: "Les photos de l'ancien dossier apparaissent dans l'onglet sans avoir à les déplacer. Les ranger dans votre dossier est facultatif (Réglages → Sauvegarde des photos)."
+      }
+    ]
+  },
+  {
     version: '2.3.0',
     items: [
       {
