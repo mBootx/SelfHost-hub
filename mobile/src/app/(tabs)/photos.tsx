@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, Alert, AppState, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { ArrowUpDown, CloudOff, Images, Search, ShieldAlert } from 'lucide-react-native'
 import ActionSheet, { ActionSheetItem } from '@/components/ActionSheet'
 import LoginScreen from '@/components/filebrowser/LoginScreen'
-import LegacyBackups from '@/components/photos/LegacyBackups'
 import PhotoTile from '@/components/photos/PhotoTile'
 import PhotoViewer from '@/components/photos/PhotoViewer'
 import { SearchField, SelectionBar } from '@/components/photos/PhotosChrome'
+import SyncStrip from '@/components/photos/SyncStrip'
 import { EmptyState, Screen, ScreenHeader } from '@/components/Screen'
 import { buildRows, filterPhotos, GridRow, SORT_LABELS, SortKey, sortPhotos } from '@/services/photoLayout'
+import { runCameraBackup } from '@/services/cameraBackup'
 import { Photo, vaultRootFor } from '@/services/photoVault'
 import { useCameraBackupStore } from '@/store/cameraBackupStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
-import { usePhotosStore } from '@/store/photosStore'
+import { PhotoTarget, targetKey, usePhotosStore } from '@/store/photosStore'
 import { useToastStore } from '@/store/toastStore'
 import { colors, layout, spacing } from '@/constants/theme'
 
@@ -21,9 +22,64 @@ import { colors, layout, spacing } from '@/constants/theme'
 const GAP = 2
 /** Coming back to the tab re-reads the folder only if it was read longer ago than this. */
 const STALE_MS = 60_000
+/** While the backup is sending, the gallery reads the folder again at most this often. */
+const LIVE_REFRESH_MS = 8_000
+/** Showing the tab looks for new photos on the phone unless that was done more recently than this. */
+const SYNC_MIN_GAP_MS = 15_000
 
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count > 1 ? many : one}`
+}
+
+/** Starts a backup run when the phone hasn't been looked at lately; a run already going is joined, not doubled. */
+function syncSoon(force = false): void {
+  const { settings, phase, lastCheckAt } = useCameraBackupStore.getState()
+  if (!settings.enabled || phase === 'running') return
+  if (force || lastCheckAt === null || Date.now() - lastCheckAt > SYNC_MIN_GAP_MS) void runCameraBackup()
+}
+
+/**
+ * Photos sent by the backup show up in the gallery as they land: while a run is sending, `refresh` is called
+ * every few seconds if anything new went up, and once more when the run ends. Only while the tab is shown:
+ * reading the folders over and over for a screen nobody is looking at would cost data and battery, and
+ * coming back to the tab catches up at once.
+ */
+function useBackupRefresh(refresh: () => void, active: boolean): void {
+  const uploaded = useCameraBackupStore((s) => s.uploadedTotal)
+  const phase = useCameraBackupStore((s) => s.phase)
+  const seen = useRef(uploaded)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latest = useRef(refresh)
+  latest.current = refresh
+
+  useEffect(() => {
+    if (!active) {
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = null
+      return
+    }
+    if (uploaded === seen.current) return
+    if (phase !== 'running') {
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = null
+      seen.current = uploaded
+      latest.current()
+      return
+    }
+    if (timer.current) return
+    timer.current = setTimeout(() => {
+      timer.current = null
+      seen.current = useCameraBackupStore.getState().uploadedTotal
+      latest.current()
+    }, LIVE_REFRESH_MS)
+  }, [uploaded, phase, active])
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    []
+  )
 }
 
 /**
@@ -37,6 +93,8 @@ export default function PhotosTab() {
   const client = useFileBrowserStore((s) => s.client)
   const connection = useFileBrowserStore((s) => s.status)
   const template = useCameraBackupStore((s) => s.settings.folder)
+  const olderFolder = useCameraBackupStore((s) => s.settings.legacyFolder)
+  const backupOn = useCameraBackupStore((s) => s.settings.enabled)
   const loadSettings = useCameraBackupStore((s) => s.load)
 
   const photos = usePhotosStore((s) => s.photos)
@@ -70,20 +128,51 @@ export default function PhotosTab() {
     }
   }, [client, template])
   const root = vault?.root ?? null
+  // Photos still in the old backup folder are shown too, so nothing has to be moved to see them.
+  const target = useMemo<PhotoTarget | null>(() => (root ? { root, older: olderFolder ? [olderFolder] : [] } : null), [root, olderFolder])
 
   // Signing out, or into another account, must not leave the previous account's photos in memory.
   useEffect(() => {
     if (!client) usePhotosStore.getState().reset()
   }, [client])
 
+  const [pulled, setPulled] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const refresh = useCallback(() => {
+    if (client && target) void load(client, target, { fresh: true })
+  }, [client, target, load])
+
+  // Showing the tab - or coming back to the app while it is shown - reads the folders and looks for new
+  // photos on the phone; whatever the backup sends meanwhile is picked up by useBackupRefresh.
   useFocusEffect(
     useCallback(() => {
-      if (!client || !root) return
-      const { root: loadedRoot, loadedAt, status: current } = usePhotosStore.getState()
-      const stale = loadedRoot !== root || loadedAt === null || Date.now() - loadedAt > STALE_MS
-      if (stale && current !== 'loading') load(client, root)
-    }, [client, root, load])
+      if (!client || !target) return
+      const { key, loadedAt, status: current } = usePhotosStore.getState()
+      const stale = key !== targetKey(target) || loadedAt === null || Date.now() - loadedAt > STALE_MS
+      if (stale && current !== 'loading') void load(client, target)
+      syncSoon()
+      const subscription = AppState.addEventListener('change', (next) => {
+        if (next !== 'active') return
+        syncSoon()
+        void load(client, target, { fresh: true })
+      })
+      return () => subscription.remove()
+    }, [client, target, load])
   )
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true)
+      return () => setFocused(false)
+    }, [])
+  )
+  useBackupRefresh(refresh, focused)
+
+  const pull = useCallback(() => {
+    if (!client || !target) return
+    setPulled(true)
+    syncSoon(true)
+    load(client, target, { fresh: true }).finally(() => setPulled(false))
+  }, [client, target, load])
 
   const visible = useMemo(() => sortPhotos(filterPhotos(photos, query), sort), [photos, query, sort])
   const columns = width >= 600 ? 5 : 3
@@ -192,7 +281,7 @@ export default function PhotosTab() {
   }
 
   const retry = (
-    <Pressable style={styles.button} onPress={() => root && load(client, root)} accessibilityRole="button">
+    <Pressable style={styles.button} onPress={() => target && load(client, target, { fresh: true })} accessibilityRole="button">
       <Text style={styles.buttonText}>Réessayer</Text>
     </Pressable>
   )
@@ -225,12 +314,18 @@ export default function PhotosTab() {
   } else if (photos.length === 0) {
     body = (
       <View>
-        <EmptyState icon={Images} title="Aucune photo sauvegardée" hint="Activez la sauvegarde automatique dans Réglages : vos photos apparaîtront ici." />
-        <View style={styles.centerButton}>
-          <Pressable style={styles.button} onPress={() => router.navigate('/settings')} accessibilityRole="button">
-            <Text style={styles.buttonText}>Ouvrir les réglages</Text>
-          </Pressable>
-        </View>
+        <EmptyState
+          icon={Images}
+          title="Aucune photo sur le serveur"
+          hint={backupOn ? "Les photos du téléphone arrivent ici dès qu'elles sont envoyées : l'état de l'envoi est indiqué plus haut." : 'Activez la sauvegarde automatique dans Réglages : vos photos apparaîtront ici.'}
+        />
+        {!backupOn && (
+          <View style={styles.centerButton}>
+            <Pressable style={styles.button} onPress={() => router.navigate('/settings')} accessibilityRole="button">
+              <Text style={styles.buttonText}>Ouvrir les réglages</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
     )
   } else if (visible.length === 0) {
@@ -248,7 +343,7 @@ export default function PhotosTab() {
         removeClippedSubviews
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: layout.contentBottom }}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={() => root && load(client, root)} tintColor={colors.accent} colors={[colors.accent]} />}
+        refreshControl={<RefreshControl refreshing={pulled} onRefresh={pull} tintColor={colors.accent} colors={[colors.accent]} />}
         ListFooterComponent={
           videos > 0 || incomplete ? (
             <View style={styles.footer}>
@@ -305,7 +400,7 @@ export default function PhotosTab() {
           }}
         />
       )}
-      {root && <LegacyBackups client={client} root={root} onMoved={() => load(client, root)} />}
+      <SyncStrip />
       {body}
 
       <ActionSheet

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { View, Text, TextInput, Switch, Pressable, Alert, Linking, ActivityIndicator, StyleSheet } from 'react-native'
+import LegacyBackups from '@/components/photos/LegacyBackups'
 import { SectionTitle } from '@/components/Screen'
 import { DEFAULT_BACKUP_FOLDER, useCameraBackupStore } from '@/store/cameraBackupStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
@@ -8,24 +9,17 @@ import {
   disableCameraBackup,
   enableCameraBackup,
   requestCameraRollAccess,
+  retryFailedBackups,
   runCameraBackup
 } from '@/services/cameraBackup'
 import { expectExternalScreen } from '@/services/appLock'
 import { USER_TOKEN, vaultRootFor } from '@/services/photoVault'
+import { timeAgo } from '@/services/syncStatus'
 import { colors, radius, spacing } from '@/constants/theme'
 
 function openAndroidSettings(): void {
   expectExternalScreen()
   Linking.openSettings()
-}
-
-function timeAgo(ms: number): string {
-  const minutes = Math.round((Date.now() - ms) / 60_000)
-  if (minutes < 1) return "à l'instant"
-  if (minutes < 60) return `il y a ${minutes} min`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `il y a ${hours} h`
-  return `il y a ${Math.round(hours / 24)} j`
 }
 
 function normalizeFolder(raw: string): string {
@@ -40,6 +34,7 @@ export default function CameraBackupSection() {
   const progress = useCameraBackupStore((s) => s.progress)
   const pending = useCameraBackupStore((s) => s.pending)
   const uploadedTotal = useCameraBackupStore((s) => s.uploadedTotal)
+  const gaveUp = useCameraBackupStore((s) => s.gaveUp)
   const lastSuccessAt = useCameraBackupStore((s) => s.lastSuccessAt)
   const limitedAccess = useCameraBackupStore((s) => s.limitedAccess)
   const error = useCameraBackupStore((s) => s.error)
@@ -211,6 +206,9 @@ export default function CameraBackupSection() {
                 <Text style={styles.pillText}>Ranger par compte ({DEFAULT_BACKUP_FOLDER})</Text>
               </Pressable>
             )}
+            {client && destination && 'path' in destination && settings.legacyFolder ? (
+              <LegacyBackups client={client} root={destination.path} />
+            ) : null}
             <Text style={styles.folderHint}>
               Pour que les autres comptes ne puissent pas lire ce dossier, c&apos;est le serveur qui doit les en empêcher : limitez
               chaque compte à son dossier dans FileBrowser (la « portée » du compte).
@@ -233,6 +231,13 @@ export default function CameraBackupSection() {
             </View>
 
             <View style={styles.divider} />
+            {gaveUp > 0 && (
+              <Pressable onPress={() => retryFailedBackups()} accessibilityRole="button" accessibilityLabel="Réessayer les fichiers non envoyés">
+                <Text style={styles.warning}>
+                  {gaveUp.toLocaleString('fr-FR')} fichier{gaveUp > 1 ? 's' : ''} que le serveur n&apos;a pas voulu{gaveUp > 1 ? 's' : ''} (trop volumineux, refusé) : touchez ici pour réessayer.
+                </Text>
+              </Pressable>
+            )}
             <View style={styles.toggleRow}>
               <Text style={[styles.value, styles.toggleText]}>
                 {uploadedTotal === 0

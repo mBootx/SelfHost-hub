@@ -4,24 +4,24 @@ import { FolderInput } from 'lucide-react-native'
 import type { FileBrowserClient } from '@/services/filebrowser'
 import { hasBackups, migrateBackups } from '@/services/photoVault'
 import { useCameraBackupStore } from '@/store/cameraBackupStore'
+import { usePhotosStore } from '@/store/photosStore'
 import { colors, radius, spacing } from '@/constants/theme'
 
 interface Props {
   client: FileBrowserClient
   /** The account's own backup folder, where the old photos are moved to. */
   root: string
-  /** Called when photos have moved, so the gallery reads the folder again. */
-  onMoved: () => void
 }
 
 const NEWLINE = String.fromCharCode(10)
 
 /**
- * Shown only while an older backup folder (from before backups were kept per account) still has photos in
- * it. Moving is the user's call: nothing happens to the old photos until they say so, and then they are moved
- * rather than copied, into the same year/month folders, without overwriting anything.
+ * Shown in the backup settings while an older backup folder (from before backups were kept per account) still
+ * has photos in it. Those photos already appear in the Photos tab, so nothing depends on this: moving them is
+ * only tidying up, and the user's call. They are moved rather than copied, into the same year/month folders,
+ * without overwriting anything.
  */
-export default function LegacyBackups({ client, root, onMoved }: Props) {
+export default function LegacyBackups({ client, root }: Props) {
   const legacyFolder = useCameraBackupStore((s) => s.settings.legacyFolder)
   const saveSettings = useCameraBackupStore((s) => s.saveSettings)
   const [found, setFound] = useState(false)
@@ -58,37 +58,38 @@ export default function LegacyBackups({ client, root, onMoved }: Props) {
       if (report.cancelled) lines.push('Déplacement interrompu : vous pouvez le reprendre.')
       Alert.alert(report.failed > 0 || report.cancelled ? 'Déplacement incomplet' : 'Déplacement terminé', lines.join(NEWLINE))
       if (!report.cancelled && report.failed === 0 && report.skipped === 0) await saveSettings({ legacyFolder: null })
-      onMoved()
     } catch (err) {
       Alert.alert('Déplacement impossible', err instanceof Error ? err.message : 'Erreur inconnue')
     } finally {
       setProgress(null)
+      // The Photos tab reads the folders again the next time it is shown.
+      usePhotosStore.getState().reset()
       hasBackups(client, folder).then(setFound)
     }
   }
 
   function ask(): void {
     Alert.alert(
-      'Déplacer les anciennes sauvegardes',
+      'Ranger les anciennes sauvegardes',
       `Les photos et vidéos de « ${folder} » seront déplacées (pas copiées) vers « ${root} », dans les mêmes dossiers par année et par mois. Rien n'est écrasé.`,
       [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Déplacer', onPress: run }
+        { text: 'Ranger', onPress: run }
       ]
     )
   }
 
   return (
-    <View style={styles.card}>
+    <View style={styles.box}>
       <FolderInput size={20} color={colors.accent} />
       <View style={styles.text}>
-        <Text style={styles.title}>Anciennes sauvegardes trouvées</Text>
-        <Text style={styles.hint} numberOfLines={3}>
+        <Text style={styles.title}>Anciennes sauvegardes</Text>
+        <Text style={styles.hint}>
           {progress
             ? progress.total > 0
               ? `Déplacement : ${progress.done} sur ${progress.total}`
               : 'Préparation du déplacement…'
-            : `Des photos sont encore dans « ${folder} ». Les ranger dans votre dossier ?`}
+            : `Des photos sont encore dans « ${folder} ». Elles apparaissent déjà dans l'onglet Photos ; vous pouvez aussi les ranger dans votre dossier.`}
         </Text>
       </View>
       {progress ? (
@@ -96,35 +97,27 @@ export default function LegacyBackups({ client, root, onMoved }: Props) {
           <ActivityIndicator color={colors.accent} />
         </Pressable>
       ) : (
-        <View style={styles.actions}>
-          <Pressable onPress={() => saveSettings({ legacyFolder: null })} hitSlop={8} accessibilityRole="button">
-            <Text style={styles.secondary}>Ignorer</Text>
-          </Pressable>
-          <Pressable style={styles.primary} onPress={ask} accessibilityRole="button" accessibilityLabel="Déplacer les anciennes sauvegardes">
-            <Text style={styles.primaryText}>Déplacer</Text>
-          </Pressable>
-        </View>
+        <Pressable style={styles.primary} onPress={ask} accessibilityRole="button" accessibilityLabel="Ranger les anciennes sauvegardes">
+          <Text style={styles.primaryText}>Ranger</Text>
+        </Pressable>
       )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  card: {
+  box: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginHorizontal: spacing.lg,
     marginBottom: spacing.md,
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.elevated
+    backgroundColor: colors.raised
   },
   text: { flex: 1, minWidth: 0 },
   title: { color: colors.text, fontSize: 13, fontWeight: '700' },
-  hint: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  actions: { alignItems: 'flex-end', gap: spacing.sm },
-  secondary: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  hint: { color: colors.textSecondary, fontSize: 12, marginTop: 2, lineHeight: 17 },
   primary: { backgroundColor: colors.accent, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2 },
   primaryText: { color: '#000000', fontSize: 12, fontWeight: '800' }
 })

@@ -160,6 +160,12 @@ export class FileBrowserClient {
     this.source = 'default'
   }
 
+  /** Whether the server answers at all (anything below 500): tells a dead connection from a file the server refused. */
+  async isReachable(): Promise<boolean> {
+    const res = await xhrRequest({ url: `${this.baseUrl}/api/users?id=self`, headers: this.authHeaders(), timeout: 8000 })
+    return res.status > 0 && res.status < 500
+  }
+
   async list(path = '/'): Promise<FBItem[]> {
     const params = new URLSearchParams({ path, source: this.source || '' })
     const res = await xhrRequest({

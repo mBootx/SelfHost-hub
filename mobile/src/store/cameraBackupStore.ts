@@ -37,6 +37,8 @@ interface CameraBackupState {
   /** Photos and videos found but not backed up yet, as of the last check. */
   pending: number | null
   uploadedTotal: number
+  /** Files the server wouldn't take, given up on; the app offers to try them again. */
+  gaveUp: number
   lastSuccessAt: number | null
   lastCheckAt: number | null
   /** Only the photos the user picked are visible (Android's "limited" access). */
@@ -54,6 +56,7 @@ export const useCameraBackupStore = create<CameraBackupState>((set, get) => ({
   progress: null,
   pending: null,
   uploadedTotal: 0,
+  gaveUp: 0,
   lastSuccessAt: null,
   lastCheckAt: null,
   limitedAccess: false,

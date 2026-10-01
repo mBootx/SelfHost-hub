@@ -217,6 +217,8 @@ export interface Photo {
   /** From the year/month folders the backup files it under. */
   year: number | null
   month: number | null
+  /** Where it sits inside the backup folder it was found in (year/month/name). */
+  relative: string
 }
 
 export interface VaultListing {
@@ -232,34 +234,41 @@ function toPhoto(path: string, item: FBItem, root: string): Photo {
   const year = /^[0-9]{4}$/.test(relative[0] ?? '') ? Number(relative[0]) : null
   const monthNumber = /^[0-9]{2}$/.test(relative[1] ?? '') ? Number(relative[1]) : 0
   const month = year !== null && monthNumber >= 1 && monthNumber <= 12 ? monthNumber : null
-  return { path, name: item.name, size: item.size || 0, modified: Date.parse(item.modified) || 0, year, month }
+  return {
+    path,
+    name: item.name,
+    size: item.size || 0,
+    modified: Date.parse(item.modified) || 0,
+    year,
+    month,
+    relative: relative.join('/')
+  }
 }
 
-/**
- * Every photo in the account's backup folder (root / year / month). Folders are read a few at a time,
- * newest first, and onPartial hears about the photos found so far, so the gallery fills in as it goes.
- * A folder that doesn't exist yet is just an empty gallery.
- */
-export async function loadPhotos(
-  client: VaultClient,
-  root: string,
-  options: { onPartial?: (photos: Photo[]) => void; isCancelled?: () => boolean } = {}
-): Promise<VaultListing> {
-  const top = resolveInside(root, root)
-  const gate = limiter(LIST_CONCURRENCY)
-  const photos: Photo[] = []
-  let videos = 0
-  let incomplete = false
-  let rootFailure: unknown = null
+interface Scan {
+  photos: Photo[]
+  videos: number
+  incomplete: boolean
+  /** Why the top folder itself couldn't be listed, if it couldn't. */
+  failure: unknown
+}
 
+/** Reads one backup folder (root / year / month) into `scan`, a few folders at a time, telling `onFound` as photos turn up. */
+async function scanInto(
+  scan: Scan,
+  client: VaultClient,
+  top: string,
+  gate: <T>(task: () => Promise<T>) => Promise<T>,
+  options: { isCancelled?: () => boolean; onFound?: () => void }
+): Promise<void> {
   async function walk(dir: string, depth: number): Promise<void> {
     if (options.isCancelled?.()) return
     let items: FBItem[]
     try {
       items = await gate(() => client.list(dir))
     } catch (err) {
-      if (dir === top) rootFailure = err
-      else incomplete = true
+      if (dir === top) scan.failure = err
+      else scan.incomplete = true
       return
     }
     const folders: string[] = []
@@ -274,24 +283,100 @@ export async function loadPhotos(
       if (item.isDir) {
         if (depth < MAX_DEPTH) folders.push(path)
       } else if (isPhotoName(item.name)) {
-        photos.push(toPhoto(path, item, top))
+        scan.photos.push(toPhoto(path, item, top))
         added = true
       } else if (isVideoName(item.name)) {
-        videos++
+        scan.videos++
       }
     }
-    if (added) options.onPartial?.([...photos])
+    if (added) options.onFound?.()
     folders.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
     await Promise.all(folders.map((folder) => walk(folder, depth + 1)))
   }
   await walk(top, 1)
+}
 
-  if (rootFailure) {
-    const error = toVaultError(rootFailure, 'Impossible de lister les photos')
-    if (error.code === 'not-found') return { photos: [], videos: 0, incomplete: false }
-    throw error
+/** The same photo in two backup folders - same year/month/name, same size - is one photo, not two. */
+function photoKey(photo: Photo): string {
+  return `${photo.relative}|${photo.size}`
+}
+
+/** The first scan's photos, then those of the others that it doesn't already have. */
+function mergeScans(scans: Scan[]): Photo[] {
+  const merged = [...scans[0].photos]
+  const known = new Set(merged.map(photoKey))
+  for (const scan of scans.slice(1)) {
+    const added = scan.photos.filter((photo) => !known.has(photoKey(photo)))
+    for (const photo of added) known.add(photoKey(photo))
+    merged.push(...added)
   }
-  return { photos, videos, incomplete }
+  return merged
+}
+
+/** The older backup folders worth reading along with `top`: valid, distinct, and neither inside nor around it. */
+function olderFolders(top: string, candidates: string[]): string[] {
+  const folders: string[] = []
+  for (const candidate of candidates) {
+    let folder: string
+    try {
+      folder = resolveInside('/', candidate)
+    } catch {
+      continue
+    }
+    if (folder === '/' || folder === top || isInside(top, folder) || isInside(folder, top) || folders.includes(folder)) continue
+    folders.push(folder)
+  }
+  return folders
+}
+
+export interface LoadOptions {
+  onPartial?: (photos: Photo[]) => void
+  isCancelled?: () => boolean
+  /**
+   * Older backup folders (from before backups were kept per account) read along with the account's own, so
+   * photos that haven't been moved yet are in the gallery all the same. A photo present in both is shown once.
+   */
+  olderFolders?: string[]
+}
+
+/**
+ * Every photo in the account's backup folder (root / year / month), and in its older backup folders if
+ * there are any. Folders are read a few at a time, newest first, and onPartial hears about the photos found
+ * so far, so the gallery fills in as it goes. A folder that doesn't exist yet is just an empty gallery.
+ */
+export async function loadPhotos(client: VaultClient, root: string, options: LoadOptions = {}): Promise<VaultListing> {
+  const top = resolveInside(root, root)
+  const tops = [top, ...olderFolders(top, options.olderFolders ?? [])]
+  const gate = limiter(LIST_CONCURRENCY)
+  const scans: Scan[] = tops.map(() => ({ photos: [], videos: 0, incomplete: false, failure: null }))
+  const onFound = (): void => options.onPartial?.(mergeScans(scans))
+  await Promise.all(tops.map((folder, i) => scanInto(scans[i], client, folder, gate, { isCancelled: options.isCancelled, onFound })))
+
+  const [own, ...older] = scans
+  if (own.failure) {
+    const error = toVaultError(own.failure, 'Impossible de lister les photos')
+    if (error.code !== 'not-found') throw error
+  }
+  // An older folder that can't be read only means some photos may be missing from the list.
+  const olderUnreadable = older.some((scan) => scan.failure !== null && toVaultError(scan.failure, '').code !== 'not-found')
+  return {
+    photos: mergeScans(scans),
+    videos: scans.reduce((total, scan) => total + scan.videos, 0),
+    incomplete: olderUnreadable || scans.some((scan) => scan.incomplete)
+  }
+}
+
+/** `path` made absolute and clean, provided it lies inside one of `roots`; throws otherwise. */
+function resolveInsideAny(roots: string[], path: string): string {
+  let first: unknown = null
+  for (const root of roots) {
+    try {
+      return resolveInside(root, path)
+    } catch (err) {
+      first ??= err
+    }
+  }
+  throw first ?? forbidden('Chemin hors du dossier de sauvegarde')
 }
 
 export interface DeleteReport {
@@ -306,12 +391,12 @@ export interface DeleteReport {
  */
 export async function deletePhotos(
   client: VaultClient,
-  root: string,
+  roots: string | string[],
   paths: string[],
   onEach?: (done: number, total: number) => void
 ): Promise<DeleteReport> {
   const report: DeleteReport = { deleted: [], failed: [] }
-  const top = resolveInside(root, root)
+  const tops = (Array.isArray(roots) ? roots : [roots]).map((root) => resolveInside(root, root))
   let stopped: VaultError | null = null
   for (const [index, path] of paths.entries()) {
     if (stopped) {
@@ -319,9 +404,9 @@ export async function deletePhotos(
       continue
     }
     try {
-      const safe = resolveInside(top, path)
+      const safe = resolveInsideAny(tops, path)
       const name = baseName(safe)
-      if (safe === top || !(isPhotoName(name) || isVideoName(name))) throw forbidden('Seules les photos peuvent être supprimées ici')
+      if (tops.includes(safe) || !(isPhotoName(name) || isVideoName(name))) throw forbidden('Seules les photos peuvent être supprimées ici')
       await client.remove(safe)
       report.deleted.push(path)
     } catch (err) {
