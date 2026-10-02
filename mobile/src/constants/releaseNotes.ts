@@ -9,6 +9,47 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '2.4.0',
+    items: [
+      {
+        title: 'Appairez le téléphone au PC',
+        text: "Le contrôle à distance demande maintenant un code, affiché sur le PC (Réglages → Contrôle à distance). Saisissez-le une seule fois dans Réglages → Appareils."
+      },
+      {
+        title: 'Photos : corbeille, zoom, vidéos',
+        text: "Supprimer une photo la met 30 jours dans la corbeille, d'où vous pouvez la restaurer. Zoom au pincement, partage, enregistrement dans la galerie ; les vidéos s'affichent et se lisent."
+      },
+      {
+        title: 'Sauvegarde : autres albums',
+        text: "Sauvegardez aussi Screenshots, WhatsApp… (Réglages → Sauvegarde des photos), et n'envoyez que lorsque le téléphone est en charge si vous le souhaitez."
+      },
+      {
+        title: 'Envoyer vers SelfHost Hub',
+        text: "Dans le menu Partager d'une autre application, choisissez SelfHost Hub puis un dossier : les fichiers partent sur le serveur. Un texte partagé devient une note."
+      },
+      {
+        title: 'Fichiers : sélection, recherche, liens',
+        text: "Appuyez longuement pour sélectionner plusieurs éléments (zip, déplacer, supprimer, lien de partage). Recherche par nom, et liste des liens de partage à copier ou révoquer."
+      },
+      {
+        title: 'Minuterie de sommeil',
+        text: 'La lune du lecteur arrête la musique après 15 min à 1 h 30, ou à la fin du titre, avec un fondu, même écran éteint.'
+      },
+      {
+        title: 'Volume uniforme, radio, genres',
+        text: "Les titres trop forts sont baissés d'après les balises ReplayGain (Réglages → Lecture). « Lancer la radio » dans le menu d'un titre, et les genres dans la Bibliothèque."
+      },
+      {
+        title: 'Widget et diagnostic',
+        text: "Un widget d'écran d'accueil pilote la lecture. Réglages → Diagnostic montre l'état des serveurs et de la sauvegarde, avec un rapport à copier."
+      },
+      {
+        title: 'Corrections',
+        text: "Copier un lien crée un vrai lien de partage au lieu de donner accès à votre session. Un fichier du même nom n'est plus remplacé sans demander, et l'application verrouillée n'apparaît plus dans les applications récentes."
+      }
+    ]
+  },
+  {
     version: '2.3.1',
     items: [
       {

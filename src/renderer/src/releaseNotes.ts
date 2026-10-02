@@ -9,6 +9,31 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '2.4.0',
+    items: [
+      {
+        title: 'Appairage des téléphones',
+        text: "Le contrôle à distance demande maintenant un code, affiché dans Réglages (Contrôle à distance). Chaque téléphone le saisit une seule fois ; « Nouveau code » déconnecte ceux qui sont déjà appairés."
+      },
+      {
+        title: 'Vrais liens de partage',
+        text: "« Copier un lien de partage » crée un lien FileBrowser (7 jours, ou sans limite) au lieu de copier une adresse qui contenait votre session."
+      },
+      {
+        title: 'Fichiers déjà présents',
+        text: "Envoyer un fichier dont le nom existe déjà demande quoi faire : ignorer, garder les deux ou remplacer. Rien n'est plus écrasé sans votre accord."
+      },
+      {
+        title: 'Écoutes et miniatures',
+        text: "Les écoutes ne sont plus perdues quand le serveur a un incident, et les miniatures utilisent la bonne adresse de FileBrowser au lieu de charger l'image entière."
+      },
+      {
+        title: 'Sécurité',
+        text: 'La fenêtre est isolée du système (bac à sable) et les liens externes ne s\'ouvrent que s\'ils sont en http ou https.'
+      }
+    ]
+  },
+  {
     version: '2.2.0',
     items: [
       {

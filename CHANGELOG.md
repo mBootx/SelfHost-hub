@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.4.0 — 2026-10-02
+
+### Fixed
+- **"Copy link" no longer copies your login (both apps).** It copied the file's address *with your session token in it*, so whoever received the pasted link had your session. It now creates a real FileBrowser share link: a week by default on the desktop, with a choice of duration on the phone. On the phone, photos and thumbnails are no longer fetched with the token in the address either.
+- **Uploading a file whose name already exists asks first (both apps).** It used to be replaced without a word. Now you choose: skip, keep both (the new one gets a number) or replace. The photo backup never overwrites anything: a file with the same name and size counts as already sent, a different one gets a name of its own.
+- **Files (Android):** the list refreshes when an upload finishes, and delete, rename and new folder tell you when they fail instead of doing nothing.
+- **Remote control needs a pairing code (both apps).** The hub accepted any device on the network that knew a hash it handed out to anyone who asked. Now the PC shows a code (Réglages → Contrôle à distance), the phone enters it once (Réglages → Appareils → Appairer avec le PC), and from then on it only answers a fresh challenge with a keyed proof: the code itself never travels. Only home-network addresses are accepted, and an address that gets the code wrong five times is ignored for ten minutes. **After updating, each phone has to be paired once**, and a new code disconnects the phones paired with the old one.
+- **App lock (Android):** the app no longer appears in the recents screen while it is locked, and the lockout can't be ended by moving the phone's clock forward.
+- **Plays are not lost to a server hiccup (both apps).** The scrobbler dropped a play on a 500 or a 429. It now tells an outage (the plays wait), a failure without a reason (a few more tries) and a play the server refuses for good (dropped).
+- **Thumbnails (both apps):** they asked for `/api/preview`, which FileBrowser 1.3 and later no longer has, so every thumbnail failed and the full-size picture was loaded instead. The current route is now tried first.
+- **Fewer permissions (Android):** the microphone and "display over other apps", which were never used, are no longer requested.
+- **Desktop:** the window runs sandboxed, and external links open only when they are http(s).
+
+### Added
+- **Diagnostics (Android):** Réglages → Diagnostic shows the versions, whether each server answers and how fast, the state of the photo backup and of remote control, and the latest events. "Copier le rapport" produces a text report with server names, accounts and IP addresses hidden, ready to paste into a message.
+- **Photos (Android):**
+  - **Trash.** Deleting from the gallery now moves photos to a `Corbeille` folder on the server, kept 30 days. From the trash button you can restore them, delete them for good, or empty it.
+  - **Zoom, share, save.** Pinch or double-tap to zoom and drag around; share a photo to another app or save it to the phone's gallery.
+  - **Videos** appear in the gallery and play in the viewer (their thumbnails need ffmpeg on the server). Filter by Tout / Photos / Vidéos, and by album.
+  - **Other albums** (Screenshots, WhatsApp…) can be backed up: Réglages → Sauvegarde des photos → Autres albums. Each goes to its own folder, by year and month.
+  - **"Seulement en charge":** back up only while the phone is plugged in.
+- **Files (Android):**
+  - **Send to SelfHost Hub from any app's share sheet.** Choose the folder and the files go up; shared text becomes a note (.txt).
+  - **Select several items** (long-press): download them as a zip, move them, delete them, or create a share link.
+  - **Search** by name, in the current folder and below.
+  - **"Liens de partage"** lists the links you created, to copy or revoke. Moving uses a folder picker.
+- **Music (Android):**
+  - **Sleep timer** (the moon on the player): 15 minutes to 1 h 30, or at the end of the song. The volume fades over the last 10 seconds, and it works with the screen off.
+  - **Uniform volume** (Réglages → Lecture): turns down tracks that are too loud, per track or per album, using the ReplayGain tags in your files. Without tags nothing changes, and no track is ever made louder.
+  - **Radio:** "Lancer la radio" in a track's menu plays similar songs and keeps adding more.
+  - **Genres:** Bibliothèque → Genres lists them; each has its albums and a random mix.
+  - **Home-screen widget** with the song playing and previous / play-pause / next.
+
 ## 2.3.1 — 2026-10-01
 
 ### Fixed
