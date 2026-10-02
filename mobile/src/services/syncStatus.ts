@@ -5,6 +5,7 @@ export type SyncKind =
   | 'checking'
   | 'running'
   | 'waiting-wifi'
+  | 'waiting-charger'
   | 'no-permission'
   | 'no-server'
   | 'error'
@@ -73,6 +74,10 @@ export function describeSync(input: SyncInput, now = Date.now()): SyncStatus {
   }
   if (phase === 'waiting-wifi') {
     return status('waiting-wifi', 'En attente du Wi-Fi', pending ? `${count(pending, 'fichier', 'fichiers')} à envoyer` : null, 'send-anyway')
+  }
+  if (phase === 'waiting-charger') {
+    const waiting = pending ? `${count(pending, 'fichier', 'fichiers')} à envoyer · ` : ''
+    return status('waiting-charger', 'En attente du chargeur', `${waiting}Branchez le téléphone pour lancer l'envoi.`, 'send-anyway')
   }
   if (phase === 'no-permission') return status('no-permission', 'Accès aux photos refusé', 'La sauvegarde ne peut pas lire les photos du téléphone.', 'allow-access')
   if (phase === 'no-server') return status('no-server', 'FileBrowser injoignable', error, 'retry')

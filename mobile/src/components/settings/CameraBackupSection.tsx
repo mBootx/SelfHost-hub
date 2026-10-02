@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { View, Text, TextInput, Switch, Pressable, Alert, Linking, ActivityIndicator, StyleSheet } from 'react-native'
 import LegacyBackups from '@/components/photos/LegacyBackups'
+import BackupAlbums from '@/components/settings/BackupAlbums'
 import { SectionTitle } from '@/components/Screen'
 import { DEFAULT_BACKUP_FOLDER, useCameraBackupStore } from '@/store/cameraBackupStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
@@ -119,6 +120,7 @@ export default function CameraBackupSection() {
   if (!settings.enabled) status = 'Désactivée'
   else if (phase === 'running' && progress) status = `Envoi ${progress.done + 1} sur ${progress.total} : ${progress.filename}`
   else if (phase === 'waiting-wifi') status = 'En attente du Wi-Fi'
+  else if (phase === 'waiting-charger') status = 'En attente du chargeur'
   else if (phase === 'no-permission') status = 'Accès aux photos refusé'
   else if (phase === 'no-server') status = error ? `FileBrowser injoignable : ${error}` : 'FileBrowser non connecté'
   else if (phase === 'error') status = `Interrompue : ${error || 'erreur inconnue'}`
@@ -230,6 +232,24 @@ export default function CameraBackupSection() {
               />
             </View>
 
+            <View style={[styles.toggleRow, styles.toggleBelow]}>
+              <View style={styles.toggleText}>
+                <Text style={styles.label}>Seulement en charge</Text>
+                <Text style={styles.hint}>N’envoie que lorsque le téléphone est branché : une grosse sauvegarde ne vide pas la batterie.</Text>
+              </View>
+              <Switch
+                value={settings.chargingOnly}
+                onValueChange={(chargingOnly) => {
+                  saveSettings({ chargingOnly }).then(() => runCameraBackup())
+                }}
+                trackColor={{ false: colors.hover, true: colors.accent }}
+                thumbColor="#ffffff"
+                accessibilityLabel="Sauvegarder seulement en charge"
+              />
+            </View>
+
+            <BackupAlbums />
+
             <View style={styles.divider} />
             {gaveUp > 0 && (
               <Pressable onPress={() => retryFailedBackups()} accessibilityRole="button" accessibilityLabel="Réessayer les fichiers non envoyés">
@@ -265,6 +285,7 @@ const styles = StyleSheet.create({
   sectionGap: { marginTop: spacing.lg },
   card: { backgroundColor: colors.elevated, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  toggleBelow: { marginTop: spacing.lg },
   toggleText: { flex: 1 },
   label: { color: colors.text, fontSize: 14, fontWeight: '600' },
   value: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },

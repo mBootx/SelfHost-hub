@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { NORMALIZE_MODES, NormalizeMode } from '@/services/loudness'
 import { storage } from '@/services/storage'
 import type { EqualizerBands } from '../../modules/selfhost-native'
 
@@ -41,10 +42,12 @@ interface PersistedSettings {
   eqPreset: string
   /** Per-band gains in the phone's own layout, used when eqPreset is 'custom'. */
   eqCustomGains: number[]
+  /** Turns loud tracks down to even out the volume, from their ReplayGain tags. */
+  normalize: NormalizeMode
 }
 
 const PREF_KEY = 'audio.settings'
-const DEFAULTS: PersistedSettings = { crossfadeSeconds: 0, gapless: true, eqEnabled: false, eqPreset: 'flat', eqCustomGains: [] }
+const DEFAULTS: PersistedSettings = { crossfadeSeconds: 0, gapless: true, eqEnabled: false, eqPreset: 'flat', eqCustomGains: [], normalize: 'off' }
 
 interface AudioSettingsState extends PersistedSettings {
   /** The phone's equalizer layout once the native side reports it; null while unknown or unsupported. */
@@ -54,6 +57,7 @@ interface AudioSettingsState extends PersistedSettings {
   setCrossfade: (seconds: number) => void
   setGapless: (on: boolean) => void
   setEqEnabled: (on: boolean) => void
+  setNormalize: (mode: NormalizeMode) => void
   applyEqPreset: (id: string) => void
   setEqBand: (index: number, db: number) => void
   /** The gain of each of the phone's bands for the current preset or custom curve. */
@@ -63,8 +67,8 @@ interface AudioSettingsState extends PersistedSettings {
 export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => {
   function update(patch: Partial<PersistedSettings>): void {
     set(patch)
-    const { crossfadeSeconds, gapless, eqEnabled, eqPreset, eqCustomGains } = get()
-    storage.savePref(PREF_KEY, { crossfadeSeconds, gapless, eqEnabled, eqPreset, eqCustomGains })
+    const { crossfadeSeconds, gapless, eqEnabled, eqPreset, eqCustomGains, normalize } = get()
+    storage.savePref(PREF_KEY, { crossfadeSeconds, gapless, eqEnabled, eqPreset, eqCustomGains, normalize })
   }
 
   return {
@@ -73,13 +77,14 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => {
 
     load: async () => {
       const saved = await storage.loadPref<Partial<PersistedSettings>>(PREF_KEY)
-      if (saved) set({ ...DEFAULTS, ...saved })
+      if (saved) set({ ...DEFAULTS, ...saved, normalize: NORMALIZE_MODES.includes(saved.normalize as NormalizeMode) ? (saved.normalize as NormalizeMode) : 'off' })
     },
 
     setEqBands: (eqBands) => set({ eqBands }),
     setCrossfade: (seconds) => update({ crossfadeSeconds: Math.max(0, Math.min(CROSSFADE_MAX_S, Math.round(seconds))) }),
     setGapless: (gapless) => update({ gapless }),
     setEqEnabled: (eqEnabled) => update({ eqEnabled }),
+    setNormalize: (normalize) => update({ normalize }),
 
     applyEqPreset: (id) => {
       if (EQ_PRESETS.some((p) => p.id === id)) update({ eqPreset: id, eqEnabled: true })

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import { describeError, logEvent } from '@/services/diagnostics'
 import type { FileBrowserClient } from '@/services/filebrowser'
-import { deletePhotos, loadPhotos, Photo, VaultError, VaultErrorCode } from '@/services/photoVault'
+import { loadPhotos, Photo, purgeExpiredTrash, TRASH_DAYS, trashPhotos, VaultError, VaultErrorCode } from '@/services/photoVault'
 
 type Status = 'idle' | 'loading' | 'ready' | 'error'
 
@@ -22,12 +23,11 @@ export function targetKey(target: PhotoTarget): string {
 interface PhotosState {
   /** What the photos below were read from (see targetKey): a different account or setting starts over. */
   key: string | null
-  /** The folders those photos can be deleted from. */
+  /** The account's backup folder first, then older ones: where photos can be deleted from (into the first one's bin). */
   folders: string[]
   status: Status
+  /** Photos and videos together; the screen filters. */
   photos: Photo[]
-  /** Videos are backed up too; the gallery only shows photos and says how many it is leaving out. */
-  videos: number
   /** Some folder couldn't be read, so photos may be missing. */
   incomplete: boolean
   error: PhotosError | null
@@ -38,17 +38,20 @@ interface PhotosState {
    * because photos may have been uploaded since it listed the folders.
    */
   load: (client: FileBrowserClient, target: PhotoTarget, options?: { fresh?: boolean }) => Promise<void>
-  /** Deletes photos on the server, for good, and drops the ones that went from the list. */
-  remove: (client: FileBrowserClient, paths: string[]) => Promise<{ deleted: number; failed: number; message: string | null }>
+  /** Moves photos into the account's bin on the server and drops the ones that went from the list. */
+  trash: (client: FileBrowserClient, paths: string[]) => Promise<{ moved: number; failed: number; message: string | null }>
   reset: () => void
 }
 
-const EMPTY = { key: null, folders: [], status: 'idle' as Status, photos: [], videos: 0, incomplete: false, error: null, loadedAt: null }
+const EMPTY = { key: null, folders: [], status: 'idle' as Status, photos: [], incomplete: false, error: null, loadedAt: null }
 
 /** Bumped by every load, so a slow one that was overtaken (another account, a pull to refresh) can't overwrite a newer one. */
 let generation = 0
 let inFlight: { key: string; promise: Promise<void> } | null = null
 let reloadAfter = false
+/** The bin is cleaned at most once a day, after the gallery has loaded (so the account is known to work). */
+const PURGE_EVERY_MS = 24 * 60 * 60 * 1000
+let lastPurge = 0
 
 export const usePhotosStore = create<PhotosState>((set, get) => ({
   ...EMPTY,
@@ -74,11 +77,20 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
           }
         })
         if (mine !== generation) return
-        set({ status: 'ready', photos: listing.photos, videos: listing.videos, incomplete: listing.incomplete, loadedAt: Date.now() })
+        set({ status: 'ready', photos: listing.photos, incomplete: listing.incomplete, loadedAt: Date.now() })
+        if (Date.now() - lastPurge > PURGE_EVERY_MS) {
+          lastPurge = Date.now()
+          void purgeExpiredTrash(client, target.root)
+            .then((result) => {
+              if (result.removed > 0) logEvent('photos', `Corbeille : ${result.removed} jour(s) de plus de ${TRASH_DAYS} jours effacé(s)`)
+            })
+            .catch(() => {})
+        }
       } catch (err) {
         if (mine !== generation) return
         const error = err instanceof VaultError ? { code: err.code, message: err.message } : { code: 'failed' as const, message: 'Impossible de charger les photos' }
         set({ status: 'error', error })
+        logEvent('photos', `Impossible de lire les photos : ${describeError(err)}`, 'warn')
       } finally {
         if (mine === generation) {
           inFlight = null
@@ -93,18 +105,19 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
     return promise
   },
 
-  remove: async (client, paths) => {
+  trash: async (client, paths) => {
     const { folders } = get()
-    if (folders.length === 0) return { deleted: 0, failed: paths.length, message: null }
-    const report = await deletePhotos(client, folders, paths)
-    if (report.deleted.length > 0) {
-      const gone = new Set(report.deleted)
+    if (folders.length === 0) return { moved: 0, failed: paths.length, message: null }
+    const report = await trashPhotos(client, folders, paths)
+    if (report.moved.length > 0) {
+      const gone = new Set(report.moved.map((m) => m.from))
       set((s) => ({ photos: s.photos.filter((p) => !gone.has(p.path)) }))
     }
-    return { deleted: report.deleted.length, failed: report.failed.length, message: report.failed[0]?.message ?? null }
+    return { moved: report.moved.length, failed: report.failed.length, message: report.failed[0]?.message ?? null }
   },
 
   reset: () => {
+    lastPurge = 0
     generation++
     inFlight = null
     reloadAfter = false

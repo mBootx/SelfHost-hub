@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { engine, ensureAudioMode, onRemoteCommand } from '@/services/playbackEngine'
+import { loudnessFactor } from '@/services/loudness'
+import { useSleepTimerStore } from '@/services/sleepTimer'
 import { resumePosition } from '@/services/playbackMemory'
 import type { NavidromeClient, NDSong } from '@/services/navidrome'
 import { useNavidromeStore } from '@/store/navidromeStore'
@@ -36,6 +38,7 @@ export default function PlaybackController(): null {
 
   const crossfadeSeconds = useAudioSettingsStore((s) => s.crossfadeSeconds)
   const gapless = useAudioSettingsStore((s) => s.gapless)
+  const normalize = useAudioSettingsStore((s) => s.normalize)
   const eqEnabled = useAudioSettingsStore((s) => s.eqEnabled)
   const eqPreset = useAudioSettingsStore((s) => s.eqPreset)
   const eqCustomGains = useAudioSettingsStore((s) => s.eqCustomGains)
@@ -45,6 +48,9 @@ export default function PlaybackController(): null {
   const song = queue[queueIndex] || null
   // What follows the current track when it ends on its own - the same rules as the store's next().
   const nextSong = repeatMode === 'one' ? null : (queue[queueIndex + 1] ?? (repeatMode === 'all' ? queue[0] : null))
+  // How much each track is turned down to even out the volume (1 when the setting is off or it has no tags).
+  const gain = loudnessFactor(song, normalize)
+  const nextGain = loudnessFactor(nextSong, normalize)
   const artworkOverride = useArtworkStore((s) => {
     const key = song?.albumId || song?.id
     return key ? s.overrides[key] : undefined
@@ -65,7 +71,11 @@ export default function PlaybackController(): null {
         }
       },
       onAutoAdvance: () => useNavidromeStore.getState().next(),
-      onExternalPlayState: (playing) => useNavidromeStore.setState({ isPlaying: playing })
+      onExternalPlayState: (playing) => useNavidromeStore.setState({ isPlaying: playing }),
+      onStopAfterTrack: () => {
+        useSleepTimerStore.getState().finished()
+        useNavidromeStore.getState().stopAtTrackEnd()
+      }
     })
     SelfHostNative?.getEqualizerBands(engine.decks[0])
       .then(setEqBands)
@@ -84,16 +94,21 @@ export default function PlaybackController(): null {
     // A track restored from the last session picks up where it stopped. It was recorded in the
     // history when it first played, so it isn't recorded again.
     const resumeAt = resumePosition(song.id)
-    engine.load(song.id, getOfflineUri(song.id) || client.streamUrl(song.id), useNavidromeStore.getState().isPlaying, resumeAt ?? 0)
+    engine.load(song.id, getOfflineUri(song.id) || client.streamUrl(song.id), useNavidromeStore.getState().isPlaying, resumeAt ?? 0, gain)
     if (resumeAt === null) recordHistory(song)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [song?.id, !!client])
 
   useEffect(() => {
     if (!client) return
-    engine.setNext(nextSong ? { id: nextSong.id, source: getOfflineUri(nextSong.id) || client.streamUrl(nextSong.id) } : null)
+    engine.setNext(nextSong ? { id: nextSong.id, source: getOfflineUri(nextSong.id) || client.streamUrl(nextSong.id), gain: nextGain } : null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nextSong?.id, client])
+  }, [nextSong?.id, client, nextGain])
+
+  // The setting was switched while this track plays: it is turned down (or back up) at once.
+  useEffect(() => {
+    engine.setGain(gain)
+  }, [gain, song?.id])
 
   // Kept separate from the track-load effect above: artworkOverride resolves asynchronously (a
   // user-triggered search that can finish after playback started), and re-running this must only
@@ -125,6 +140,16 @@ export default function PlaybackController(): null {
   useEffect(() => {
     if (nextArtwork) SelfHostNative?.prefetchArtwork?.(nextArtwork)
   }, [nextArtwork])
+
+  // The home-screen widget shows the same song, and whether it is playing.
+  useEffect(() => {
+    if (!SelfHostNative?.updateWidget) return
+    if (!song || !client) {
+      SelfHostNative.updateWidget('', '', '', false)
+      return
+    }
+    SelfHostNative.updateWidget(song.title, song.artist, lockScreenArtwork(song, client, artworkOverride) ?? '', isPlaying)
+  }, [song, client, artworkOverride, isPlaying])
 
   // Nothing left to play (queue cleared, signed out): the Now Bar goes too, instead of showing the last song.
   useEffect(() => {

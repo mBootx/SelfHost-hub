@@ -13,6 +13,10 @@ import {
   currentDeviceList,
   isRunning,
   localLanAddress,
+  getPairingCode,
+  regeneratePairingCode,
+  Pairing,
+  PairingStore,
   REMOTE_CONTROL_PORT
 } from './remoteHub'
 import { initAutoUpdates } from './updater'
@@ -57,7 +61,8 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      // The preload only needs contextBridge, ipcRenderer and webUtils, which a sandboxed preload has.
+      sandbox: true,
       // Lets the FileBrowser preview modal render PDFs inline via Chromium's
       // built-in viewer (an <iframe src="...pdf"> is a no-op without this).
       plugins: true
@@ -68,9 +73,14 @@ function createWindow(): void {
     if (!startHidden) mainWindow?.show()
   })
 
+  // Only web links go to the browser: anything else (file:, smb:, a custom scheme) could start a program.
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    if (details.url.startsWith('https://') || details.url.startsWith('http://')) shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+  // The window never leaves the app: a link that would load another page in it is dropped.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== mainWindow?.webContents.getURL()) event.preventDefault()
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -142,6 +152,38 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
+/** Encrypts with the OS keychain when there is one, like the passwords. */
+function writeSecret(key: string, value: string): void {
+  const bytes = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(value) : Buffer.from(value, 'utf-8')
+  store.set(`secure.${key}`, bytes.toString('base64'))
+}
+
+function readSecret(key: string): string | null {
+  const raw = store.get(`secure.${key}`) as string | undefined
+  if (!raw) return null
+  try {
+    const buf = Buffer.from(raw, 'base64')
+    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buf) : buf.toString('utf-8')
+  } catch {
+    return null
+  }
+}
+
+/** The remote-control pairing code is a secret like a password: kept encrypted. */
+const pairingStore: PairingStore = {
+  load() {
+    try {
+      const saved = JSON.parse(readSecret('remote.pairing') ?? 'null') as Pairing | null
+      return saved && typeof saved.hubId === 'string' && typeof saved.code === 'string' ? saved : null
+    } catch {
+      return null
+    }
+  },
+  save(pairing) {
+    writeSecret('remote.pairing', JSON.stringify(pairing))
+  }
+}
+
 function registerIpc(): void {
   // Plain (non-sensitive) settings: server URLs, usernames, UI prefs
   ipcMain.handle('store:get', (_e, key: string) => store.get(key) ?? null)
@@ -156,28 +198,11 @@ function registerIpc(): void {
 
   // Sensitive secrets (passwords/tokens): encrypted at rest via OS keychain (safeStorage)
   ipcMain.handle('secure:set', (_e, key: string, value: string) => {
-    if (safeStorage.isEncryptionAvailable()) {
-      const encrypted = safeStorage.encryptString(value)
-      store.set(`secure.${key}`, encrypted.toString('base64'))
-    } else {
-      // Fallback: still keep it out of plain settings namespace
-      store.set(`secure.${key}`, Buffer.from(value, 'utf-8').toString('base64'))
-    }
+    // Without a keychain it is still kept out of the plain settings namespace.
+    writeSecret(key, value)
     return true
   })
-  ipcMain.handle('secure:get', (_e, key: string) => {
-    const raw = store.get(`secure.${key}`) as string | undefined
-    if (!raw) return null
-    try {
-      const buf = Buffer.from(raw, 'base64')
-      if (safeStorage.isEncryptionAvailable()) {
-        return safeStorage.decryptString(buf)
-      }
-      return buf.toString('utf-8')
-    } catch {
-      return null
-    }
-  })
+  ipcMain.handle('secure:get', (_e, key: string) => readSecret(key))
   ipcMain.handle('secure:delete', (_e, key: string) => {
     store.delete(`secure.${key}`)
     return true
@@ -360,10 +385,13 @@ function registerIpc(): void {
   // Remote control: this app is the only side able to accept incoming
   // connections (see remoteHub.ts), so it hosts the local WebSocket hub that
   // phones on the same LAN connect to.
-  ipcMain.handle('remote:start', (_e, args: { accountHash: string; deviceName: string }) => {
+  ipcMain.handle('remote:start', (_e, args: { deviceName: string }) => {
     if (!mainWindow) return { ok: false, error: 'Fenêtre indisponible' }
-    return startHub({ window: mainWindow, accountHash: args.accountHash, deviceName: args.deviceName })
+    return startHub({ window: mainWindow, deviceName: args.deviceName, store: pairingStore })
   })
+  // The code a phone is paired with, and a way to replace it (which disconnects every paired phone).
+  ipcMain.handle('remote:pairingCode', () => getPairingCode(pairingStore))
+  ipcMain.handle('remote:newPairingCode', () => regeneratePairingCode(pairingStore))
   ipcMain.handle('remote:stop', () => {
     stopHub()
     return { ok: true }

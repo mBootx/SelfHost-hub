@@ -25,16 +25,35 @@ export interface NDAlbum {
   year?: number
 }
 
+/** ReplayGain as OpenSubsonic servers report it, in dB. Only there for files that carry the tags. */
+export interface ReplayGain {
+  trackGain?: number
+  albumGain?: number
+  trackPeak?: number
+  albumPeak?: number
+  /** What a client should apply to a file that has no ReplayGain tags of its own. */
+  fallbackGain?: number
+}
+
 export interface NDSong {
   id: string
   title: string
   artist: string
+  artistId?: string
   album?: string
   albumId?: string
   coverArt?: string
   duration: number
   track?: number
   starred?: string
+  genre?: string
+  replayGain?: ReplayGain
+}
+
+export interface NDGenre {
+  name: string
+  songCount: number
+  albumCount: number
 }
 
 export interface NDPlaylist {
@@ -83,9 +102,12 @@ function coverSizeBucket(size: number): number {
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  /** Subsonic's own error code when the server answered 200 with a failure in the body (70: not found, 0: unexplained...). */
+  code?: number
+  constructor(message: string, status: number, code?: number) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -140,7 +162,7 @@ export class NavidromeClient {
     if (!body) throw new ApiError('Réponse Navidrome invalide', res.status)
     if (body.status === 'failed') {
       const code = body.error?.code
-      throw new ApiError(body.error?.message || 'Erreur Navidrome', code === 40 ? 401 : 500)
+      throw new ApiError(body.error?.message || 'Erreur Navidrome', code === 40 ? 401 : 500, typeof code === 'number' ? code : 0)
     }
     return body as T
   }
@@ -173,6 +195,38 @@ export class NavidromeClient {
 
   async getAlbumList(type: 'newest' | 'recent' | 'frequent' | 'random' = 'newest', size = 40): Promise<NDAlbum[]> {
     const body = await this.call<any>('getAlbumList2', { type, size: String(size) })
+    return body.albumList2?.album || []
+  }
+
+  /** Songs like this one, as the server works them out (Last.fm or its own tags). Often empty on a small library. */
+  async getSimilarSongs(id: string, count = 40): Promise<NDSong[]> {
+    const body = await this.call<any>('getSimilarSongs', { id, count: String(count) })
+    return body.similarSongs?.song || []
+  }
+
+  /** Songs from artists like this one. */
+  async getSimilarSongs2(artistId: string, count = 40): Promise<NDSong[]> {
+    const body = await this.call<any>('getSimilarSongs2', { id: artistId, count: String(count) })
+    return body.similarSongs2?.song || []
+  }
+
+  async getRandomSongs(count = 40, genre?: string): Promise<NDSong[]> {
+    const params: Record<string, string> = { size: String(count) }
+    if (genre) params.genre = genre
+    const body = await this.call<any>('getRandomSongs', params)
+    return body.randomSongs?.song || []
+  }
+
+  async getGenres(): Promise<NDGenre[]> {
+    const body = await this.call<any>('getGenres')
+    const genres: NDGenre[] = (body.genres?.genre || [])
+      .filter((g: any) => typeof g?.value === 'string' && g.value.trim() !== '')
+      .map((g: any) => ({ name: g.value, songCount: g.songCount ?? 0, albumCount: g.albumCount ?? 0 }))
+    return genres.sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }))
+  }
+
+  async getAlbumsByGenre(genre: string, size = 60, offset = 0): Promise<NDAlbum[]> {
+    const body = await this.call<any>('getAlbumList2', { type: 'byGenre', genre, size: String(size), offset: String(offset) })
     return body.albumList2?.album || []
   }
 

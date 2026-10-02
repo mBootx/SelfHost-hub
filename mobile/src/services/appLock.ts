@@ -19,6 +19,28 @@ const EXTERNAL_MAX_MS = 3 * 60 * 1000
 
 let expectingExternalUntil = 0
 
+/** The phone's own clock, which setting the date cannot move: milliseconds since it started, and which start it was. */
+export interface DeviceClock {
+  elapsed: number
+  boot: number
+}
+
+/**
+ * How long a lockout (wrong codes) still has to run. It is measured on the device clock when the phone has
+ * not restarted since it began, so moving the date forward does not end it; after a restart, or without that
+ * clock, it falls back to the date. A restart needs the phone's own unlock, which is the real barrier.
+ */
+export function lockoutRemaining(
+  untilWall: number,
+  untilElapsed: number,
+  boot: number,
+  wallNow: number,
+  clock: DeviceClock | null
+): number {
+  if (clock && untilElapsed > 0 && boot !== -1 && boot === clock.boot) return Math.max(0, untilElapsed - clock.elapsed)
+  return Math.max(0, untilWall - wallNow)
+}
+
 export function randomSalt(): string {
   let salt = ''
   for (let i = 0; i < 32; i++) salt += Math.floor(Math.random() * 16).toString(16)

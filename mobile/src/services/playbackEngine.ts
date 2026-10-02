@@ -6,6 +6,8 @@ type DeckIndex = 0 | 1
 export interface NextTrack {
   id: string
   source: string
+  /** What its volume is multiplied by (1 = as it is): the loudness evening-out, see services/loudness. */
+  gain?: number
 }
 
 export interface EngineHandlers {
@@ -16,6 +18,8 @@ export interface EngineHandlers {
   onAutoAdvance: () => void
   /** Play/pause changed from outside the app's buttons: lock screen, Now Bar, headset, audio focus. */
   onExternalPlayState: (playing: boolean) => void
+  /** The track "to stop after" ended: playback was stopped instead of going on to the next one. */
+  onStopAfterTrack?: () => void
 }
 
 /** How long before the fade window the next track starts buffering. */
@@ -53,6 +57,10 @@ class DeckEngine {
   private crossfadeSeconds = 0
   private gapless = true
   private volume = 1
+  /** Each deck's loudness factor: the track on it, whatever the volume setting is. */
+  private gains: [number, number] = [1, 1]
+  /** Playback stops when the current track ends, with no crossfade or gapless hop into the next. */
+  private stopAfterTrack = false
   private rate = 1
   private wantPlaying = false
   /** A requested play() that hasn't produced playback yet: replace() reports playing:false until the source loads. */
@@ -81,11 +89,17 @@ class DeckEngine {
     for (const deck of this.decks) deck.clearLockScreenControls()
   }
 
+  /** The volume a deck should have: the volume setting times its track's loudness factor. */
+  private level(index: DeckIndex): number {
+    return this.volume * this.gains[index]
+  }
+
   /**
    * Makes `id` current: keeps it if a transition already started it, switches instantly if it was
-   * preloaded, else loads it. `startAt` (seconds) resumes a track part-way through.
+   * preloaded, else loads it. `startAt` (seconds) resumes a track part-way through. `gain` is the track's
+   * loudness factor.
    */
-  load(id: string, source: string, play: boolean, startAt = 0): void {
+  load(id: string, source: string, play: boolean, startAt = 0, gain = 1): void {
     if (this.trackIds[this.active] === id) {
       if (play) this.play()
       return
@@ -97,15 +111,17 @@ class DeckEngine {
       this.decks[this.active].pause()
       this.trackIds[this.active] = null
       this.active = otherIndex
-      other.volume = this.volume
+      this.gains[otherIndex] = gain
+      other.volume = this.level(otherIndex)
       if (startAt <= 0) this.rewindIfAhead(other)
     } else {
       const deck = this.decks[this.active]
       this.trackIds[this.active] = id
+      this.gains[this.active] = gain
       deck.replace(source)
       deck.shouldCorrectPitch = true
       deck.setPlaybackRate(this.rate)
-      deck.volume = this.volume
+      deck.volume = this.level(this.active)
     }
     this.finished[this.active] = false
     this.pendingSeek = null
@@ -122,6 +138,8 @@ class DeckEngine {
     this.next = next
     const otherIndex = (1 - this.active) as DeckIndex
     if (this.fade?.from === otherIndex) return
+    // Already preloaded: it only needs to know its loudness factor, which the setting may have changed.
+    if (next && this.trackIds[otherIndex] === next.id) this.gains[otherIndex] = next.gain ?? 1
     if (this.trackIds[otherIndex] && this.trackIds[otherIndex] !== next?.id) {
       this.decks[otherIndex].pause()
       this.trackIds[otherIndex] = null
@@ -160,7 +178,22 @@ class DeckEngine {
 
   setVolume(volume: number): void {
     this.volume = volume
-    if (!this.fade) this.decks[this.active].volume = volume
+    if (!this.fade) this.decks[this.active].volume = this.level(this.active)
+  }
+
+  /** Changes the loudness factor of the track playing now (the setting was switched, or its tags became known). */
+  setGain(gain: number): void {
+    this.gains[this.active] = gain
+    if (!this.fade) this.decks[this.active].volume = this.level(this.active)
+  }
+
+  /** Stops playback when the current track ends instead of going on; the next transition is not prepared meanwhile. */
+  setStopAfterTrack(on: boolean): void {
+    this.stopAfterTrack = on
+  }
+
+  get stoppingAfterTrack(): boolean {
+    return this.stopAfterTrack
   }
 
   setRate(rate: number): void {
@@ -238,7 +271,7 @@ class DeckEngine {
   }
 
   private checkTransition(status: AudioStatus): void {
-    if (!this.next || this.fade || !status.playing || !status.duration) return
+    if (this.stopAfterTrack || !this.next || this.fade || !status.playing || !status.duration) return
     if (this.crossfadeSeconds <= 0 && !this.gapless) return
     const remaining = (status.duration - status.currentTime) / (this.rate || 1)
     if (remaining <= this.crossfadeSeconds + PRELOAD_LEAD_S) this.preloadNext()
@@ -258,6 +291,7 @@ class DeckEngine {
     this.trackIds[otherIndex] = next.id
     this.finished[otherIndex] = false
     // Paused first (see the class comment): a deck that finished a track would start this one by itself.
+    this.gains[otherIndex] = next.gain ?? 1
     deck.pause()
     deck.volume = 0
     deck.replace(next.source)
@@ -277,7 +311,7 @@ class DeckEngine {
     this.finished[toIndex] = false
     this.pendingSeek = null
     this.play()
-    const native = this.startNativeFade(this.decks[fromIndex], to, durationMs)
+    const native = this.startNativeFade(this.decks[fromIndex], to, durationMs, this.level(fromIndex), this.level(toIndex))
     this.fade = {
       from: fromIndex,
       start: Date.now(),
@@ -287,10 +321,13 @@ class DeckEngine {
     this.handlers?.onAutoAdvance()
   }
 
-  /** Hands the volume ramp to the native side, which keeps running with the screen off. False if it can't. */
-  private startNativeFade(from: AudioPlayer, to: AudioPlayer, durationMs: number): boolean {
+  /**
+   * Hands the volume ramp to the native side, which keeps running with the screen off. False if it can't.
+   * Each deck ramps between silence and its own level (volume times its track's loudness factor).
+   */
+  private startNativeFade(from: AudioPlayer, to: AudioPlayer, durationMs: number, fromLevel: number, toLevel: number): boolean {
     try {
-      return SelfHostNative?.startCrossfade?.(from, to, durationMs, this.volume) === true
+      return SelfHostNative?.startCrossfade?.(from, to, durationMs, fromLevel, toLevel) === true
     } catch {
       return false
     }
@@ -301,8 +338,8 @@ class DeckEngine {
     const fade = this.fade
     if (!fade) return
     const progress = Math.min(1, (Date.now() - fade.start) / fade.durationMs)
-    this.decks[this.active].volume = this.volume * Math.sin((progress * Math.PI) / 2)
-    this.decks[fade.from].volume = this.volume * Math.cos((progress * Math.PI) / 2)
+    this.decks[this.active].volume = this.level(this.active) * Math.sin((progress * Math.PI) / 2)
+    this.decks[fade.from].volume = this.level(fade.from) * Math.cos((progress * Math.PI) / 2)
     if (progress >= 1) this.finishFade()
   }
 
@@ -315,10 +352,19 @@ class DeckEngine {
     this.fade = null
     this.decks[fade.from].pause()
     this.trackIds[fade.from] = null
-    this.decks[this.active].volume = this.volume
+    this.decks[this.active].volume = this.level(this.active)
   }
 
   private onActiveEnded(): void {
+    if (this.stopAfterTrack) {
+      // The track the person asked to stop after is over: nothing follows it by itself.
+      this.stopAfterTrack = false
+      this.wantPlaying = false
+      this.pendingPlay = false
+      this.decks[this.active].pause()
+      this.handlers?.onStopAfterTrack?.()
+      return
+    }
     const next = this.next
     const otherIndex = (1 - this.active) as DeckIndex
     const other = this.decks[otherIndex]
@@ -329,7 +375,7 @@ class DeckEngine {
       this.trackIds[this.active] = null
       this.active = otherIndex
       this.rewindIfAhead(other)
-      other.volume = this.volume
+      other.volume = this.level(otherIndex)
       this.finished[otherIndex] = false
       this.pendingSeek = null
       this.play()

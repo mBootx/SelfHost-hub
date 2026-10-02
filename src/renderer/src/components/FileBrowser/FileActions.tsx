@@ -3,6 +3,8 @@ import { Download, Trash2, Pencil, Link2, Check } from 'lucide-react'
 import { FBItem } from '@renderer/services/filebrowser'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 import { downloadAndRecord } from '@renderer/store/downloadStore'
+import { useToastStore } from '@renderer/store/toastStore'
+import { copyShareLink, WEEK } from '@renderer/services/shareLink'
 
 interface Props {
   item: FBItem
@@ -16,10 +18,14 @@ export default function FileActions({ item, onRequestRename, onRequestDelete }: 
 
   if (!client) return <></>
 
-  function handleCopyLink(): void {
-    navigator.clipboard.writeText(client!.rawUrl(item.path))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
+  async function handleCopyLink(): Promise<void> {
+    try {
+      useToastStore.getState().show(await copyShareLink(client!, item, WEEK))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch (err: any) {
+      useToastStore.getState().show(err?.message || 'Impossible de créer le lien')
+    }
   }
 
   return (
@@ -33,7 +39,7 @@ export default function FileActions({ item, onRequestRename, onRequestDelete }: 
           <Download className="h-4 w-4" />
         </button>
       )}
-      <button onClick={handleCopyLink} title="Copier le lien" className="text-gray-400 hover:text-white">
+      <button onClick={handleCopyLink} title="Copier un lien de partage (7 jours)" className="text-gray-400 hover:text-white">
         {copied ? <Check className="h-4 w-4 text-accent" /> : <Link2 className="h-4 w-4" />}
       </button>
       <button onClick={onRequestRename} title="Renommer" className="text-gray-400 hover:text-white">

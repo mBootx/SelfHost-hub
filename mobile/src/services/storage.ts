@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-export type ServiceKey = 'navidrome' | 'filebrowser' | 'downtify'
+export type ServiceKey = 'navidrome' | 'filebrowser' | 'downtify' | 'remote'
 
 export interface SavedConnection {
   url: string

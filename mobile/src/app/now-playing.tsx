@@ -12,6 +12,7 @@ import {
   ListPlus,
   Pause,
   Play,
+  Radio,
   Repeat,
   Repeat1,
   Shuffle,
@@ -32,6 +33,7 @@ import { useCoverColor } from '@/hooks/useCoverColor'
 import ActionSheet, { ActionSheetItem } from '@/components/ActionSheet'
 import CoverImage from '@/components/CoverImage'
 import OfflineButton from '@/components/navidrome/OfflineButton'
+import SleepButton from '@/components/nowplaying/SleepButton'
 import Backdrop from '@/components/nowplaying/Backdrop'
 import LyricsCard from '@/components/nowplaying/LyricsCard'
 import LyricsOverlay, { Box } from '@/components/nowplaying/LyricsOverlay'
@@ -79,6 +81,7 @@ export default function NowPlayingScreen() {
   // Not subscribing to currentTime/duration here: SeekBar and the lyrics own that, so this screen stays still.
   const setProgress = useNavidromeStore((s) => s.setProgress)
   const playQueue = useNavidromeStore((s) => s.playQueue)
+  const startRadio = useNavidromeStore((s) => s.startRadio)
   const playbackRate = useNavidromeStore((s) => s.playbackRate)
   const setPlaybackRate = useNavidromeStore((s) => s.setPlaybackRate)
   const removeFromQueueAt = useNavidromeStore((s) => s.removeFromQueueAt)
@@ -280,6 +283,19 @@ export default function NowPlayingScreen() {
   const deviceName = deviceList.find((d) => d.deviceId === selectedDeviceId)?.deviceName || 'Appareil distant'
   const menuItems: ActionSheetItem[] = [
     { label: 'Ajouter à une playlist', icon: ListPlus, onPress: () => openPlaylistPicker(song) },
+    ...(isRemote
+      ? []
+      : [
+          {
+            label: 'Lancer la radio',
+            icon: Radio,
+            onPress: async () => {
+              showToast('Recherche de titres similaires…')
+              const result = await startRadio(song).catch(() => 'empty' as const)
+              showToast(result === 'started' ? `Radio lancée depuis « ${song.title} »` : 'Aucun titre similaire trouvé')
+            }
+          }
+        ]),
     { label: starred ? 'Retirer des favoris' : 'Ajouter aux favoris', icon: Heart, onPress: toggleHeart },
     ...(song.albumId
       ? [{ label: "Voir l'album", icon: Disc3, onPress: () => router.push({ pathname: '/album/[id]', params: { id: song.albumId! } }) }]
@@ -417,6 +433,7 @@ export default function NowPlayingScreen() {
                       <Text style={[styles.speed, playbackRate !== 1 && styles.speedActive]}>{playbackRate}x</Text>
                     </Pressable>
                   )}
+                  {!isRemote && <SleepButton idleColor={SOFT_WHITE} />}
                   <OfflineButton song={song} client={client} size={22} idleColor={SOFT_WHITE} />
                   <Pressable onPress={() => setView('queue')} hitSlop={10} accessibilityRole="button" accessibilityLabel="File de lecture">
                     <ListMusic size={22} color={SOFT_WHITE} />

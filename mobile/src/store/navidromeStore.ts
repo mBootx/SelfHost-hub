@@ -1,11 +1,16 @@
 import { create } from 'zustand'
+import { describeError, logEvent } from '@/services/diagnostics'
 import { NavidromeClient, NDAlbum, NDArtist, NDPlaylist, NDSong } from '@/services/navidrome'
 import { seekTo } from '@/services/playbackEngine'
+import { findRadioSongs, radioNeedsMore } from '@/services/radio'
 import { storage } from '@/services/storage'
 import { prefetchCoverArt } from '@/services/imagePrefetch'
 import { ConnectionStatus } from '@/types'
 
 export type RepeatMode = 'off' | 'all' | 'one'
+
+/** A radio adds songs only one request at a time. */
+let extendingRadio = false
 
 interface NavidromeState {
   client: NavidromeClient | null
@@ -25,6 +30,8 @@ interface NavidromeState {
   orderedQueue: NDSong[] | null
   queueIndex: number
   isPlaying: boolean
+  /** The song radio running, if any: what it was started from. It adds similar songs when the queue runs low. */
+  radio: { seedId: string; seedTitle: string } | null
   repeatMode: RepeatMode
   shuffle: boolean
   volume: number
@@ -42,6 +49,11 @@ interface NavidromeState {
   addSongsToPlaylist: (playlistId: string, songIds: string[]) => Promise<void>
 
   playQueue: (songs: NDSong[], startIndex: number) => void
+  /** Plays songs like `seed`, and keeps adding more. 'empty' when the server has nothing similar to offer. */
+  startRadio: (seed: NDSong) => Promise<'started' | 'empty'>
+  extendRadio: () => Promise<void>
+  /** The track meant to be the last has ended: stays on the one after it, paused. */
+  stopAtTrackEnd: () => void
   addToQueue: (songs: NDSong[]) => void
   playNext: (song: NDSong) => void
   removeFromQueueAt: (index: number) => void
@@ -76,6 +88,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
   orderedQueue: null,
   queueIndex: -1,
   isPlaying: false,
+  radio: null,
   repeatMode: 'off',
   shuffle: false,
   volume: 0.8,
@@ -100,6 +113,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     try {
       await client.testConnection()
       set({ client, status: 'connected', username })
+      logEvent('connection', 'Navidrome connecté')
       if (remember) {
         await storage.saveConnection('navidrome', { url, username })
         await storage.saveSecret('navidrome', 'password', password)
@@ -107,6 +121,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
       await get().loadLibrary()
     } catch (err: any) {
       set({ status: 'error', error: err?.message || 'Connexion impossible' })
+      logEvent('connection', `Navidrome : ${describeError(err)}`, 'warn')
       throw err
     }
   },
@@ -191,7 +206,8 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
       queue: [],
       orderedQueue: null,
       queueIndex: -1,
-      isPlaying: false
+      isPlaying: false,
+      radio: null
     })
   },
 
@@ -215,11 +231,49 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
         queue: picked ? [picked, ...rest] : rest,
         queueIndex: 0,
         isPlaying: true,
-        currentTime: 0
+        currentTime: 0,
+        radio: null
       })
       return
     }
-    set({ queue: songs, orderedQueue: null, queueIndex: startIndex, isPlaying: true, currentTime: 0 })
+    set({ queue: songs, orderedQueue: null, queueIndex: startIndex, isPlaying: true, currentTime: 0, radio: null })
+  },
+
+  startRadio: async (seed) => {
+    const { client } = get()
+    if (!client) return 'empty'
+    const { songs } = await findRadioSongs(client, seed)
+    if (songs.length === 0) return 'empty'
+    get().playQueue([seed, ...songs], 0)
+    set({ radio: { seedId: seed.id, seedTitle: seed.title } })
+    logEvent('music', `Radio lancée depuis « ${seed.title} » (${songs.length} titres)`)
+    return 'started'
+  },
+
+  extendRadio: async () => {
+    const { client, radio, queue } = get()
+    if (!client || !radio || extendingRadio) return
+    const seed = queue[queue.length - 1]
+    if (!seed) return
+    extendingRadio = true
+    try {
+      // The radio drifts: each batch is made from the last song queued, and never repeats one already in the queue.
+      const { songs } = await findRadioSongs(client, seed, { exclude: new Set(queue.map((song) => song.id)) })
+      // Another radio, or something played by hand, took over while this was loading.
+      if (songs.length > 0 && get().radio?.seedId === radio.seedId) get().addToQueue(songs)
+    } catch {
+      // the next skip tries again
+    } finally {
+      extendingRadio = false
+    }
+  },
+
+  stopAtTrackEnd: () => {
+    const { queue, queueIndex } = get()
+    const hasNext = queueIndex + 1 < queue.length
+    set({ queueIndex: hasNext ? queueIndex + 1 : queueIndex, currentTime: 0, isPlaying: false })
+    // Nothing follows: the track just ended is put back at its start, ready to be played again.
+    if (!hasNext) seekTo(0)
   },
 
   // Both of these also extend orderedQueue when shuffle is on, otherwise turning
@@ -282,7 +336,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     })
   },
 
-  clearQueue: () => set({ queue: [], orderedQueue: null, queueIndex: -1, isPlaying: false, currentTime: 0, duration: 0 }),
+  clearQueue: () => set({ queue: [], orderedQueue: null, queueIndex: -1, isPlaying: false, currentTime: 0, duration: 0, radio: null }),
 
   removeFromPlaylist: async (playlistId, songIndex) => {
     const { client } = get()
@@ -318,6 +372,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
       }
     }
     set({ queueIndex: nextIndex, currentTime: 0, isPlaying: true })
+    if (get().radio && radioNeedsMore(queue.length, nextIndex)) void get().extendRadio()
   },
 
   prev: () => {

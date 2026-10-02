@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { View, Text, Switch, Pressable, StyleSheet } from 'react-native'
 import Slider from '@react-native-community/slider'
 import { SectionTitle } from '@/components/Screen'
+import { NORMALIZE_LABELS, NORMALIZE_MODES } from '@/services/loudness'
 import { CROSSFADE_MAX_S, EQ_PRESETS, useAudioSettingsStore } from '@/store/audioSettingsStore'
 import { colors, radius, spacing } from '@/constants/theme'
 
@@ -36,6 +37,8 @@ export default function PlaybackSection() {
   const eqBands = useAudioSettingsStore((s) => s.eqBands)
   const setCrossfade = useAudioSettingsStore((s) => s.setCrossfade)
   const setGapless = useAudioSettingsStore((s) => s.setGapless)
+  const normalize = useAudioSettingsStore((s) => s.normalize)
+  const setNormalize = useAudioSettingsStore((s) => s.setNormalize)
   const setEqEnabled = useAudioSettingsStore((s) => s.setEqEnabled)
   const applyEqPreset = useAudioSettingsStore((s) => s.applyEqPreset)
   const setEqBand = useAudioSettingsStore((s) => s.setEqBand)
@@ -73,6 +76,28 @@ export default function PlaybackSection() {
           value={gapless}
           onChange={setGapless}
         />
+        <View style={styles.divider} />
+        <Text style={styles.label}>Volume uniforme</Text>
+        <View style={styles.presets}>
+          {NORMALIZE_MODES.map((mode) => {
+            const selected = normalize === mode
+            return (
+              <Pressable
+                key={mode}
+                onPress={() => setNormalize(mode)}
+                style={[styles.chip, selected && styles.chipSelected]}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Volume uniforme : ${NORMALIZE_LABELS[mode]}`}
+              >
+                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{NORMALIZE_LABELS[mode]}</Text>
+              </Pressable>
+            )
+          })}
+        </View>
+        <Text style={styles.hint}>
+          Baisse les titres trop forts pour que tous sonnent à peu près pareil, d&apos;après les balises ReplayGain de vos fichiers (ajoutées par un outil comme loudgain, ou par le tagueur de votre bibliothèque). Un titre sans balise n&apos;est pas touché, et aucun titre n&apos;est jamais amplifié.
+        </Text>
       </View>
 
       <View style={styles.sectionGap}>

@@ -82,9 +82,12 @@ function coverSizeBucket(size: number): number {
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  /** Subsonic's own error code when the server answered 200 with a failure in the body (70: not found, 0: unexplained...). */
+  code?: number
+  constructor(message: string, status: number, code?: number) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -135,7 +138,7 @@ export class NavidromeClient {
     if (!body) throw new ApiError('Réponse Navidrome invalide', res.status)
     if (body.status === 'failed') {
       const code = body.error?.code
-      throw new ApiError(body.error?.message || 'Erreur Navidrome', code === 40 ? 401 : 500)
+      throw new ApiError(body.error?.message || 'Erreur Navidrome', code === 40 ? 401 : 500, typeof code === 'number' ? code : 0)
     }
     return body as T
   }

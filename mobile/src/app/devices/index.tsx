@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Switch, StyleSheet } from 'react-native'
+import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Switch, StyleSheet, Alert } from 'react-native'
 import { useNavigation } from 'expo-router'
 import { Laptop, Smartphone, Play, Pause, SkipBack, SkipForward, Cast } from 'lucide-react-native'
 import { useRemoteStore, LOCAL_DEVICE_ID } from '@/store/remoteStore'
@@ -25,11 +25,15 @@ export default function DevicesScreen() {
   const setEnabled = useRemoteStore((s) => s.setEnabled)
   const setDeviceName = useRemoteStore((s) => s.setDeviceName)
   const connectManual = useRemoteStore((s) => s.connectManual)
+  const pairing = useRemoteStore((s) => s.pairing)
+  const pair = useRemoteStore((s) => s.pair)
+  const unpair = useRemoteStore((s) => s.unpair)
   const selectDevice = useRemoteStore((s) => s.selectDevice)
   const sendCommand = useRemoteStore((s) => s.sendCommand)
 
   const [nameDraft, setNameDraft] = useState(deviceName)
   const [manualIp, setManualIp] = useState('')
+  const [codeDraft, setCodeDraft] = useState('')
   const [connecting, setConnecting] = useState(false)
 
   useEffect(() => {
@@ -41,6 +45,20 @@ export default function DevicesScreen() {
   const otherDevices = deviceList.filter((d) => d.deviceId !== LOCAL_DEVICE_ID)
   const selected = selectedDeviceId !== LOCAL_DEVICE_ID ? devices[selectedDeviceId] : null
   const isRemote = selectedDeviceId !== LOCAL_DEVICE_ID
+
+  async function handlePair(): Promise<void> {
+    setConnecting(true)
+    const ok = await pair(codeDraft, manualIp.trim() || undefined)
+    setConnecting(false)
+    if (ok) setCodeDraft('')
+  }
+
+  function confirmUnpair(): void {
+    Alert.alert('Dissocier du PC ?', 'Ce téléphone ne pourra plus piloter le PC (ni l\'inverse) avant d\'être appairé de nouveau avec le code du PC.', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Dissocier', style: 'destructive', onPress: () => void unpair() }
+    ])
+  }
 
   async function handleManualConnect(): Promise<void> {
     if (!manualIp.trim()) return
@@ -78,7 +96,53 @@ export default function DevicesScreen() {
             />
           </View>
 
-          {status === 'error' && (
+          {!pairing && (
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>Appairer avec le PC</Text>
+              <Text style={styles.pairHint}>
+                Sur le PC : Réglages, rubrique « Contrôle à distance », « Code d'appairage ». Saisissez-le ici une seule fois :
+                il n'est jamais envoyé sur le réseau.
+              </Text>
+              <TextInput
+                style={[styles.input, styles.codeInput]}
+                value={codeDraft}
+                onChangeText={(text) => setCodeDraft(text.toUpperCase())}
+                placeholder="ABCDE-FGHJK"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={14}
+                accessibilityLabel="Code d'appairage du PC"
+              />
+              {status === 'error' && (
+                <>
+                  <Text style={styles.fieldLabel}>Adresse IP du PC (seulement s'il n'est pas trouvé tout seul)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={manualIp}
+                    onChangeText={setManualIp}
+                    placeholder="192.168.1.42"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="numbers-and-punctuation"
+                    accessibilityLabel="Adresse IP du PC"
+                  />
+                </>
+              )}
+              <Pressable
+                style={({ pressed }) => [styles.connectButton, styles.pairButton, (connecting || pressed) && styles.pressed]}
+                onPress={handlePair}
+                disabled={connecting}
+                accessibilityRole="button"
+                accessibilityLabel="Appairer"
+              >
+                {connecting ? <ActivityIndicator color="#000" /> : <Text style={styles.connectButtonText}>Appairer</Text>}
+              </Pressable>
+            </View>
+          )}
+
+          {pairing && status === 'error' && (
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>PC introuvable automatiquement - adresse IP</Text>
               <View style={styles.manualRow}>
@@ -104,6 +168,12 @@ export default function DevicesScreen() {
                 </Pressable>
               </View>
             </View>
+          )}
+
+          {pairing && (
+            <Pressable onPress={confirmUnpair} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dissocier ce téléphone du PC">
+              <Text style={styles.unpair}>Appairé avec un PC · Dissocier</Text>
+            </Pressable>
           )}
 
           {status === 'connected' && (
@@ -190,6 +260,10 @@ export default function DevicesScreen() {
 }
 
 const styles = StyleSheet.create({
+  pairHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginBottom: spacing.sm },
+  codeInput: { fontFamily: 'monospace', letterSpacing: 2, marginBottom: spacing.sm },
+  pairButton: { alignSelf: 'flex-start', marginTop: spacing.sm },
+  unpair: { color: colors.textMuted, fontSize: 12, textAlign: 'center', paddingVertical: spacing.md },
   container: { flex: 1, backgroundColor: colors.base },
   content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl },
   row: {

@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router'
-import { ListEnd, ListStart, ListPlus, Disc3, Heart } from 'lucide-react-native'
+import { ListEnd, ListStart, ListPlus, Disc3, Heart, Radio } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useTrackSheetStore } from '@/store/trackSheetStore'
 import { isStarred, useStarStore } from '@/store/starStore'
@@ -15,6 +15,7 @@ export default function TrackOptionsSheet() {
   const client = useNavidromeStore((s) => s.client)
   const playNext = useNavidromeStore((s) => s.playNext)
   const addToQueue = useNavidromeStore((s) => s.addToQueue)
+  const startRadio = useNavidromeStore((s) => s.startRadio)
   const openPlaylistPicker = usePlaylistPickerStore((s) => s.open)
   const showToast = useToastStore((s) => s.show)
   const starred = useStarStore((s) => (song ? isStarred(s, song) : false))
@@ -39,6 +40,15 @@ export default function TrackOptionsSheet() {
           }
         },
         { label: 'Ajouter à une playlist', icon: ListPlus, onPress: () => openPlaylistPicker(song) },
+        {
+          label: 'Lancer la radio',
+          icon: Radio,
+          onPress: async () => {
+            showToast('Recherche de titres similaires…')
+            const result = await startRadio(song).catch(() => 'empty' as const)
+            showToast(result === 'started' ? `Radio lancée depuis « ${song.title} »` : 'Aucun titre similaire trouvé')
+          }
+        },
         {
           label: starred ? 'Retirer des favoris' : 'Ajouter aux favoris',
           icon: Heart,

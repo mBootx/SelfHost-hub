@@ -33,8 +33,8 @@ export default function PreviewModal({ item, client, onClose }: Props) {
         <View style={styles.body}>
           {type.includes('image') && (
             <Image
-              // Keyed on the file, not the URL: the URL embeds the login token, which changes every session.
-              source={{ uri: client.rawUrl(item.path), cacheKey: `fb:${client.getSourceName()}:${item.path}:${item.modified}` }}
+              // The login travels in a header, not in the address; the cache key names the file so it outlives a session.
+              source={client.imageSource(client.rawUrl(item.path), `fb:${client.getSourceName()}:${item.path}:${item.modified}`)}
               style={styles.image}
               contentFit="contain"
               cachePolicy="memory-disk"

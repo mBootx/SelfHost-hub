@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import type { LucideIcon } from 'lucide-react-native'
-import { CircleCheck, CloudOff, CloudUpload, TriangleAlert, WifiOff } from 'lucide-react-native'
+import { BatteryCharging, CircleCheck, CloudOff, CloudUpload, TriangleAlert, WifiOff } from 'lucide-react-native'
 import { backupOverMobileData, retryFailedBackups, runCameraBackup } from '@/services/cameraBackup'
 import { describeSync, SyncAction, SyncKind } from '@/services/syncStatus'
 import { useCameraBackupStore } from '@/store/cameraBackupStore'
@@ -12,6 +12,7 @@ const ICONS: Record<SyncKind, LucideIcon> = {
   checking: CloudUpload,
   running: CloudUpload,
   'waiting-wifi': WifiOff,
+  'waiting-charger': BatteryCharging,
   'no-permission': TriangleAlert,
   'no-server': CloudOff,
   error: TriangleAlert,
@@ -25,6 +26,7 @@ const TINTS: Record<SyncKind, string> = {
   checking: colors.textSecondary,
   running: colors.accent,
   'waiting-wifi': colors.warning,
+  'waiting-charger': colors.warning,
   'no-permission': colors.warning,
   'no-server': colors.warning,
   error: colors.warning,

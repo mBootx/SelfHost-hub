@@ -6,11 +6,14 @@ import { Album, Asset, AssetField, MediaType, Query } from 'expo-media-library'
 import type { AssetInfo, AssetMetadata } from 'expo-media-library'
 import * as Network from 'expo-network'
 import * as TaskManager from 'expo-task-manager'
+import SelfHostNative from '../../modules/selfhost-native'
 import { expectExternalScreen } from '@/services/appLock'
+import { describeError, flushDiagnostics, logEvent } from '@/services/diagnostics'
 import { ApiError, FileBrowserClient } from '@/services/filebrowser'
+import { freeName } from '@/services/fileNames'
 import { storage } from '@/services/storage'
-import { VaultError, vaultRootFor } from '@/services/photoVault'
-import { useCameraBackupStore } from '@/store/cameraBackupStore'
+import { albumFolderName, VaultError, vaultRootFor } from '@/services/photoVault'
+import { BackupAlbum, useCameraBackupStore } from '@/store/cameraBackupStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 
 /**
@@ -65,21 +68,39 @@ interface Journal {
 const EMPTY_JOURNAL: Journal = { floor: 0, cursor: 0, recent: {}, failures: {}, gaveUp: {}, uploadedTotal: 0, lastSuccessAt: null }
 
 let running: Promise<void> | null = null
-/** Set by "send anyway" and "try again": the next run ignores "Wi-Fi only" / also tries the files given up on. */
-let overMobileDataNext = false
+/** The state last written to the diagnostic record, so a run that finds the same thing again says nothing. */
+let lastLogged: string | null = null
+
+/** Writes a line when the situation changed since the last one (a run every 15 minutes mustn't fill the record). */
+function noteState(state: string, message: string, level: 'info' | 'warn' = 'info'): void {
+  if (lastLogged === state) return
+  lastLogged = state
+  logEvent('backup', message, level)
+}
+/** Set by "send anyway" and "try again": the next run ignores "Wi-Fi only" and "charging only" / also tries the files given up on. */
+let anywayNext = false
 let retryFailedNext = false
 /** When the current run must stop starting new uploads; a background run joining a foreground one lowers it. */
 let deadline = Number.POSITIVE_INFINITY
 let cancelRequested = false
 let started = false
 
-async function loadJournal(): Promise<Journal> {
-  const saved = await storage.loadPref<Journal>(JOURNAL_KEY).catch(() => null)
+async function loadJournal(key = JOURNAL_KEY): Promise<Journal> {
+  const saved = await storage.loadPref<Journal>(key).catch(() => null)
   return { ...EMPTY_JOURNAL, ...saved }
 }
 
-async function saveJournal(journal: Journal): Promise<void> {
-  await storage.savePref(JOURNAL_KEY, journal)
+async function saveJournal(journal: Journal, key = JOURNAL_KEY): Promise<void> {
+  await storage.savePref(key, journal)
+}
+
+/** Whether the phone is plugged in; true when this build can't tell, so the setting can never block the backup for good. */
+function isCharging(): boolean {
+  try {
+    return SelfHostNative?.isCharging?.() ?? true
+  } catch {
+    return true
+  }
 }
 
 function errorMessage(err: unknown): string {
@@ -132,6 +153,8 @@ interface SendResult {
   message: string
   /** The trouble is on the phone (the file is gone or unreadable), not at the server: nothing to offer to retry. */
   local?: boolean
+  /** The server already had this very file (same name and size): nothing was sent, but it is backed up. */
+  already?: boolean
 }
 
 /** What a failed upload says about the run: skip this file, or stop until the server or network is back. */
@@ -165,76 +188,160 @@ export function sendingOrder<T extends Item>(items: T[], alreadySent: number, li
   return [...newestFirst.slice(0, room), ...rest]
 }
 
-/** Sends one photo or video into its year/month folder. */
-async function sendOne(client: FileBrowserClient, meta: Item, folders: Set<string>): Promise<SendResult> {
+/** The files a server folder already holds (name -> size), read once per run and kept up to date as files go in. */
+type Listings = Map<string, Map<string, number>>
+
+async function filesIn(client: FileBrowserClient, folder: string, listings: Listings): Promise<Map<string, number>> {
+  let names = listings.get(folder)
+  if (names) return names
+  names = new Map()
+  try {
+    for (const item of await client.list(folder)) if (!item.isDir) names.set(item.name, item.size)
+  } catch (err) {
+    // A folder that isn't there yet holds nothing; any other failure is the upload's own.
+    if (!(err instanceof ApiError && err.status === 404)) throw err
+  }
+  listings.set(folder, names)
+  return names
+}
+
+/**
+ * Sends one photo or video into its year/month folder. Nothing already on the server is ever replaced: the
+ * very same file (name and size) is left alone - it is simply backed up - and a different file with the same
+ * name goes in under a numbered name.
+ */
+async function sendOne(client: FileBrowserClient, meta: Item, source: Source, folders: Set<string>, listings: Listings): Promise<SendResult> {
   let info: AssetInfo
+  let size: number
   try {
     info = await new Asset(meta.id).getInfo()
-    if (!new File(info.uri).exists) throw new Error('fichier introuvable sur le téléphone')
+    const file = new File(info.uri)
+    if (!file.exists) throw new Error('fichier introuvable sur le téléphone')
+    size = file.size
   } catch (err) {
     // Deleted meanwhile, or unreadable: a problem with this file only.
     return { outcome: 'file-problem', message: errorMessage(err), local: true }
   }
   try {
-    const folder = monthFolder(backupRoot(client), meta.creationTime)
+    const folder = monthFolder(source.folder(client), meta.creationTime)
     await ensureFolder(client, folder, folders)
-    await client.uploadLocalFile(info.uri, folder, info.filename)
-    return { outcome: 'sent', message: '' }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const names = await filesIn(client, folder, listings)
+      let name = info.filename
+      const existing = names.get(name)
+      if (existing !== undefined) {
+        if (existing === size) return { outcome: 'sent', message: '', already: true }
+        name = freeName(name, new Set(names.keys()))
+      }
+      try {
+        await client.uploadLocalFile(info.uri, folder, name)
+        names.set(name, size)
+        return { outcome: 'sent', message: '' }
+      } catch (err) {
+        // The name was taken after we looked: look again, once.
+        if (!(err instanceof ApiError && err.status === 409) || attempt === 1) throw err
+        listings.delete(folder)
+      }
+    }
+    return { outcome: 'file-problem', message: 'nom déjà pris sur le serveur' }
   } catch (err) {
     return classify(err)
   }
 }
 
-async function run(): Promise<void> {
-  const store = useCameraBackupStore
-  await store.getState().load()
-  const { settings } = store.getState()
-  if (!settings.enabled) return
-  cancelRequested = false
-  // "Send anyway" and "try again" are for this run only.
-  const overMobileData = overMobileDataNext
-  const retryFailed = retryFailedNext
-  overMobileDataNext = false
-  retryFailedNext = false
+/** One place photos are read from on the phone and backed up to: the camera, or one of the other albums. */
+interface Source {
+  key: string
+  title: string
+  journalKey: string
+  /** The album on the phone, or null when there is none (no camera album yet). */
+  open: () => Promise<Album | null>
+  /** The server folder whose year/month folders this source's files go into. */
+  folder: (client: FileBrowserClient) => string
+}
 
-  const permission = await MediaLibrary.getPermissionsAsync(false, MEDIA_PERMISSIONS)
-  if (!permission.granted) {
-    store.setState({ phase: 'no-permission', lastCheckAt: Date.now() })
-    return
+const CAMERA: Source = {
+  key: 'camera',
+  title: 'Appareil photo',
+  journalKey: JOURNAL_KEY,
+  open: () => Album.get('Camera'),
+  folder: (client) => backupRoot(client)
+}
+
+function albumSource(album: BackupAlbum): Source {
+  return {
+    key: `album:${album.id}`,
+    title: album.title,
+    journalKey: `${JOURNAL_KEY}.album.${album.id}`,
+    open: async () => new Album(album.id),
+    folder: (client) => `${backupRoot(client)}/${albumFolderName(album.title)}`
   }
-  store.setState({ limitedAccess: permission.accessPrivileges === 'limited' })
+}
 
-  if (settings.wifiOnly && !overMobileData) {
-    const network = await Network.getNetworkStateAsync()
-    if (network.type !== Network.NetworkStateType.WIFI && network.type !== Network.NetworkStateType.ETHERNET) {
-      store.setState({ phase: 'waiting-wifi', lastCheckAt: Date.now() })
-      return
+/** The camera, then the albums the user picked. */
+function sourcesOf(albums: BackupAlbum[]): Source[] {
+  return [CAMERA, ...albums.map(albumSource)]
+}
+
+/** What a source has to do in this run, worked out from its journal and what is on the phone. */
+interface Plan {
+  source: Source
+  journal: Journal
+  order: Item[]
+  todo: Item[]
+  /** Files given up on that are tried again because the user asked. */
+  retried: Set<string>
+  advanceCursor: () => void
+}
+
+/** What the screen shows is the sum over the sources; each one reports its own part here. */
+interface RunContext {
+  views: Map<string, { uploaded: number; lastSuccessAt: number | null; gaveUp: number; pending: number }>
+  /** Files handled by the sources before this one, and all the files of the run, for the progress bar. */
+  done: number
+  total: number
+  sent: number
+  alreadyThere: number
+}
+
+function publish(ctx: RunContext, extra: Partial<ReturnType<typeof useCameraBackupStore.getState>> = {}): void {
+  let uploadedTotal = 0
+  let gaveUp = 0
+  let pending = 0
+  let lastSuccessAt: number | null = null
+  for (const view of ctx.views.values()) {
+    uploadedTotal += view.uploaded
+    gaveUp += view.gaveUp
+    pending += view.pending
+    if (view.lastSuccessAt !== null) lastSuccessAt = Math.max(lastSuccessAt ?? 0, view.lastSuccessAt)
+  }
+  useCameraBackupStore.setState({ uploadedTotal, lastSuccessAt, gaveUp, pending, ...extra })
+}
+
+/** Reads the source's journal and the phone, and says what is left to send. */
+async function planSource(source: Source, retryFailed: boolean): Promise<Plan> {
+  const journal = await loadJournal(source.journalKey)
+  let all: Item[] = []
+  try {
+    const album = await source.open()
+    if (album) {
+      const from = Math.max(journal.floor, journal.cursor - LOOKBACK_MS)
+      all = (
+        await new Query()
+          .album(album)
+          .gte(AssetField.CREATION_TIME, from)
+          .orderBy({ key: AssetField.CREATION_TIME, ascending: true })
+          .exeForMetadata()
+      ).filter(
+        (a): a is AssetMetadata & { creationTime: number } =>
+          a.creationTime !== null && (a.mediaType === MediaType.IMAGE || a.mediaType === MediaType.VIDEO)
+      )
     }
+  } catch (err) {
+    // An album that was deleted since, or can't be read, has nothing to send; the camera's failure is the run's.
+    if (source === CAMERA) throw err
+    logEvent('backup', `Album « ${source.title} » illisible : ${describeError(err)}`, 'warn')
   }
-
-  const journal = await loadJournal()
-  store.setState({
-    uploadedTotal: journal.uploadedTotal,
-    lastSuccessAt: journal.lastSuccessAt,
-    gaveUp: Object.keys(journal.gaveUp).length
-  })
-
-  const album = await Album.get('Camera')
-  if (!album) {
-    store.setState({ phase: 'idle', pending: 0, lastCheckAt: Date.now(), error: null })
-    return
-  }
-  const from = Math.max(journal.floor, journal.cursor - LOOKBACK_MS)
-  const all = (
-    await new Query()
-      .album(album)
-      .gte(AssetField.CREATION_TIME, from)
-      .orderBy({ key: AssetField.CREATION_TIME, ascending: true })
-      .exeForMetadata()
-  ).filter(
-    (a): a is AssetMetadata & { creationTime: number } =>
-      a.creationTime !== null && (a.mediaType === MediaType.IMAGE || a.mediaType === MediaType.VIDEO)
-  )
 
   const isDone = (a: { id: string }): boolean =>
     a.id in journal.recent || (journal.failures[a.id]?.attempts ?? 0) >= MAX_ATTEMPTS
@@ -265,27 +372,20 @@ async function run(): Promise<void> {
     : []
   const retried = new Set(again.map((item) => item.id))
   const order: Item[] = [...sendingOrder(todo, Object.keys(journal.recent).length), ...again]
-  store.setState({ pending: order.length, lastCheckAt: Date.now() })
-  if (order.length === 0) {
-    await saveJournal(journal)
-    store.setState({ phase: 'idle', error: null })
-    return
-  }
+  return { source, journal, order, todo, retried, advanceCursor }
+}
 
-  let client: FileBrowserClient | null
-  try {
-    client = await getClient()
-  } catch (err) {
-    store.setState({ phase: 'no-server', error: errorMessage(err) })
-    return
-  }
-  if (!client) {
-    store.setState({ phase: 'no-server', error: null })
-    return
-  }
+interface SendSummary {
+  stopMessage: string | null
+  lastFileError: string | null
+}
 
-  store.setState({ phase: 'running', error: null })
+/** Sends a plan's files, one at a time, and keeps its journal. Stops early when the run must (see Outcome). */
+async function sendPlan(plan: Plan, client: FileBrowserClient, ctx: RunContext): Promise<SendSummary> {
+  const store = useCameraBackupStore
+  const { source, journal, order, retried, advanceCursor } = plan
   const folders = new Set<string>()
+  const listings: Listings = new Map()
   let stopMessage: string | null = null
   let lastFileError: string | null = null
   let retryLater = 0
@@ -297,10 +397,20 @@ async function run(): Promise<void> {
   const finished = new Set<string>()
 
   const nameOf = (item: Item): string => item.filename || item.id.split('/').pop() || 'photo'
+  const report = (pending: number): void => {
+    ctx.views.set(source.key, {
+      uploaded: journal.uploadedTotal,
+      lastSuccessAt: journal.lastSuccessAt,
+      gaveUp: Object.keys(journal.gaveUp).length,
+      pending
+    })
+    publish(ctx)
+  }
 
   /** The server won't take this file again: remembered, so the app can offer to try once more. */
   const giveUp = (item: Item, message: string): void => {
     journal.gaveUp[item.id] = { name: nameOf(item), time: item.creationTime, message }
+    logEvent('backup', `Abandon de ${nameOf(item)} : ${message}`, 'warn')
     const ids = Object.keys(journal.gaveUp)
     if (ids.length > MAX_GAVE_UP) {
       ids.sort((a, b) => journal.gaveUp[a].time - journal.gaveUp[b].time)
@@ -325,12 +435,18 @@ async function run(): Promise<void> {
     finished.add(item.id)
     if (!local) giveUp(item, message)
   }
-  const sent = (item: Item): void => {
+  const sent = (item: Item, already = false): void => {
     // A file older than the look-back is not in the cursor's range, so there is nothing to remember it by.
     if (!retried.has(item.id) || item.creationTime >= journal.cursor - LOOKBACK_MS) journal.recent[item.id] = item.creationTime
     delete journal.failures[item.id]
     delete journal.gaveUp[item.id]
     finished.add(item.id)
+    // A file the server already had is backed up, but nothing was sent: it is not an upload to count.
+    if (already) {
+      ctx.alreadyThere++
+      return
+    }
+    ctx.sent++
     journal.uploadedTotal++
     journal.lastSuccessAt = Date.now()
   }
@@ -342,15 +458,15 @@ async function run(): Promise<void> {
 
   for (const [index, item] of order.entries()) {
     if (cancelRequested || Date.now() > deadline) break
-    store.setState({ progress: { done: index, total: order.length, filename: nameOf(item) } })
+    store.setState({ progress: { done: ctx.done + index, total: ctx.total, filename: nameOf(item) } })
 
-    let result = await sendOne(client, item, folders)
+    let result = await sendOne(client, item, source, folders, listings)
     // FileBrowser sessions expire: sign in again once per run (as the file screen does) and retry.
     if (result.outcome === 'signed-out' && !signedInAgain) {
       signedInAgain = true
       try {
         await client.login()
-        result = await sendOne(client, item, folders)
+        result = await sendOne(client, item, source, folders, listings)
       } catch (err) {
         result = { outcome: 'abort', message: errorMessage(err) }
       }
@@ -372,34 +488,121 @@ async function run(): Promise<void> {
       continue
     }
     settleSuspects()
-    if (result.outcome === 'sent') sent(item)
+    if (result.outcome === 'sent') sent(item, result.already === true)
     else fail(item, result.message, result.local === true)
     advanceCursor()
     if (Date.now() - savedAt > JOURNAL_SAVE_GAP_MS) {
-      await saveJournal(journal)
+      await saveJournal(journal, source.journalKey)
       savedAt = Date.now()
     }
-    store.setState({
-      uploadedTotal: journal.uploadedTotal,
-      lastSuccessAt: journal.lastSuccessAt,
-      pending: order.length - index - 1 + retryLater + suspects.length
-    })
+    report(order.length - index - 1 + retryLater + suspects.length)
   }
   // Nothing was sent after them, but the server answered each time: they were the files' own failures.
   if (!stopMessage) {
     settleSuspects()
     advanceCursor()
   }
-  await saveJournal(journal)
+  await saveJournal(journal, source.journalKey)
+  ctx.done += order.length
+  report(order.filter((item) => !retried.has(item.id) && !finished.has(item.id)).length)
+  return { stopMessage, lastFileError }
+}
+
+async function run(): Promise<void> {
+  const store = useCameraBackupStore
+  await store.getState().load()
+  const { settings } = store.getState()
+  if (!settings.enabled) return
+  cancelRequested = false
+  // "Send anyway" and "try again" are for this run only.
+  const anyway = anywayNext
+  const retryFailed = retryFailedNext
+  anywayNext = false
+  retryFailedNext = false
+
+  const permission = await MediaLibrary.getPermissionsAsync(false, MEDIA_PERMISSIONS)
+  if (!permission.granted) {
+    store.setState({ phase: 'no-permission', lastCheckAt: Date.now() })
+    noteState('no-permission', "Accès aux photos refusé : rien ne peut être sauvegardé", 'warn')
+    return
+  }
+  store.setState({ limitedAccess: permission.accessPrivileges === 'limited' })
+
+  if (settings.wifiOnly && !anyway) {
+    const network = await Network.getNetworkStateAsync()
+    if (network.type !== Network.NetworkStateType.WIFI && network.type !== Network.NetworkStateType.ETHERNET) {
+      store.setState({ phase: 'waiting-wifi', lastCheckAt: Date.now() })
+      noteState('waiting-wifi', 'En attente du Wi-Fi (réglage « Wi-Fi uniquement »)')
+      return
+    }
+  }
+  if (settings.chargingOnly && !anyway && !isCharging()) {
+    store.setState({ phase: 'waiting-charger', lastCheckAt: Date.now() })
+    noteState('waiting-charger', 'En attente du chargeur (réglage « Seulement en charge »)')
+    return
+  }
+
+  // Everything to send is worked out first, so the screen's totals are right from the start of the run.
+  const plans: Plan[] = []
+  for (const source of sourcesOf(settings.albums)) plans.push(await planSource(source, retryFailed))
+  const ctx: RunContext = { views: new Map(), done: 0, total: 0, sent: 0, alreadyThere: 0 }
+  for (const plan of plans) {
+    ctx.views.set(plan.source.key, {
+      uploaded: plan.journal.uploadedTotal,
+      lastSuccessAt: plan.journal.lastSuccessAt,
+      gaveUp: Object.keys(plan.journal.gaveUp).length,
+      pending: plan.order.length
+    })
+    ctx.total += plan.order.length
+  }
+  publish(ctx, { lastCheckAt: Date.now() })
+  if (ctx.total === 0) {
+    for (const plan of plans) await saveJournal(plan.journal, plan.source.journalKey)
+    store.setState({ phase: 'idle', error: null })
+    return
+  }
+
+  let client: FileBrowserClient | null
+  try {
+    client = await getClient()
+  } catch (err) {
+    store.setState({ phase: 'no-server', error: errorMessage(err) })
+    noteState('no-server', `FileBrowser injoignable : ${errorMessage(err)}`, 'warn')
+    return
+  }
+  if (!client) {
+    store.setState({ phase: 'no-server', error: null })
+    noteState('no-server', 'Pas de compte FileBrowser enregistré')
+    return
+  }
+
+  store.setState({ phase: 'running', error: null })
+  lastLogged = null
+  const todoCount = plans.reduce((sum, plan) => sum + plan.todo.length, 0)
+  const againCount = plans.reduce((sum, plan) => sum + plan.retried.size, 0)
+  logEvent('backup', `Envoi de ${ctx.total} fichier${ctx.total > 1 ? 's' : ''} (${todoCount} nouveau${todoCount > 1 ? 'x' : ''}${againCount > 0 ? `, ${againCount} à renvoyer` : ''}${plans.length > 1 ? `, ${plans.length} sources` : ''})`)
+
+  let stopMessage: string | null = null
+  let lastFileError: string | null = null
+  for (const plan of plans) {
+    const summary = await sendPlan(plan, client, ctx)
+    lastFileError = summary.lastFileError ?? lastFileError
+    if (summary.stopMessage) {
+      stopMessage = summary.stopMessage
+      break
+    }
+    if (cancelRequested || Date.now() > deadline) break
+  }
 
   const error = stopMessage ?? lastFileError
-  store.setState({
-    phase: stopMessage ? 'error' : 'idle',
-    progress: null,
-    error,
-    gaveUp: Object.keys(journal.gaveUp).length,
-    pending: order.filter((item) => !retried.has(item.id) && !finished.has(item.id)).length
-  })
+  let left = 0
+  for (const view of ctx.views.values()) left += view.pending
+  logEvent(
+    'backup',
+    `Terminé : ${ctx.sent} envoyé${ctx.sent > 1 ? 's' : ''}${ctx.alreadyThere > 0 ? `, ${ctx.alreadyThere} déjà sur le serveur` : ''}, ${left} en attente${stopMessage ? ` — interrompu : ${stopMessage}` : lastFileError ? ` — ${lastFileError}` : ''}`,
+    stopMessage ? 'warn' : 'info'
+  )
+  publish(ctx, { phase: stopMessage ? 'error' : 'idle', progress: null, error })
 }
 
 /** Checks for new photos and backs them up. Runs one at a time; calls during a run share it. */
@@ -410,6 +613,7 @@ export function runCameraBackup(budgetMs = Number.POSITIVE_INFINITY): Promise<vo
     running = run()
       .catch((err) => {
         useCameraBackupStore.setState({ phase: 'error', progress: null, error: errorMessage(err) })
+        logEvent('backup', `Erreur inattendue : ${describeError(err)}`, 'error')
       })
       .finally(() => {
         running = null
@@ -427,6 +631,62 @@ async function setBackgroundTask(enabled: boolean): Promise<void> {
   } else if (!enabled && registered) {
     await BackgroundTask.unregisterTaskAsync(TASK_NAME)
   }
+}
+
+/** What the journal says, for the Diagnostic screen. */
+export async function backupJournalSummary(): Promise<{
+  cursor: number
+  rememberedSent: number
+  failing: number
+  gaveUp: { name: string; message: string }[]
+}> {
+  await useCameraBackupStore.getState().load()
+  const sources = sourcesOf(useCameraBackupStore.getState().settings.albums)
+  const journals = await Promise.all(sources.map((source) => loadJournal(source.journalKey)))
+  return {
+    cursor: journals[0].cursor,
+    rememberedSent: journals.reduce((sum, journal) => sum + Object.keys(journal.recent).length, 0),
+    failing: journals.reduce((sum, journal) => sum + Object.keys(journal.failures).length, 0),
+    gaveUp: journals.flatMap((journal, i) =>
+      Object.values(journal.gaveUp).map((entry) => ({ name: i === 0 ? entry.name : `${sources[i].title}/${entry.name}`, message: entry.message }))
+    )
+  }
+}
+
+export interface BackupEnvironment {
+  permission: 'accordé' | 'limité' | 'refusé' | 'inconnu'
+  network: 'Wi-Fi' | 'Ethernet' | 'données mobiles' | 'aucun' | 'inconnu'
+  /** Null when this build can't tell (it predates the native check). */
+  charging: boolean | null
+}
+
+/** What the phone allows the backup right now, for the Diagnostic screen. Never throws. */
+export async function backupEnvironment(): Promise<BackupEnvironment> {
+  let permission: BackupEnvironment['permission'] = 'inconnu'
+  try {
+    const status = await MediaLibrary.getPermissionsAsync(false, MEDIA_PERMISSIONS)
+    permission = !status.granted ? 'refusé' : status.accessPrivileges === 'limited' ? 'limité' : 'accordé'
+  } catch {
+    // Left as unknown.
+  }
+  let network: BackupEnvironment['network'] = 'inconnu'
+  try {
+    const state = await Network.getNetworkStateAsync()
+    if (state.isConnected === false) network = 'aucun'
+    else if (state.type === Network.NetworkStateType.WIFI) network = 'Wi-Fi'
+    else if (state.type === Network.NetworkStateType.ETHERNET) network = 'Ethernet'
+    else if (state.type === Network.NetworkStateType.CELLULAR) network = 'données mobiles'
+  } catch {
+    // Left as unknown.
+  }
+  let charging: boolean | null = null
+  try {
+    const value = SelfHostNative?.isCharging?.()
+    charging = typeof value === 'boolean' ? value : null
+  } catch {
+    // Left as unknown.
+  }
+  return { permission, network, charging }
 }
 
 export async function countCameraRoll(): Promise<number> {
@@ -448,21 +708,21 @@ export async function requestCameraRollAccess(): Promise<boolean> {
  * Runs one backup with a one-off exception. A run already going finishes first, and the exception is gone
  * once this one is over, so it can't be left waiting for some later run (hours on, perhaps on mobile data).
  */
-async function runOnceWith(flag: 'overMobileData' | 'retryFailed'): Promise<void> {
+async function runOnceWith(flag: 'anyway' | 'retryFailed'): Promise<void> {
   await running
-  if (flag === 'overMobileData') overMobileDataNext = true
+  if (flag === 'anyway') anywayNext = true
   else retryFailedNext = true
   try {
     await runCameraBackup()
   } finally {
-    overMobileDataNext = false
+    anywayNext = false
     retryFailedNext = false
   }
 }
 
-/** Backs up once even though "Wi-Fi only" is on and the phone is on mobile data; the setting itself stays. */
+/** Backs up once even though "Wi-Fi only" or "charging only" is on and the phone isn't meeting it; the settings themselves stay. */
 export function backupOverMobileData(): Promise<void> {
-  return runOnceWith('overMobileData')
+  return runOnceWith('anyway')
 }
 
 /** Tries again the files that were given up on (too big for the server, refused), along with anything new. */
@@ -470,18 +730,60 @@ export function retryFailedBackups(): Promise<void> {
   return runOnceWith('retryFailed')
 }
 
+/** A source's journal starting afresh: from the beginning of the roll, or from `now`. */
+async function startJournal(source: Source, includeExisting: boolean, now: number): Promise<void> {
+  const journal = await loadJournal(source.journalKey)
+  await saveJournal(
+    { ...journal, floor: includeExisting ? 0 : now, cursor: includeExisting ? 0 : now, recent: {}, failures: {}, gaveUp: {} },
+    source.journalKey
+  )
+}
+
+/** Runs a backup that starts from the settings as they are now: a run already going has made its plans from the old ones, so it finishes first. */
+async function runAfterCurrent(): Promise<void> {
+  await running
+  await runCameraBackup()
+}
+
+/** The phone's albums other than the camera's, by name. */
+export async function listDeviceAlbums(): Promise<BackupAlbum[]> {
+  const albums = await Album.getAll()
+  const named = await Promise.all(
+    albums.map(async (album) => ({ id: album.id, title: (await album.getTitle().catch(() => '')).trim() }))
+  )
+  return named.filter((album) => album.title !== '' && album.title !== 'Camera').sort((a, b) => a.title.localeCompare(b.title, 'fr'))
+}
+
+/** How many photos and videos an album holds. */
+export async function countAlbumItems(id: string): Promise<number> {
+  const all = await new Query().album(new Album(id)).exeForMetadata()
+  return all.filter((a) => a.mediaType === MediaType.IMAGE || a.mediaType === MediaType.VIDEO).length
+}
+
+/** Adds an album to the backup. `includeExisting`: what it already holds too, not only what comes next. */
+export async function addBackupAlbum(album: BackupAlbum, includeExisting: boolean): Promise<void> {
+  const store = useCameraBackupStore.getState()
+  await store.load()
+  if (store.settings.albums.some((known) => known.id === album.id)) return
+  await startJournal(albumSource(album), includeExisting, Date.now())
+  await store.saveSettings({ albums: [...store.settings.albums, album] })
+  await runAfterCurrent()
+}
+
+/** Stops backing up an album. What was already sent stays on the server. */
+export async function removeBackupAlbum(id: string): Promise<void> {
+  const store = useCameraBackupStore.getState()
+  await store.load()
+  await store.saveSettings({ albums: store.settings.albums.filter((album) => album.id !== id) })
+  await storage.savePref(albumSource({ id, title: '' }).journalKey, null)
+  await runAfterCurrent()
+}
+
 /** Turns backup on. `includeExisting`: the photos already on the phone too, not only the next ones. */
 export async function enableCameraBackup(includeExisting: boolean): Promise<void> {
-  const journal = await loadJournal()
+  await useCameraBackupStore.getState().load()
   const now = Date.now()
-  await saveJournal({
-    ...journal,
-    floor: includeExisting ? 0 : now,
-    cursor: includeExisting ? 0 : now,
-    recent: {},
-    failures: {},
-    gaveUp: {}
-  })
+  for (const source of sourcesOf(useCameraBackupStore.getState().settings.albums)) await startJournal(source, includeExisting, now)
   await useCameraBackupStore.getState().saveSettings({ enabled: true })
   useCameraBackupStore.setState({ phase: 'idle', error: null, pending: null, gaveUp: 0 })
   await setBackgroundTask(true)
@@ -526,5 +828,8 @@ TaskManager.defineTask(TASK_NAME, async () => {
     return BackgroundTask.BackgroundTaskResult.Success
   } catch {
     return BackgroundTask.BackgroundTaskResult.Failed
+  } finally {
+    // Android may freeze this process as soon as the task returns: what the run did is written down now.
+    await flushDiagnostics()
   }
 })

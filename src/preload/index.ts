@@ -101,7 +101,9 @@ const api = {
       ipcRenderer.invoke('wol:wake', { mac, broadcast })
   },
   remote: {
-    start: (args: { accountHash: string; deviceName: string }) => ipcRenderer.invoke('remote:start', args),
+    start: (args: { deviceName: string }) => ipcRenderer.invoke('remote:start', args),
+    pairingCode: (): Promise<string> => ipcRenderer.invoke('remote:pairingCode'),
+    newPairingCode: (): Promise<string> => ipcRenderer.invoke('remote:newPairingCode'),
     stop: () => ipcRenderer.invoke('remote:stop'),
     status: () => ipcRenderer.invoke('remote:status'),
     pushState: (state: Record<string, unknown>) => ipcRenderer.invoke('remote:pushState', state),

@@ -6,11 +6,14 @@ import {
   encodePattern,
   externalTripStillShort,
   hashSecret,
+  DeviceClock,
   LockMethod,
+  lockoutRemaining,
   randomSalt,
   takeExpectedExternal
 } from '@/services/appLock'
 import { storage } from '@/services/storage'
+import SelfHostNative from '../../modules/selfhost-native'
 
 /** Everything about the lock lives in the secure store, so a restored backup can't bring a lock without its code. */
 const CONFIG_KEY = 'appLock_config'
@@ -30,7 +33,26 @@ function readLockFlag(): boolean {
   }
 }
 
+/** With a lock set, the recents screen must not show the last screen of the app. */
+function applyPrivacy(enabled: boolean): void {
+  try {
+    SelfHostNative?.setPrivacyScreen?.(enabled)
+  } catch {
+    // An older build without the native side: the lock itself still works.
+  }
+}
+
+function readClock(): DeviceClock | null {
+  try {
+    const clock = SelfHostNative?.getClock?.()
+    return clock && typeof clock.elapsed === 'number' ? clock : null
+  } catch {
+    return null
+  }
+}
+
 function writeLockFlag(enabled: boolean): void {
+  applyPrivacy(enabled)
   try {
     if (!enabled) {
       if (flagFile.exists) flagFile.delete()
@@ -78,8 +100,12 @@ interface AppLockState {
   loaded: boolean
   status: LockStatus
   failedAttempts: number
-  /** Epoch ms until which no code is accepted after too many wrong ones. */
+  /** Epoch ms until which no code is accepted after too many wrong ones (what the screen counts down to). */
   lockoutUntil: number
+  /** The same moment on the phone's own clock, which changing the date does not move; 0 when there is none. */
+  lockoutElapsedUntil: number
+  /** Which start of the phone that clock belongs to. */
+  lockoutBoot: number
 
   load: () => Promise<void>
   lock: () => void
@@ -108,9 +134,18 @@ async function saveConfig(config: LockConfig): Promise<void> {
   writeLockFlag(config.method !== 'none')
 }
 
-async function saveAttempts(failedAttempts: number, lockoutUntil: number): Promise<void> {
-  if (failedAttempts === 0) await SecureStore.deleteItemAsync(ATTEMPTS_KEY)
-  else await SecureStore.setItemAsync(ATTEMPTS_KEY, JSON.stringify({ failedAttempts, lockoutUntil }))
+interface Attempts {
+  failedAttempts: number
+  lockoutUntil: number
+  lockoutElapsedUntil: number
+  lockoutBoot: number
+}
+
+const NO_ATTEMPTS: Attempts = { failedAttempts: 0, lockoutUntil: 0, lockoutElapsedUntil: 0, lockoutBoot: -1 }
+
+async function saveAttempts(attempts: Attempts): Promise<void> {
+  if (attempts.failedAttempts === 0) await SecureStore.deleteItemAsync(ATTEMPTS_KEY)
+  else await SecureStore.setItemAsync(ATTEMPTS_KEY, JSON.stringify(attempts))
 }
 
 function lockoutFor(failedAttempts: number): number {
@@ -124,19 +159,34 @@ let backgroundedAt: number | null = null
 let tripExpected = false
 
 export const useAppLockStore = create<AppLockState>((set, get) => {
+  /** How long no code is accepted any more. Asking also refreshes what the screen counts down to. */
+  function lockoutLeft(): number {
+    const { lockoutUntil, lockoutElapsedUntil, lockoutBoot } = get()
+    const left = lockoutRemaining(lockoutUntil, lockoutElapsedUntil, lockoutBoot, Date.now(), readClock())
+    // Someone moved the date forward: the countdown on screen starts again from what is really left.
+    if (left > 0 && Date.now() >= lockoutUntil) set({ lockoutUntil: Date.now() + left })
+    return left
+  }
+
   async function recordFailure(): Promise<UnlockResult> {
     const failedAttempts = get().failedAttempts + 1
     const pause = lockoutFor(failedAttempts)
-    const lockoutUntil = pause ? Date.now() + pause : get().lockoutUntil
-    set({ failedAttempts, lockoutUntil })
-    await saveAttempts(failedAttempts, lockoutUntil)
+    let { lockoutUntil, lockoutElapsedUntil, lockoutBoot } = get()
+    if (pause) {
+      const clock = readClock()
+      lockoutUntil = Date.now() + pause
+      lockoutElapsedUntil = clock ? clock.elapsed + pause : 0
+      lockoutBoot = clock ? clock.boot : -1
+    }
+    set({ failedAttempts, lockoutUntil, lockoutElapsedUntil, lockoutBoot })
+    await saveAttempts({ failedAttempts, lockoutUntil, lockoutElapsedUntil, lockoutBoot })
     return 'wrong'
   }
 
   async function resetFailures(): Promise<void> {
     if (get().failedAttempts === 0) return
-    set({ failedAttempts: 0, lockoutUntil: 0 })
-    await saveAttempts(0, 0)
+    set({ ...NO_ATTEMPTS })
+    await saveAttempts(NO_ATTEMPTS)
   }
 
   return {
@@ -145,15 +195,17 @@ export const useAppLockStore = create<AppLockState>((set, get) => {
     status: readLockFlag() ? 'locked' : 'unlocked',
     failedAttempts: 0,
     lockoutUntil: 0,
+    lockoutElapsedUntil: 0,
+    lockoutBoot: -1,
 
     load: async () => {
       let config = NO_LOCK
-      let attempts = { failedAttempts: 0, lockoutUntil: 0 }
+      let attempts: Attempts = NO_ATTEMPTS
       try {
         const raw = await SecureStore.getItemAsync(CONFIG_KEY)
         if (raw) config = { ...NO_LOCK, ...JSON.parse(raw) }
         const rawAttempts = await SecureStore.getItemAsync(ATTEMPTS_KEY)
-        if (rawAttempts) attempts = JSON.parse(rawAttempts)
+        if (rawAttempts) attempts = { ...NO_ATTEMPTS, ...JSON.parse(rawAttempts) }
       } catch {
         // Unreadable secure store (e.g. restored from another phone): nothing to unlock with.
         config = NO_LOCK
@@ -169,8 +221,8 @@ export const useAppLockStore = create<AppLockState>((set, get) => {
     unlock: () => set({ status: 'unlocked' }),
 
     check: async (secret) => {
-      const { config, lockoutUntil } = get()
-      if (Date.now() < lockoutUntil) return 'locked-out'
+      const { config } = get()
+      if (lockoutLeft() > 0) return 'locked-out'
       if (hashSecret(toSecret(secret), config.salt) !== config.hash) return recordFailure()
       await resetFailures()
       return 'ok'
@@ -188,7 +240,7 @@ export const useAppLockStore = create<AppLockState>((set, get) => {
     },
 
     recover: async (password) => {
-      if (Date.now() < get().lockoutUntil) return 'locked-out'
+      if (lockoutLeft() > 0) return 'locked-out'
       const saved = await Promise.all([
         storage.loadSecret('navidrome', 'password'),
         storage.loadSecret('filebrowser', 'password')
@@ -239,6 +291,8 @@ export function startAppLock(): void {
   started = true
   useAppLockStore.getState().load()
   AppState.addEventListener('change', (next) => {
+    // The setting belongs to the activity, which Android may have rebuilt while the app was away.
+    if (next === 'active') applyPrivacy(useAppLockStore.getState().config.method !== 'none')
     if (next === 'background') {
       backgroundedAt = Date.now()
       tripExpected = takeExpectedExternal()

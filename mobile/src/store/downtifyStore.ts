@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { describeError, logEvent } from '@/services/diagnostics'
 import { DowntifyClient, DowntifySong, QueueItem } from '@/services/downtify'
 import { storage } from '@/services/storage'
 import { ConnectionStatus } from '@/types'
@@ -49,6 +50,7 @@ export const useDowntifyStore = create<DowntifyState>((set, get) => ({
     try {
       await client.testConnection()
       set({ client, status: 'connected' })
+      logEvent('connection', 'Downtify connecté')
       if (remember) {
         await storage.saveConnection('downtify', { url, username: '' })
       }
@@ -56,6 +58,7 @@ export const useDowntifyStore = create<DowntifyState>((set, get) => ({
       await get().refreshQueue()
     } catch (err: any) {
       set({ status: 'error', error: err?.message || 'Connexion impossible' })
+      logEvent('connection', `Downtify : ${describeError(err)}`, 'warn')
       throw err
     }
   },

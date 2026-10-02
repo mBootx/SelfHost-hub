@@ -1,0 +1,38 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!--
+      "SelfHost Hub" in the share sheet of other apps, for files (and text, which becomes a note). It opens the
+      app's own activity; the module reads what was sent (SelfHostNative.consumeSharedContent) and the app
+      asks where to put it. Nothing is sent to the server without that answer.
+    -->
+    <activity-alias
+      android:name="expo.modules.selfhostnative.ShareTarget"
+      android:targetActivity="${applicationId}.MainActivity"
+      android:exported="true"
+      android:label="SelfHost Hub">
+      <intent-filter>
+        <action android:name="android.intent.action.SEND" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="*/*" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.SEND_MULTIPLE" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="*/*" />
+      </intent-filter>
+    </activity-alias>
+
+    <!-- The home-screen widget: the song playing, with previous / play-pause / next (see PlayerWidgetProvider). -->
+    <receiver
+      android:name="expo.modules.selfhostnative.PlayerWidgetProvider"
+      android:exported="false"
+      android:label="SelfHost Hub">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/player_widget_info" />
+    </receiver>
+  </application>
+</manifest>

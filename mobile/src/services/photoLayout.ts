@@ -1,4 +1,5 @@
-import type { Photo } from '@/services/photoVault'
+import { daysInBin, TRASH_DAYS } from '@/services/photoVault'
+import type { Photo, TrashedPhoto } from '@/services/photoVault'
 
 export type SortKey = 'newest' | 'oldest' | 'name-asc' | 'name-desc' | 'largest' | 'smallest'
 
@@ -12,6 +13,62 @@ export const SORT_LABELS: Record<SortKey, string> = {
 }
 
 const collator = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' })
+
+export type KindFilter = 'all' | 'photo' | 'video'
+
+export const KIND_LABELS: Record<KindFilter, string> = { all: 'Tout', photo: 'Photos', video: 'Vidéos' }
+
+export function filterByKind(photos: Photo[], kind: KindFilter): Photo[] {
+  return kind === 'all' ? photos : photos.filter((photo) => photo.kind === kind)
+}
+
+/** Every album. */
+export const ALL_ALBUMS = '*'
+/** The camera's own photos, which sit in no album folder. */
+export const CAMERA_ALBUM = ''
+
+export function filterByAlbum(photos: Photo[], album: string): Photo[] {
+  return album === ALL_ALBUMS ? photos : photos.filter((photo) => (photo.album ?? CAMERA_ALBUM) === album)
+}
+
+export interface AlbumChip {
+  /** ALL_ALBUMS, CAMERA_ALBUM or the album's folder name. */
+  id: string
+  label: string
+  count: number
+}
+
+/**
+ * The albums to offer as filters: all of them, the camera, then the others by name. Nothing is offered while
+ * everything is in one place - a filter that changes nothing is only noise.
+ */
+export function albumChips(photos: Photo[]): AlbumChip[] {
+  const counts = new Map<string, number>()
+  for (const photo of photos) {
+    const id = photo.album ?? CAMERA_ALBUM
+    counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+  if (counts.size < 2) return []
+  const others = [...counts.keys()].filter((id) => id !== CAMERA_ALBUM).sort((a, b) => collator.compare(a, b))
+  const chips: AlbumChip[] = [{ id: ALL_ALBUMS, label: 'Tous les albums', count: photos.length }]
+  if (counts.has(CAMERA_ALBUM)) chips.push({ id: CAMERA_ALBUM, label: 'Appareil photo', count: counts.get(CAMERA_ALBUM)! })
+  for (const id of others) chips.push({ id, label: id, count: counts.get(id)! })
+  return chips
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count > 1 ? many : one}`
+}
+
+/** "12 photos · 3 vidéos", leaving out what there is none of. */
+export function countLabel(photos: Photo[]): string {
+  const videos = photos.filter((photo) => photo.kind === 'video').length
+  const pictures = photos.length - videos
+  const parts: string[] = []
+  if (pictures > 0 || videos === 0) parts.push(plural(pictures, 'photo', 'photos'))
+  if (videos > 0) parts.push(plural(videos, 'vidéo', 'vidéos'))
+  return parts.join(' · ')
+}
 
 /** Year and month of the folder a photo is filed in, as one number; photos outside year/month folders sort last. */
 function monthKey(photo: Photo): number {
@@ -105,4 +162,40 @@ export function formatSize(bytes: number): string {
     unit++
   }
   return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`
+}
+
+export type TrashRow =
+  | { kind: 'header'; key: string; day: string; count: number }
+  | { kind: 'items'; key: string; items: TrashedPhoto[]; firstIndex: number }
+
+/** Rows for the bin's grid: a header per day it was deleted on, then that day's files, `columns` to a row. Items must already be sorted by day. */
+export function buildTrashRows(items: TrashedPhoto[], columns: number): TrashRow[] {
+  const rows: TrashRow[] = []
+  let start = 0
+  while (start < items.length) {
+    const day = items[start].trashedOn
+    let end = start
+    while (end < items.length && items[end].trashedOn === day) end++
+    rows.push({ kind: 'header', key: `h:${day}`, day, count: end - start })
+    for (let i = start; i < end; i += columns) {
+      rows.push({ kind: 'items', key: `d:${day}:${i}`, items: items.slice(i, Math.min(i + columns, end)), firstIndex: i })
+    }
+    start = end
+  }
+  return rows
+}
+
+/** "02/10/2026" from a bin day folder's name. */
+export function formatBinDay(day: string): string {
+  const [year, month, date] = day.split('-')
+  return `${date}/${month}/${year}`
+}
+
+/** How long a day's files stay in the bin: "il reste 28 jours". */
+export function binTimeLeft(day: string, today: Date): string {
+  const age = daysInBin(day, today)
+  if (age === null) return ''
+  const left = TRASH_DAYS - age
+  if (left <= 0) return 'sera supprimé très bientôt'
+  return left === 1 ? 'il reste 1 jour' : `il reste ${left} jours`
 }

@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View, Text, Pressable, FlatList, RefreshControl, StyleSheet, Alert } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Disc3, ListMusic, Users, Plus, FolderOpen, Trash2 } from 'lucide-react-native'
+import { Disc3, ListMusic, Users, Plus, FolderOpen, Trash2, Tags, ChevronRight } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useToastStore } from '@/store/toastStore'
-import { NDPlaylist } from '@/services/navidrome'
+import { NDGenre, NDPlaylist } from '@/services/navidrome'
 import ActionSheet from '@/components/ActionSheet'
 import NavidromeGate from '@/components/navidrome/NavidromeGate'
 import AlbumTile from '@/components/navidrome/AlbumTile'
@@ -14,11 +14,12 @@ import PromptModal from '@/components/PromptModal'
 import { Screen, ScreenHeader, EmptyState } from '@/components/Screen'
 import { colors, layout, radius, spacing } from '@/constants/theme'
 
-type SubTab = 'albums' | 'artists' | 'playlists'
+type SubTab = 'albums' | 'artists' | 'genres' | 'playlists'
 
 const SEGMENTS: [SubTab, string][] = [
   ['albums', 'Albums'],
   ['artists', 'Artistes'],
+  ['genres', 'Genres'],
   ['playlists', 'Playlists']
 ]
 
@@ -38,6 +39,7 @@ function LibraryContent() {
   const router = useRouter()
   const artists = useNavidromeStore((s) => s.artists)
   const recentAlbums = useNavidromeStore((s) => s.recentAlbums)
+  const client = useNavidromeStore((s) => s.client)
   const playlists = useNavidromeStore((s) => s.playlists)
   const loadLibrary = useNavidromeStore((s) => s.loadLibrary)
   const createPlaylist = useNavidromeStore((s) => s.createPlaylist)
@@ -49,6 +51,20 @@ function LibraryContent() {
   const [showNewPlaylist, setShowNewPlaylist] = useState(false)
   const [creatingPlaylist, setCreatingPlaylist] = useState(false)
   const [menuPlaylist, setMenuPlaylist] = useState<NDPlaylist | null>(null)
+  const [genres, setGenres] = useState<NDGenre[] | null>(null)
+  const [genreError, setGenreError] = useState<string | null>(null)
+
+  // The genres are only asked for the first time the tab is opened.
+  useEffect(() => {
+    if (subTab !== 'genres' || genres !== null || !client) return
+    client
+      .getGenres()
+      .then((found) => {
+        setGenres(found)
+        setGenreError(null)
+      })
+      .catch((err) => setGenreError(err instanceof Error ? err.message : 'Impossible de charger les genres'))
+  }, [subTab, genres, client])
 
   function confirmDeletePlaylist(playlist: NDPlaylist): void {
     Alert.alert('Supprimer la playlist', `"${playlist.name}" sera définitivement supprimée.`, [
@@ -71,6 +87,7 @@ function LibraryContent() {
   async function handleRefresh(): Promise<void> {
     setRefreshing(true)
     await loadLibrary()
+    if (client && subTab === 'genres') setGenres(await client.getGenres().catch(() => genres))
     setRefreshing(false)
   }
 
@@ -145,6 +162,41 @@ function LibraryContent() {
           {...LIST_PERF}
           ListEmptyComponent={<EmptyState icon={Users} title="Aucun artiste" hint="Tirez vers le bas pour recharger." />}
           renderItem={({ item }) => <ArtistRow artist={item} />}
+        />
+      ) : subTab === 'genres' ? (
+        <FlatList
+          key="genres"
+          contentContainerStyle={styles.list}
+          data={genres ?? []}
+          keyExtractor={(g) => g.name}
+          refreshControl={refreshControl}
+          showsVerticalScrollIndicator={false}
+          {...LIST_PERF}
+          ListEmptyComponent={
+            genres === null && !genreError ? (
+              <EmptyState icon={Tags} title="Chargement…" />
+            ) : (
+              <EmptyState icon={Tags} title={genreError ? 'Genres indisponibles' : 'Aucun genre'} hint={genreError ?? "Les genres viennent des balises de vos fichiers. Tirez vers le bas pour recharger."} />
+            )
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              style={styles.genreRow}
+              onPress={() => router.push({ pathname: '/genre/[name]', params: { name: item.name } })}
+              accessibilityRole="button"
+              accessibilityLabel={`Genre ${item.name}`}
+            >
+              <View style={styles.genreText}>
+                <Text style={styles.genreName} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={styles.genreMeta}>
+                  {item.albumCount} album{item.albumCount > 1 ? 's' : ''} · {item.songCount} titre{item.songCount > 1 ? 's' : ''}
+                </Text>
+              </View>
+              <ChevronRight size={18} color={colors.textMuted} />
+            </Pressable>
+          )}
         />
       ) : subTab === 'playlists' ? (
         <FlatList
@@ -236,5 +288,9 @@ const styles = StyleSheet.create({
   segmentText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   segmentTextActive: { color: '#000' },
   list: { paddingHorizontal: spacing.lg, paddingBottom: layout.contentBottom },
+  genreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.elevated, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
+  genreText: { flex: 1, minWidth: 0 },
+  genreName: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  genreMeta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   column: { justifyContent: 'space-between' }
 })

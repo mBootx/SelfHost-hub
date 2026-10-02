@@ -13,6 +13,17 @@ export interface FBItem {
   type?: string
 }
 
+/** How long a share link lasts; null is for ever. */
+export type ShareDuration = { value: number; unit: 'minutes' | 'hours' | 'days' } | null
+
+export interface ShareLink {
+  hash: string
+  /** The page that opens the share in a browser. */
+  url: string
+  /** When the link stops working (ms), or null if it never does. */
+  expiresAt: number | null
+}
+
 export interface SourceUsage {
   name: string
   used: number
@@ -69,6 +80,8 @@ export class FileBrowserClient {
   private password: string
   private token: string | null = null
   private source: string | null = null
+  /** Which preview route answered last: 'current' (FileBrowser 1.3 and later) or 'legacy'. */
+  private previewRoute: 'current' | 'legacy' = 'current'
 
   constructor(config: FileBrowserConfig) {
     this.baseUrl = config.url.replace(/\/+$/, '')
@@ -172,16 +185,50 @@ export class FileBrowserClient {
     return `${this.baseUrl}/api/resources/download?${params.toString()}`
   }
 
-  /** Server-generated small preview; callers fall back to rawUrl() if the server can't produce one. */
-  thumbnailUrl(path: string): string {
-    const params = new URLSearchParams({
-      source: this.source || '',
-      path,
-      size: 'small',
-      inline: 'true',
-      auth: this.token || ''
+  /**
+   * Addresses of the server-made thumbnail, best guess first. FileBrowser 1.3 and later serve it at
+   * /api/resources/preview; older ones at /api/preview. The caller tries them in turn, then falls back to
+   * rawUrl(), and tells notePreviewWorked() which one answered so the next ones start with it. They carry the
+   * login because an <img> can't send a header: they are for showing in this window, never for copying.
+   */
+  previewUrls(path: string, size: 'small' | 'large' = 'small'): string[] {
+    const query = new URLSearchParams({ source: this.source || '', path, size, inline: 'true', auth: this.token || '' }).toString()
+    const current = `${this.baseUrl}/api/resources/preview?${query}`
+    const legacy = `${this.baseUrl}/api/preview?${query}`
+    return this.previewRoute === 'current' ? [current, legacy] : [legacy, current]
+  }
+
+  notePreviewWorked(url: string): void {
+    this.previewRoute = url.includes('/api/resources/preview') ? 'current' : 'legacy'
+  }
+
+  /**
+   * Makes a link anyone can open without an account, pointing at this server through the address the app
+   * uses. Unlike rawUrl() it holds nothing of this session, so it is safe to paste anywhere.
+   */
+  async createShare(path: string, duration: ShareDuration = null): Promise<ShareLink> {
+    const body: Record<string, unknown> = { path, source: this.source }
+    if (duration) {
+      body.expires = String(duration.value)
+      body.unit = duration.unit
+    }
+    const res = await window.api.net.request({
+      url: `${this.baseUrl}/api/share`,
+      method: 'POST',
+      headers: { ...this.authHeaders(), 'Content-Type': 'application/json' },
+      data: body
     })
-    return `${this.baseUrl}/api/preview?${params.toString()}`
+    if (!res.ok || typeof res.data?.hash !== 'string') {
+      if (res.status === 403) throw new ApiError("Ce compte n'a pas le droit de partager des fichiers", 403)
+      const message = typeof res.data?.message === 'string' ? res.data.message : res.error
+      throw new ApiError(message || 'Création du lien impossible', res.status || 500)
+    }
+    const expire = Number(res.data.expire) || 0
+    return {
+      hash: res.data.hash,
+      url: `${this.baseUrl}/public/share/${res.data.hash}`,
+      expiresAt: expire > 0 ? expire * 1000 : null
+    }
   }
 
   /** Returns where the file landed, so callers can log it in the downloads history. */
@@ -194,11 +241,18 @@ export class FileBrowserClient {
     }) as Promise<{ ok: boolean; path?: string; canceled?: boolean }>
   }
 
-  async uploadLocalFile(localPath: string, destDir: string, filename: string, uploadId?: string): Promise<void> {
+  /** A file of the same name is left alone (the server answers 409) unless `override` says to replace it. */
+  async uploadLocalFile(
+    localPath: string,
+    destDir: string,
+    filename: string,
+    uploadId?: string,
+    options: { override?: boolean } = {}
+  ): Promise<void> {
     const params = new URLSearchParams({
       path: joinPath(destDir, filename),
       source: this.source || '',
-      override: 'true'
+      override: options.override ? 'true' : 'false'
     })
     const res = await window.api.fb.uploadFile({
       uploadId: uploadId || filename,
@@ -207,7 +261,10 @@ export class FileBrowserClient {
       headers: this.authHeaders(),
       method: 'POST'
     })
-    if (!res.ok) throw new ApiError("Échec de l'upload", res.status || 500)
+    if (!res.ok) {
+      if (res.status === 409) throw new ApiError('Un fichier du même nom existe déjà', 409)
+      throw new ApiError("Échec de l'upload", res.status || 500)
+    }
   }
 
   async pickFiles(): Promise<{ path: string; size: number }[]> {
@@ -236,7 +293,10 @@ export class FileBrowserClient {
         rename: false
       }
     })
-    if (!res.ok) throw new ApiError('Renommage impossible', res.status)
+    if (!res.ok || (Array.isArray(res.data?.failed) && res.data.failed.length > 0)) {
+      const reason = res.data?.failed?.[0]?.message
+      throw new ApiError(typeof reason === 'string' && reason ? reason : 'Renommage impossible', res.status || 500)
+    }
   }
 
   async createFolder(path: string): Promise<void> {

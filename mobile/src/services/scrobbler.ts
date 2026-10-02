@@ -1,4 +1,5 @@
 import { ApiError } from '@/services/navidrome'
+import { describeError, logEvent } from '@/services/diagnostics'
 import { storage } from '@/services/storage'
 import { useNavidromeStore } from '@/store/navidromeStore'
 
@@ -12,6 +13,8 @@ const PENDING_KEY = 'scrobbles.pending'
 const MIN_DURATION_S = 30
 const MAX_REQUIRED_S = 240
 const MAX_PENDING = 500
+/** A play the server fails on without saying why is tried this many times in all, then given up on. */
+const MAX_TRIES = 5
 /** A bigger jump between two progress ticks is a seek, not listening. */
 const MAX_TICK_S = 3
 /** "Recently played" is refreshed this long after a play is recorded, once for a burst of plays. */
@@ -21,6 +24,8 @@ interface PendingPlay {
   id: string
   /** When the song started, in ms: the server records the play at that time. */
   time: number
+  /** How many times the server has failed on it without a reason. */
+  tries?: number
 }
 
 interface CurrentPlay {
@@ -42,10 +47,23 @@ function savePending(): void {
   storage.savePref(PENDING_KEY, pending).catch(() => {})
 }
 
-/** Unreachable server or a proxy in front of a stopped one: worth another try later. */
-function isTransient(err: unknown): boolean {
-  const status = err instanceof ApiError ? err.status : 0
-  return status === 0 || status === 502 || status === 503 || status === 504
+export type Failure = 'outage' | 'rejected' | 'unexplained'
+
+/**
+ * What a failed scrobble says. 'outage': the server can't be reached, or a proxy in front of it is down, or the
+ * login is no good right now: keep every waiting play and try again later. 'rejected': the server answered and
+ * refuses this play for good (the song was deleted since): drop it. 'unexplained': it failed without saying why
+ * (Navidrome puts most errors in a 200 answer, which the client reports as a 500): a few more tries.
+ */
+export function classifyFailure(err: unknown): Failure {
+  if (!(err instanceof ApiError)) return 'outage'
+  const { status, code } = err
+  if (status === 0 || status === 401 || status === 408 || status === 429 || status === 502 || status === 503 || status === 504) return 'outage'
+  if (code !== undefined) {
+    if (code >= 40 && code <= 44) return 'outage'
+    return code === 0 ? 'unexplained' : 'rejected'
+  }
+  return status >= 500 ? 'unexplained' : 'rejected'
 }
 
 /** Sends the given play (if any) after the ones still waiting, oldest first. Runs one at a time. */
@@ -58,16 +76,33 @@ function flush(play?: PendingPlay): void {
     const client = useNavidromeStore.getState().client
     if (!client || pending.length === 0) return
     let sent = 0
-    while (pending.length > 0) {
+    let offline = false
+    const keep: PendingPlay[] = []
+    // Each waiting play gets one try per round, so one the server chokes on never holds the others back.
+    for (const waiting of pending) {
+      if (offline) {
+        keep.push(waiting)
+        continue
+      }
       try {
-        await client.scrobble(pending[0].id, true, pending[0].time)
+        await client.scrobble(waiting.id, true, waiting.time)
         sent++
       } catch (err) {
-        // A song the server rejects (deleted since) is dropped; an outage keeps the rest for later.
-        if (isTransient(err)) break
+        const failure = classifyFailure(err)
+        if (failure === 'outage') {
+          if (!offline) logEvent('scrobbler', `Navidrome injoignable : les écoutes attendent (${describeError(err)})`, 'warn')
+          offline = true
+          keep.push(waiting)
+        } else if (failure === 'unexplained') {
+          const tries = (waiting.tries ?? 0) + 1
+          if (tries < MAX_TRIES) keep.push({ ...waiting, tries })
+          else logEvent('scrobbler', `Écoute abandonnée après ${MAX_TRIES} essais : ${describeError(err)}`, 'warn')
+        } else {
+          logEvent('scrobbler', `Écoute refusée par le serveur et abandonnée : ${describeError(err)}`, 'info')
+        }
       }
-      pending.shift()
     }
+    pending = keep
     savePending()
     if (sent > 0) scheduleRecentRefresh()
   })

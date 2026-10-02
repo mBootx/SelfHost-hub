@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Music, FolderOpen, Download, HardDriveDownload, ChevronRight, Check, Cast, RefreshCw, Sparkles, Server } from 'lucide-react-native'
+import { Music, FolderOpen, Download, HardDriveDownload, ChevronRight, Check, Cast, RefreshCw, Sparkles, Server, Activity } from 'lucide-react-native'
 import { installedVersion } from '@/services/appUpdate'
 import { useIsOwner } from '@/hooks/useIsOwner'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
@@ -375,6 +375,21 @@ export default function SettingsTab() {
           <View style={styles.rowInfo}>
             <Text style={styles.rowTitle}>Nouveautés</Text>
             <Text style={styles.rowMeta}>Ce qui a changé dans les dernières versions.</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          onPress={() => router.push('/diagnostics')}
+          accessibilityRole="button"
+          accessibilityLabel="Diagnostic"
+        >
+          <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
+            <Activity size={20} color={colors.textSecondary} />
+          </View>
+          <View style={styles.rowInfo}>
+            <Text style={styles.rowTitle}>Diagnostic</Text>
+            <Text style={styles.rowMeta}>État des serveurs et de la sauvegarde, journal des erreurs, rapport à copier.</Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
         </Pressable>

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Music, FolderOpen, Download, HardDriveDownload, Cast, RefreshCw } from 'lucide-react'
+import { Music, FolderOpen, Download, HardDriveDownload, Cast, RefreshCw, Copy, KeyRound } from 'lucide-react'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
 import { useOfflineStore } from '@renderer/store/offlineStore'
 import { useRemoteStore } from '@renderer/store/remoteStore'
+import { useToastStore } from '@renderer/store/toastStore'
 import { useWhatsNewStore } from '@renderer/store/whatsNewStore'
 import DowntifyLoginPage from '@renderer/components/Downtify/LoginPage'
 import DowntifySettingsForm from '@renderer/components/Downtify/SettingsForm'
@@ -174,6 +175,8 @@ export default function SettingsModule(): JSX.Element {
   const remoteDeviceCount = useRemoteStore((s) => s.deviceList.length - 1)
   const setRemoteEnabled = useRemoteStore((s) => s.setEnabled)
   const setRemoteDeviceName = useRemoteStore((s) => s.setDeviceName)
+  const remotePairingCode = useRemoteStore((s) => s.pairingCode)
+  const newRemotePairingCode = useRemoteStore((s) => s.newPairingCode)
   const [deviceNameDraft, setDeviceNameDraft] = useState(remoteDeviceName)
   useEffect(() => setDeviceNameDraft(remoteDeviceName), [remoteDeviceName])
 
@@ -238,6 +241,38 @@ export default function SettingsModule(): JSX.Element {
             </div>
             <Switch checked={remoteEnabled} onChange={setRemoteEnabled} label="Contrôle à distance" />
           </div>
+          {remoteEnabled && remotePairingCode && (
+            <div className="flex items-center gap-4 rounded-lg border border-surface-border bg-surface-elevated p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-base text-gray-300">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-gray-400">Code d'appairage : à saisir une fois sur chaque téléphone</p>
+                <p className="select-all font-mono text-lg font-semibold tracking-widest" aria-label="Code d'appairage">
+                  {remotePairingCode}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(remotePairingCode)
+                  useToastStore.getState().show('Code copié')
+                }}
+                className="flex items-center gap-1.5 rounded border border-surface-border px-3 py-1.5 text-xs text-gray-300 hover:bg-surface-hover"
+              >
+                <Copy className="h-3.5 w-3.5" /> Copier
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm("Un nouveau code déconnecte les téléphones déjà appairés : ils devront le saisir de nouveau. Continuer ?")) void newRemotePairingCode()
+                }}
+                className="rounded border border-surface-border px-3 py-1.5 text-xs text-gray-300 hover:bg-surface-hover"
+              >
+                Nouveau code
+              </button>
+            </div>
+          )}
           {remoteEnabled && (
             <div className="flex items-center gap-3 rounded-lg border border-surface-border bg-surface-elevated p-4">
               <label className="text-xs text-gray-400" htmlFor="remote-device-name">

@@ -1,17 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, AppState, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
-import { ArrowUpDown, CloudOff, Images, Search, ShieldAlert } from 'lucide-react-native'
+import { ArrowUpDown, CloudOff, Download, Images, Search, Share2, ShieldAlert, Trash2 } from 'lucide-react-native'
 import ActionSheet, { ActionSheetItem } from '@/components/ActionSheet'
 import LoginScreen from '@/components/filebrowser/LoginScreen'
 import PhotoTile from '@/components/photos/PhotoTile'
-import PhotoViewer from '@/components/photos/PhotoViewer'
-import { SearchField, SelectionBar } from '@/components/photos/PhotosChrome'
+import PhotoViewer, { ViewerAction } from '@/components/photos/PhotoViewer'
+import { BarAction, Chips, SearchField, SelectionBar } from '@/components/photos/PhotosChrome'
 import SyncStrip from '@/components/photos/SyncStrip'
 import { EmptyState, Screen, ScreenHeader } from '@/components/Screen'
-import { buildRows, filterPhotos, GridRow, SORT_LABELS, SortKey, sortPhotos } from '@/services/photoLayout'
+import {
+  albumChips,
+  ALL_ALBUMS,
+  buildRows,
+  countLabel,
+  filterByAlbum,
+  filterByKind,
+  filterPhotos,
+  formatSize,
+  GridRow,
+  KIND_LABELS,
+  KindFilter,
+  monthTitle,
+  SORT_LABELS,
+  SortKey,
+  sortPhotos
+} from '@/services/photoLayout'
 import { runCameraBackup } from '@/services/cameraBackup'
-import { Photo, vaultRootFor } from '@/services/photoVault'
+import { saveToGallery, shareMedia } from '@/services/photoActions'
+import { Photo, TRASH_DAYS, vaultRootFor } from '@/services/photoVault'
 import { useCameraBackupStore } from '@/store/cameraBackupStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 import { PhotoTarget, targetKey, usePhotosStore } from '@/store/photosStore'
@@ -99,17 +116,19 @@ export default function PhotosTab() {
 
   const photos = usePhotosStore((s) => s.photos)
   const status = usePhotosStore((s) => s.status)
-  const videos = usePhotosStore((s) => s.videos)
   const incomplete = usePhotosStore((s) => s.incomplete)
   const error = usePhotosStore((s) => s.error)
   const load = usePhotosStore((s) => s.load)
-  const remove = usePhotosStore((s) => s.remove)
+  const trash = usePhotosStore((s) => s.trash)
   const showToast = useToastStore((s) => s.show)
 
   const [sort, setSort] = useState<SortKey>('newest')
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [sortSheet, setSortSheet] = useState(false)
+  const [kind, setKind] = useState<KindFilter>('all')
+  const [album, setAlbum] = useState(ALL_ALBUMS)
+  const [working, setWorking] = useState<string | null>(null)
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set())
   const [viewerAt, setViewerAt] = useState<number | null>(null)
 
@@ -174,7 +193,15 @@ export default function PhotosTab() {
     load(client, target, { fresh: true }).finally(() => setPulled(false))
   }, [client, target, load])
 
-  const visible = useMemo(() => sortPhotos(filterPhotos(photos, query), sort), [photos, query, sort])
+  const hasVideos = useMemo(() => photos.some((photo) => photo.kind === 'video'), [photos])
+  const albums = useMemo(() => albumChips(photos), [photos])
+  // A filter whose choice has disappeared (the last video was deleted, an album emptied) falls back to "all".
+  const activeKind: KindFilter = hasVideos ? kind : 'all'
+  const activeAlbum = albums.some((chip) => chip.id === album) ? album : ALL_ALBUMS
+  const visible = useMemo(
+    () => sortPhotos(filterPhotos(filterByAlbum(filterByKind(photos, activeKind), activeAlbum), query), sort),
+    [photos, activeKind, activeAlbum, query, sort]
+  )
   const columns = width >= 600 ? 5 : 3
   const size = Math.floor((width - GAP * (columns - 1)) / columns)
   const rows = useMemo(() => buildRows(visible, columns, sort === 'newest' || sort === 'oldest'), [visible, columns, sort])
@@ -212,25 +239,68 @@ export default function PhotosTab() {
   function confirmDelete(paths: string[]): void {
     const one = paths.length === 1
     Alert.alert(
-      one ? 'Supprimer cette photo ?' : `Supprimer ${paths.length} photos ?`,
-      `${one ? 'Elle sera supprimée' : 'Elles seront supprimées'} définitivement du serveur. Les copies restées sur votre téléphone ne sont pas touchées.`,
+      one ? 'Mettre à la corbeille ?' : `Mettre ${paths.length} éléments à la corbeille ?`,
+      `${one ? 'Il sera déplacé' : 'Ils seront déplacés'} dans la corbeille du serveur et supprimé${one ? '' : 's'} définitivement au bout de ${TRASH_DAYS} jours; vous pouvez les récupérer d'ici là. Les copies restées sur votre téléphone ne sont pas touchées.`,
       [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer', style: 'destructive', onPress: () => void deletePaths(paths) }
+        { text: 'Mettre à la corbeille', style: 'destructive', onPress: () => void trashPaths(paths) }
       ]
     )
   }
 
-  async function deletePaths(paths: string[]): Promise<void> {
+  async function trashPaths(paths: string[]): Promise<void> {
     if (!client) return
-    const result = await remove(client, paths)
+    const result = await trash(client, paths)
     setSelection(new Set())
     if (result.failed > 0) {
-      Alert.alert('Suppression incomplète', `${result.failed} sur ${paths.length} n'ont pas pu être supprimées${result.message ? ` : ${result.message}` : ''}.`)
+      Alert.alert('Corbeille incomplète', `${result.failed} sur ${paths.length} n'ont pas pu être déplacés${result.message ? ` : ${result.message}` : ''}.`)
     } else {
-      showToast(plural(result.deleted, 'photo supprimée', 'photos supprimées'))
+      showToast(plural(result.moved, 'élément mis à la corbeille', 'éléments mis à la corbeille'))
     }
   }
+
+  const byPath = useMemo(() => new Map(photos.map((photo) => [photo.path, photo])), [photos])
+
+  async function shareSelection(): Promise<void> {
+    const item = [...selection].map((path) => byPath.get(path)).find(Boolean)
+    if (!client || !item || working) return
+    setWorking('Préparation du partage…')
+    try {
+      if (!(await shareMedia(client, item))) showToast("Le partage n'est pas disponible sur ce téléphone")
+    } catch (err) {
+      Alert.alert('Partage impossible', err instanceof Error && err.message ? err.message : 'Le fichier n’a pas pu être téléchargé.')
+    } finally {
+      setWorking(null)
+    }
+  }
+
+  async function saveSelection(): Promise<void> {
+    const items = [...selection].map((path) => byPath.get(path)).filter((item): item is Photo => item !== undefined)
+    if (!client || items.length === 0 || working) return
+    setWorking('Enregistrement…')
+    try {
+      const report = await saveToGallery(client, items, (done, total) => setWorking(`Enregistrement ${done} sur ${total}…`))
+      setSelection(new Set())
+      if (report.failed > 0) {
+        Alert.alert('Enregistrement incomplet', `${report.failed} sur ${items.length} n'ont pas pu être enregistrés${report.message ? ` : ${report.message}` : ''}.`)
+      } else {
+        showToast(plural(report.saved, 'élément enregistré sur le téléphone', 'éléments enregistrés sur le téléphone'))
+      }
+    } finally {
+      setWorking(null)
+    }
+  }
+
+  const selectionActions: BarAction[] = [
+    ...(selection.size === 1 ? [{ key: 'share', label: 'Partager', icon: Share2, onPress: () => void shareSelection() }] : []),
+    { key: 'save', label: 'Enregistrer sur le téléphone', icon: Download, onPress: () => void saveSelection() },
+    { key: 'trash', label: 'Mettre à la corbeille', icon: Trash2, destructive: true, onPress: () => confirmDelete([...selection]) }
+  ]
+  const viewerActions: ViewerAction<Photo>[] = [
+    { key: 'trash', label: 'Mettre à la corbeille', icon: Trash2, destructive: true, onPress: (photo) => confirmDelete([photo.path]) }
+  ]
+  const describe = (photo: Photo): string =>
+    [monthTitle(photo.year, photo.month), photo.album, formatSize(photo.size)].filter(Boolean).join(' · ')
 
   const renderRow = useCallback(
     ({ item }: { item: GridRow }) => {
@@ -329,7 +399,7 @@ export default function PhotosTab() {
       </View>
     )
   } else if (visible.length === 0) {
-    body = <EmptyState icon={Search} title="Aucun résultat" hint="Aucune photo ne correspond à cette recherche." />
+    body = <EmptyState icon={Search} title="Aucun résultat" hint="Rien ne correspond à ces filtres ou à cette recherche." />
   } else {
     body = (
       <FlatList
@@ -345,14 +415,9 @@ export default function PhotosTab() {
         contentContainerStyle={{ paddingBottom: layout.contentBottom }}
         refreshControl={<RefreshControl refreshing={pulled} onRefresh={pull} tintColor={colors.accent} colors={[colors.accent]} />}
         ListFooterComponent={
-          videos > 0 || incomplete ? (
+          incomplete ? (
             <View style={styles.footer}>
-              {videos > 0 && (
-                <Text style={styles.footerText}>
-                  {plural(videos, 'vidéo sauvegardée n’est pas affichée', 'vidéos sauvegardées ne sont pas affichées')} ici.
-                </Text>
-              )}
-              {incomplete && <Text style={styles.footerText}>Certains dossiers n’ont pas pu être lus : la liste peut être incomplète.</Text>}
+              <Text style={styles.footerText}>Certains dossiers n’ont pas pu être lus : la liste peut être incomplète.</Text>
             </View>
           ) : null
         }
@@ -360,16 +425,17 @@ export default function PhotosTab() {
     )
   }
 
-  const count = plural(photos.length, 'photo', 'photos')
+  const count = countLabel(photos)
+  const filtered = query !== '' || activeKind !== 'all' || activeAlbum !== ALL_ALBUMS
   const subtitle =
     photos.length === 0 && status !== 'ready'
       ? 'Chargement…'
-      : `${query ? `${visible.length} sur ${count}` : count} · ${SORT_LABELS[sort]}${status === 'loading' ? ' · actualisation…' : ''}`
+      : `${filtered ? `${countLabel(visible)} sur ${photos.length}` : count} · ${SORT_LABELS[sort]}${status === 'loading' ? ' · actualisation…' : ''}`
 
   return (
     <Screen>
       {selecting ? (
-        <SelectionBar count={selection.size} onClear={() => setSelection(new Set())} onDelete={() => confirmDelete([...selection])} />
+        <SelectionBar count={selection.size} onClear={() => setSelection(new Set())} actions={selectionActions} />
       ) : (
         <>
           <ScreenHeader
@@ -381,6 +447,9 @@ export default function PhotosTab() {
                 </Pressable>
                 <Pressable onPress={() => setSortSheet(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Trier les photos">
                   <ArrowUpDown size={22} color={colors.text} />
+                </Pressable>
+                <Pressable onPress={() => router.push('/trash')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Corbeille">
+                  <Trash2 size={22} color={colors.text} />
                 </Pressable>
               </View>
             }
@@ -401,7 +470,22 @@ export default function PhotosTab() {
         />
       )}
       <SyncStrip />
+      {hasVideos && !selecting && (
+        <Chips
+          label="Afficher"
+          items={(Object.keys(KIND_LABELS) as KindFilter[]).map((id) => ({ id, label: KIND_LABELS[id] }))}
+          value={activeKind}
+          onChange={(id) => setKind(id as KindFilter)}
+        />
+      )}
+      {albums.length > 0 && !selecting && <Chips label="Albums" items={albums} value={activeAlbum} onChange={setAlbum} />}
       {body}
+      {working && (
+        <View style={styles.working} pointerEvents="auto">
+          <ActivityIndicator color={colors.accent} />
+          <Text style={styles.workingText}>{working}</Text>
+        </View>
+      )}
 
       <ActionSheet
         visible={sortSheet}
@@ -414,7 +498,7 @@ export default function PhotosTab() {
         onClose={() => setSortSheet(false)}
       />
       {viewerAt !== null && (
-        <PhotoViewer photos={visible} client={client} startIndex={viewerAt} onClose={() => setViewerAt(null)} onDelete={(photo) => confirmDelete([photo.path])} />
+        <PhotoViewer photos={visible} client={client} startIndex={viewerAt} onClose={() => setViewerAt(null)} actions={viewerActions} describe={describe} />
       )}
     </Screen>
   )
@@ -431,6 +515,8 @@ const styles = StyleSheet.create({
   monthCount: { color: colors.textMuted, fontSize: 12 },
   footer: { padding: spacing.lg, gap: spacing.xs },
   footerText: { color: colors.textMuted, fontSize: 12, textAlign: 'center' },
+  working: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: spacing.md, backgroundColor: 'rgba(0,0,0,0.55)' },
+  workingText: { color: colors.text, fontSize: 14 },
   button: { backgroundColor: colors.accent, borderRadius: 999, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm + 2 },
   buttonText: { color: '#000000', fontWeight: '800', fontSize: 14 }
 })

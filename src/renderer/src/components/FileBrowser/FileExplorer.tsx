@@ -37,6 +37,9 @@ import FileThumbnail from './FileThumbnail'
 import ContextMenu, { ContextMenuItem } from '@renderer/components/ContextMenu'
 import PromptModal from '@renderer/components/PromptModal'
 import ConfirmModal from '@renderer/components/ConfirmModal'
+import UploadConflictModal from '@renderer/components/FileBrowser/UploadConflictModal'
+import { ConflictChoice, findConflicts, planUploads } from '@renderer/services/uploadNames'
+import { copyShareLink, WEEK } from '@renderer/services/shareLink'
 import ServiceUnavailable from '@renderer/components/ServiceUnavailable'
 
 const DRAG_MIME = 'application/x-fb-item-path'
@@ -55,6 +58,12 @@ function formatSize(bytes: number): string {
 
 function isPdf(item: FBItem): boolean {
   return (item.type || '').includes('pdf') || item.name.toLowerCase().endsWith('.pdf')
+}
+
+interface PickedFile {
+  path: string
+  name: string
+  size: number
 }
 
 function basename(path: string): string {
@@ -168,6 +177,7 @@ export default function FileExplorer(): JSX.Element {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: FBItem | null } | null>(null)
   const [prompt, setPrompt] = useState<{ mode: 'newFolder' } | { mode: 'rename'; item: FBItem } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<FBItem | null>(null)
+  const [conflict, setConflict] = useState<{ files: PickedFile[]; destDir: string; taken: Set<string>; count: number; first: string } | null>(null)
   const uploadTasks = useUploadStore((s) => s.tasks)
   const addUploadTask = useUploadStore((s) => s.addTask)
   const markUploadDone = useUploadStore((s) => s.markDone)
@@ -184,21 +194,54 @@ export default function FileExplorer(): JSX.Element {
   const folderCount = filtered.filter((i) => i.isDir).length
   const fileCount = filtered.length - folderCount
 
-  async function uploadFilesTo(fileList: { path: string; name: string; size: number }[], destDir: string): Promise<void> {
+  /** Sends what the plan says, a few files at a time (more only slow each other down). */
+  async function sendPlanned(fileList: PickedFile[], destDir: string, plan: ReturnType<typeof planUploads>): Promise<void> {
     if (!client) return
-    await Promise.all(
-      fileList.map(async (f) => {
+    const queue = [...plan]
+    const worker = async (): Promise<void> => {
+      for (let next = queue.shift(); next; next = queue.shift()) {
+        const f = fileList[next.index]
         const id = crypto.randomUUID()
-        addUploadTask({ id, filename: f.name, destPath: destDir, sizeBytes: f.size })
+        addUploadTask({ id, filename: next.name, destPath: destDir, sizeBytes: f.size })
         try {
-          await client.uploadLocalFile(f.path, destDir, f.name, id)
+          await client.uploadLocalFile(f.path, destDir, next.name, id, { override: next.override })
           markUploadDone(id)
         } catch (err: any) {
           markUploadError(id, err?.message || 'Échec du téléversement')
         }
-      })
-    )
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker))
     await refresh()
+  }
+
+  /** Nothing already in the folder is replaced without asking: a clash with an existing name is put to the user. */
+  async function uploadFilesTo(fileList: PickedFile[], destDir: string): Promise<void> {
+    if (!client || fileList.length === 0) return
+    let listing: FBItem[] = []
+    try {
+      listing = destDir === currentPath ? items : await client.list(destDir)
+    } catch {
+      // Can't see the folder: the server still refuses to replace a file unless told to.
+    }
+    const taken = new Set([
+      ...listing.map((i) => i.name),
+      ...uploadTasks.filter((t) => t.destPath === destDir && t.status === 'uploading').map((t) => t.filename)
+    ])
+    const names = fileList.map((f) => f.name)
+    const clashes = findConflicts(names, taken)
+    if (clashes.length === 0) {
+      await sendPlanned(fileList, destDir, planUploads(names, taken, 'keep-both'))
+      return
+    }
+    setConflict({ files: fileList, destDir, taken, count: clashes.length, first: names[clashes[0]] })
+  }
+
+  async function resolveConflict(choice: ConflictChoice): Promise<void> {
+    const pending = conflict
+    setConflict(null)
+    if (!pending) return
+    await sendPlanned(pending.files, pending.destDir, planUploads(pending.files.map((f) => f.name), pending.taken, choice))
   }
 
   async function handleDrop(e: React.DragEvent): Promise<void> {
@@ -299,10 +342,13 @@ export default function FileExplorer(): JSX.Element {
     }
   }
 
-  function handleCopyLinkItem(item: FBItem): void {
+  async function handleCopyLinkItem(item: FBItem, duration: Parameters<typeof copyShareLink>[2]): Promise<void> {
     if (!client) return
-    navigator.clipboard.writeText(client.rawUrl(item.path))
-    showToast('Lien copié')
+    try {
+      showToast(await copyShareLink(client, item, duration))
+    } catch (err: any) {
+      showToast(err?.message || 'Impossible de créer le lien')
+    }
   }
 
   function buildContextMenuItems(item: FBItem | null): ContextMenuItem[] {
@@ -327,7 +373,8 @@ export default function FileExplorer(): JSX.Element {
       })
     }
     items.push(
-      { label: 'Copier le lien', icon: Link2, onClick: () => handleCopyLinkItem(item) },
+      { label: 'Copier un lien de partage (7 jours)', icon: Link2, onClick: () => handleCopyLinkItem(item, WEEK) },
+      { label: 'Copier un lien de partage (sans limite)', icon: Link2, onClick: () => handleCopyLinkItem(item, null) },
       { label: 'Renommer', icon: Pencil, onClick: () => setPrompt({ mode: 'rename', item }) },
       { label: 'Supprimer', icon: Trash2, onClick: () => setDeleteTarget(item), danger: true, separatorBefore: true }
     )
@@ -596,6 +643,9 @@ export default function FileExplorer(): JSX.Element {
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => (deleteTarget ? handleDeleteItem(deleteTarget) : undefined)}
       />
+      {conflict && (
+        <UploadConflictModal count={conflict.count} first={conflict.first} onChoose={(choice) => void resolveConflict(choice)} onCancel={() => setConflict(null)} />
+      )}
     </div>
   )
 }

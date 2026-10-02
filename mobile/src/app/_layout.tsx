@@ -5,14 +5,19 @@ import { StatusBar } from 'expo-status-bar'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import PlaybackController from '@/components/PlaybackController'
 import PlayerOverlay from '@/components/PlayerOverlay'
+import ShareSheet from '@/components/ShareSheet'
 import UpdatePrompt from '@/components/UpdatePrompt'
 import WhatsNewModal from '@/components/WhatsNewModal'
 import LockScreen from '@/components/lock/LockScreen'
 import { pruneStaleDownloads } from '@/services/appUpdate'
+import { installErrorLogging } from '@/services/diagnostics'
 import { startPlaybackMemory } from '@/services/playbackMemory'
 import { startScrobbler } from '@/services/scrobbler'
 import { startDownloadWatcher } from '@/services/downloadWatcher'
 import { startCameraBackup } from '@/services/cameraBackup'
+import { startShareIntake } from '@/services/shareIntake'
+import { initSleepTimer } from '@/services/sleepTimer'
+import { startWidget } from '@/services/widget'
 import { useUpdateStore } from '@/store/updateStore'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
 import { startAppLock } from '@/store/appLockStore'
@@ -27,6 +32,9 @@ import { useRemoteStore } from '@/store/remoteStore'
 import { useHistoryStore } from '@/store/historyStore'
 import { colors } from '@/constants/theme'
 import { ConnectionStatus } from '@/types'
+
+// As soon as this file loads, so a crash while the screens are being built is written down too.
+installErrorLogging()
 
 /** A quick hop to another app shouldn't re-check every service on the way back. */
 const RESUME_REVALIDATE_MS = 30_000
@@ -79,6 +87,9 @@ export default function RootLayout() {
     startScrobbler()
     startDownloadWatcher()
     startCameraBackup()
+    startShareIntake()
+    initSleepTimer()
+    startWidget()
     // Keeps a downloaded APK that is still newer than this install, so retrying an update doesn't re-download it.
     pruneStaleDownloads()
     checkForUpdate()
@@ -115,16 +126,21 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="album/[id]" options={detailHeader} />
         <Stack.Screen name="artist/[id]" options={detailHeader} />
+        <Stack.Screen name="genre/[name]" options={detailHeader} />
         <Stack.Screen name="playlist/[id]" options={detailHeader} />
         <Stack.Screen name="downtify/queue" options={detailHeader} />
         <Stack.Screen name="downtify/connect" options={detailHeader} />
         <Stack.Screen name="devices/index" options={detailHeader} />
         <Stack.Screen name="server/index" options={detailHeader} />
+        <Stack.Screen name="shares" options={detailHeader} />
+        <Stack.Screen name="diagnostics" options={detailHeader} />
+        <Stack.Screen name="trash" options={detailHeader} />
         <Stack.Screen name="now-playing" options={{ presentation: 'modal' }} />
       </Stack>
       <PlayerOverlay />
       <UpdatePrompt />
       <WhatsNewModal />
+      <ShareSheet />
       {/* Last, so it opens above every other window. */}
       <LockScreen />
     </GestureHandlerRootView>

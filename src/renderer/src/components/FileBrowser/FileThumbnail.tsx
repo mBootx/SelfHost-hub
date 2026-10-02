@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { FileBrowserClient } from '@renderer/services/filebrowser'
 
 interface Props {
@@ -7,18 +7,25 @@ interface Props {
   className?: string
 }
 
-/** Loads the server's small preview instead of the full-size original, falling back to the original if that fails. */
+/**
+ * Loads the server's small preview instead of the full-size original: at the route this FileBrowser version
+ * uses, then the other one, then the original if the server can't make a thumbnail at all.
+ */
 export default function FileThumbnail({ client, path, className }: Props): JSX.Element {
-  const [useOriginal, setUseOriginal] = useState(false)
+  const candidates = useMemo(() => [...client.previewUrls(path), client.rawUrl(path)], [client, path])
+  const [stage, setStage] = useState(0)
 
   return (
     <img
-      src={useOriginal ? client.rawUrl(path) : client.thumbnailUrl(path)}
+      src={candidates[Math.min(stage, candidates.length - 1)]}
       alt=""
       loading="lazy"
       decoding="async"
       className={className}
-      onError={() => setUseOriginal(true)}
+      onLoad={() => {
+        if (stage < candidates.length - 1) client.notePreviewWorked(candidates[stage])
+      }}
+      onError={() => setStage((current) => Math.min(current + 1, candidates.length - 1))}
     />
   )
 }

@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { md5 } from 'js-md5'
 import { useNavidromeStore, RepeatMode } from './navidromeStore'
 import { seekTo } from '@renderer/services/playbackEngine'
 import { storage } from '@renderer/services/storage'
@@ -44,6 +43,8 @@ interface RemoteState {
   enabled: boolean
   running: boolean
   address: string | null
+  /** The code that pairs a phone with this PC ("ABCDE-FGHJK"), while the hub is running. */
+  pairingCode: string | null
   deviceName: string
   deviceList: RemoteDeviceSummary[]
   devices: Record<string, RemoteDeviceState>
@@ -52,6 +53,8 @@ interface RemoteState {
   init: () => Promise<void>
   setEnabled: (enabled: boolean) => Promise<void>
   setDeviceName: (name: string) => Promise<void>
+  /** Replaces the pairing code: phones paired with the old one are disconnected and must enter the new one. */
+  newPairingCode: () => Promise<void>
   selectDevice: (id: string) => void
   sendCommand: (action: string, payload?: unknown) => void
 }
@@ -78,32 +81,33 @@ function applyCommandLocally(action: string, payload: any): void {
     case 'prev':
       s.prev()
       break
-    case 'seek':
-      seekTo(payload.seconds)
-      useNavidromeStore.setState({ currentTime: payload.seconds })
+    case 'seek': {
+      const seconds = Number(payload?.seconds)
+      if (!Number.isFinite(seconds) || seconds < 0) break
+      seekTo(seconds)
+      useNavidromeStore.setState({ currentTime: seconds })
       break
-    case 'setVolume':
-      s.setVolume(payload.volume)
+    }
+    case 'setVolume': {
+      const volume = Number(payload?.volume)
+      if (!Number.isFinite(volume)) break
+      s.setVolume(Math.min(1, Math.max(0, volume)))
       break
+    }
     case 'toggleShuffle':
       s.toggleShuffle()
       break
     case 'setRepeatMode':
-      s.setRepeatMode(payload.mode)
+      if (payload?.mode === 'off' || payload?.mode === 'all' || payload?.mode === 'one') s.setRepeatMode(payload.mode)
       break
   }
-}
-
-async function computeAccountHash(): Promise<string | null> {
-  const conn = await storage.loadConnection('navidrome')
-  if (!conn) return null
-  return md5(`${conn.url}|${conn.username}`)
 }
 
 export const useRemoteStore = create<RemoteState>((set, get) => ({
   enabled: false,
   running: false,
   address: null,
+  pairingCode: null,
   deviceName: 'PC',
   deviceList: [],
   devices: {},
@@ -179,16 +183,14 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
       })
     }
 
-    const accountHash = get().enabled ? await computeAccountHash() : null
-    if (accountHash) {
-      const res = await window.api.remote.start({ accountHash, deviceName: get().deviceName })
-      if (res.ok) set({ running: true, address: res.address })
+    // The hub only makes sense with a player to drive: off, or logged out of Navidrome, it is stopped.
+    const loggedIn = get().enabled ? await storage.loadConnection('navidrome') : null
+    if (loggedIn) {
+      const res = await window.api.remote.start({ deviceName: get().deviceName })
+      if (res.ok) set({ running: true, address: res.address, pairingCode: await window.api.remote.pairingCode() })
     } else {
-      // Covers both "disabled" and "enabled but logged out of Navidrome": a
-      // hub left running after logout would still pair phones against the
-      // account hash from the previous session.
       await window.api.remote.stop()
-      set({ running: false })
+      set({ running: false, pairingCode: null })
     }
   },
 
@@ -201,10 +203,11 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
   setDeviceName: async (name) => {
     await storage.savePref('remote.deviceName', name)
     set({ deviceName: name })
-    if (get().running) {
-      const accountHash = await computeAccountHash()
-      if (accountHash) await window.api.remote.start({ accountHash, deviceName: name })
-    }
+    if (get().running) await window.api.remote.start({ deviceName: name })
+  },
+
+  newPairingCode: async () => {
+    set({ pairingCode: await window.api.remote.newPairingCode() })
   },
 
   selectDevice: (id) => {

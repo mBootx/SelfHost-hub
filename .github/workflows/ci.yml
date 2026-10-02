@@ -1,0 +1,40 @@
+name: CI
+
+# Type checks for both apps and the Node test suites of the Android app's logic (photo backup, photo vault, ...).
+# Releases are still built by hand: the Android signing key never leaves the owner's PC.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+      # The tests bundle the app's code with the desktop project's esbuild.
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: mobile
+      - run: npx tsc --noEmit -p .
+        working-directory: mobile
+      - run: npm test
+        working-directory: mobile

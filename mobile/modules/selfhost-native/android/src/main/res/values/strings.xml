@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="selfhost_widget_description">Titre en cours, avec précédent, lecture/pause et suivant.</string>
+    <string name="selfhost_widget_previous">Titre précédent</string>
+    <string name="selfhost_widget_toggle">Lecture ou pause</string>
+    <string name="selfhost_widget_next">Titre suivant</string>
+</resources>

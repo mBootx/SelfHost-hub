@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { describeError, logEvent } from '@/services/diagnostics'
 import { AvailableUpdate, downloadUpdate, findUpdate, isDownloaded, openInstaller } from '@/services/appUpdate'
 
 /** GitHub allows 60 anonymous API calls an hour; automatic checks stay far below that. */
@@ -42,12 +43,14 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     try {
       const update = await findUpdate()
       if (update) {
+        logEvent('update', `Version ${update.version} disponible`)
         set({ update, readyToInstall: isDownloaded(update), phase: 'available', error: null, dismissed: false })
         return 'available'
       }
       set({ update: null, readyToInstall: false, phase: 'idle' })
       return 'current'
-    } catch {
+    } catch (err) {
+      logEvent('update', `Recherche de mise à jour impossible : ${describeError(err)}`, 'warn')
       set({ phase: get().update ? 'available' : 'idle' })
       return 'error'
     }
@@ -71,6 +74,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       // Back from the installer without updating (a successful install restarts the app instead).
       set({ phase: 'available' })
     } catch (err: any) {
+      logEvent('update', `Échec de la mise à jour vers ${update.version} : ${describeError(err)}`, 'error')
       set({ phase: 'error', error: err?.message || 'La mise à jour a échoué', readyToInstall: isDownloaded(update) })
     }
   },

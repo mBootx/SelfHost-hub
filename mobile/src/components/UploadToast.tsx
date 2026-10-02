@@ -37,7 +37,7 @@ export default function UploadToast({ bottomOffset = 0 }: { bottomOffset?: numbe
         return (
           <View key={t.id} style={styles.card}>
             <View style={styles.row}>
-              {t.status === 'uploading' && <Upload size={14} color={colors.accent} />}
+              {(t.status === 'uploading' || t.status === 'queued') && <Upload size={14} color={t.status === 'queued' ? colors.textMuted : colors.accent} />}
               {t.status === 'done' && <CircleCheck size={14} color={colors.accent} />}
               {t.status === 'error' && <CircleAlert size={14} color={colors.danger} />}
               <Text style={styles.filename} numberOfLines={1}>
@@ -57,7 +57,7 @@ export default function UploadToast({ bottomOffset = 0 }: { bottomOffset?: numbe
                   <View style={[styles.fill, { width: `${t.status === 'done' ? 100 : percent}%` }]} />
                 </View>
                 <Text style={styles.meta}>
-                  {t.status === 'done' ? 'Terminé' : `${percent}%${t.speedBps > 0 ? ` - ${formatSpeed(t.speedBps)}` : ''}`}
+                  {t.status === 'done' ? 'Terminé' : t.status === 'queued' ? 'En attente' : `${percent}%${t.speedBps > 0 ? ` - ${formatSpeed(t.speedBps)}` : ''}`}
                 </Text>
               </>
             )}

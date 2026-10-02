@@ -4,6 +4,13 @@ import { storage } from '@/services/storage'
 
 export { DEFAULT_BACKUP_FOLDER }
 
+/** A phone album (other than the camera's) that is backed up along with it. */
+export interface BackupAlbum {
+  /** The album's identifier on the phone; its title is only what it is called. */
+  id: string
+  title: string
+}
+
 export interface CameraBackupSettings {
   enabled: boolean
   /**
@@ -14,19 +21,31 @@ export interface CameraBackupSettings {
   wifiOnly: boolean
   /** An older backup folder whose photos haven't been moved into the current layout yet, if there is one. */
   legacyFolder: string | null
+  /** Backs up only while the phone is plugged in: a big backlog should not drain the battery. */
+  chargingOnly: boolean
+  /** Other albums backed up along with the camera's, each into a folder of its own named after it. */
+  albums: BackupAlbum[]
 }
 
 export type CameraBackupPhase =
   | 'idle'
   | 'running'
   | 'waiting-wifi'
+  | 'waiting-charger'
   | 'no-permission'
   | 'no-server'
   | 'error'
 
 const SETTINGS_KEY = 'cameraBackup.settings'
 
-const DEFAULT_SETTINGS: CameraBackupSettings = { enabled: false, folder: DEFAULT_BACKUP_FOLDER, wifiOnly: true, legacyFolder: null }
+const DEFAULT_SETTINGS: CameraBackupSettings = {
+  enabled: false,
+  folder: DEFAULT_BACKUP_FOLDER,
+  wifiOnly: true,
+  legacyFolder: null,
+  chargingOnly: false,
+  albums: []
+}
 
 interface CameraBackupState {
   settings: CameraBackupSettings

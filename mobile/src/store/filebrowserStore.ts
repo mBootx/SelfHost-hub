@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { describeError, logEvent } from '@/services/diagnostics'
 import { FileBrowserClient, FBItem, SourceUsage } from '@/services/filebrowser'
 import { storage } from '@/services/storage'
 import { ConnectionStatus } from '@/types'
@@ -83,6 +84,7 @@ export const useFileBrowserStore = create<FileBrowserState>((set, get) => ({
     try {
       await client.login()
       set({ client, status: 'connected', history: ['/'], historyIndex: 0, canGoBack: false, canGoForward: false })
+      logEvent('connection', `FileBrowser connecté (compte ${client.getAccountName()}, source ${client.getSourceName() ?? '?'})`)
       if (remember) {
         await storage.saveConnection('filebrowser', { url, username })
         await storage.saveSecret('filebrowser', 'password', password)
@@ -90,6 +92,7 @@ export const useFileBrowserStore = create<FileBrowserState>((set, get) => ({
       await Promise.all([loadPath(get, set, '/'), get().refreshUsage()])
     } catch (err: any) {
       set({ status: 'error', error: err?.message || 'Connexion impossible' })
+      logEvent('connection', `FileBrowser : ${describeError(err)}`, 'warn')
       throw err
     }
   },
