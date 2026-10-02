@@ -9,6 +9,23 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '2.5.0',
+    items: [
+      {
+        title: 'Application pour montre Wear OS',
+        text: "Pilotez la lecture du téléphone depuis une montre Wear OS, et celle du PC par l'intermédiaire du téléphone, et parcourez votre bibliothèque. La montre ne se connecte jamais au PC. Réglages → Montre lui envoie l'accès à Navidrome (jamais le mot de passe)."
+      },
+      {
+        title: 'Installer l\'application de la montre',
+        text: "Elle ne s'installe pas depuis le téléphone : téléchargez SelfHost-Hub-Watch-2.5.0.apk sur la page de la version, sur GitHub (étapes dans wear/README.md)."
+      },
+      {
+        title: 'Connexions en http et en ws',
+        text: "Android bloquait les connexions non chiffrées dans l'application installée : serveur en http://, contrôle à distance du PC. Elles sont maintenant autorisées."
+      }
+    ]
+  },
+  {
     version: '2.4.0',
     items: [
       {

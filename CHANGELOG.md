@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.5.0 — 2026-10-02
+
+### Added
+- **Wear OS watch app (new, Android phone + watch).** A remote control and library browser for a Wear OS 3+ watch: what is playing (cover, title, artist, a seek bar), previous / play-pause / next, shuffle, repeat, volume on the crown, a black always-on screen, and the library (artists, albums, playlists, search, also offline) from which you start an album or a song. A chip on the watch face offers the player when a song starts.
+  - **The watch only talks to the phone** (over the Wear OS data layer) and to Navidrome; it never connects to the PC. The phone stays the one link to the PC: when it is paired with the PC (Réglages → Appareils), the watch can also pause, skip and change the volume of the PC's player through it. Something chosen in the watch's library always plays on the phone.
+  - **Réglages → Montre** (phone) sends the watch Navidrome's address and a login token. The password itself never leaves the phone, and nothing about the PC is sent. The same screen says when the watch last got in touch.
+  - The watch app is not installed by the phone: download `SelfHost-Hub-Watch-2.5.0.apk` from this page and install it over Wi-Fi debugging (steps in `wear/README.md`). It needs this version of the phone app.
+
+### Fixed
+- **Plain `http://` and `ws://` connections are no longer blocked in the installed Android app.** Release builds did not allow unencrypted traffic, which Android 9 and later blocks unless the app asks for it: a Navidrome or FileBrowser at an `http://` address, and the remote-control link to the PC on the home network, could not connect. The app now allows it.
+- **The Android updater picks the phone's APK by name**, so a release that also carries the watch's APK can never offer the wrong file.
+
 ## 2.4.0 — 2026-10-02
 
 ### Fixed
