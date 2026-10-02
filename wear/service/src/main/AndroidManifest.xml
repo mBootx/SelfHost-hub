@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+
+        <!--
+          What the phone sends over the Wear OS data layer, addressed to this app: its setup (the "Montre" setting) and
+          the state of the players, pushed whenever something changes. Nothing keeps a connection open in the
+          background: the system starts this service when a message arrives.
+        -->
+        <service
+            android:name="com.selfhosthub.wear.service.WatchListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/selfhost/setup"
+                    android:scheme="wear" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/selfhost/link"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
+        <!-- The previous / play-pause / next buttons of the notification. -->
+        <receiver
+            android:name="com.selfhosthub.wear.service.PlaybackActionReceiver"
+            android:exported="false" />
+    </application>
+</manifest>

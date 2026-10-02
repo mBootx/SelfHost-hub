@@ -3,6 +3,7 @@ import { startActivityAsync } from 'expo-intent-launcher'
 import { Directory, File, Paths } from 'expo-file-system'
 import { fetchWithTimeout } from './http'
 import { expectExternalScreen } from './appLock'
+import { phoneApkName, pickPhoneApk } from './updateAsset'
 
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/mBootx/SelfHost-hub/releases/latest'
 const FLAG_GRANT_READ_URI_PERMISSION = 1
@@ -32,9 +33,7 @@ export function isNewer(candidate: string, current: string): boolean {
   return false
 }
 
-function apkName(version: string): string {
-  return `SelfHost-Hub-${version}.apk`
-}
+const apkName = phoneApkName
 
 /** The versionName of the APK actually installed, not app.json's, so the two can never disagree. */
 export function installedVersion(): string {
@@ -47,7 +46,7 @@ export async function findUpdate(): Promise<AvailableUpdate | null> {
   if (!res.ok) throw new Error(`GitHub a répondu ${res.status}`)
   const release = await res.json()
   const version = String(release.tag_name ?? '').replace(/^v/i, '')
-  const apk = (release.assets ?? []).find((a: { name: string }) => a.name.endsWith('.apk'))
+  const apk = pickPhoneApk<{ name: string; browser_download_url: string; size: number }>(release.assets ?? [], version)
   if (!version || !apk || !isNewer(version, installedVersion())) return null
   return { version, apkUrl: apk.browser_download_url, sizeBytes: apk.size }
 }

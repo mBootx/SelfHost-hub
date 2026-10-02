@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Now playing -->
+    <string name="nothing_playing">Rien en lecture</string>
+    <string name="nothing_playing_hint">Lancez de la musique sur le téléphone ou le PC</string>    <string name="play">Lecture</string>
+    <string name="pause">Pause</string>
+    <string name="next">Suivant</string>
+    <string name="previous">Précédent</string>
+    <string name="shuffle">Aléatoire</string>
+    <string name="repeat_off">Répétition désactivée</string>
+    <string name="repeat_all">Répéter tout</string>
+    <string name="repeat_one">Répéter ce titre</string>
+    <string name="volume">Volume</string>
+    <string name="volume_percent">%1$d %%</string>
+    <string name="seek_bar">Position dans le titre</string>
+    <string name="playing_on">Sur %1$s</string>
+    <string name="following_player">Suit la lecture</string>
+
+    <!-- Connection -->
+    <string name="status_connected">Connectée</string>
+    <string name="status_connecting">Connexion…</string>
+    <string name="status_disconnected">Hors ligne</string>
+    <string name="retry">Réessayer</string>
+    <string name="pc_connected">Connecté</string>
+    <string name="pc_disconnected">Non connecté</string>
+    <string name="pc_off">Contrôle à distance désactivé sur le téléphone</string>
+    <string name="pc_unpaired">Pas encore appairé : voir Contrôle à distance sur le téléphone</string>
+    <string name="pc_error">Connexion impossible</string>
+
+    <!-- Library -->
+    <string name="library">Bibliothèque</string>
+    <string name="artists">Artistes</string>
+    <string name="albums">Albums</string>
+    <string name="playlists">Playlists</string>
+    <string name="search">Rechercher</string>
+    <string name="search_hint">Titre, artiste ou album</string>
+    <string name="search_offline">Résultats de la montre : le serveur ne répond pas</string>
+    <string name="no_results">Aucun résultat</string>
+    <string name="empty_library">Bibliothèque vide pour le moment</string>
+    <string name="empty_library_hint">Elle se remplit à la première synchronisation</string>
+    <string name="load_failed">Impossible de charger : %1$s</string>
+    <string name="play_album">Lire l\'album</string>
+    <string name="play_playlist">Lire la playlist</string>
+    <string name="play_now">Lire maintenant</string>
+    <string name="play_next">Lire ensuite</string>
+    <string name="add_to_queue">Ajouter à la file</string>
+    <string name="sent_to_phone">Envoyé au téléphone</string>
+    <string name="phone_unreachable">Téléphone injoignable</string>
+    <string name="section_artists">Artistes</string>
+    <string name="section_albums">Albums</string>
+    <string name="section_tracks">Titres</string>
+
+    <!-- Devices -->
+    <string name="devices">Lecteur</string>
+    <string name="automatic">Automatique</string>
+    <string name="automatic_hint">Suit ce qui joue</string>
+    <string name="no_devices">Aucun lecteur : le téléphone ne répond pas</string>
+    <string name="this_phone">Ce téléphone</string>
+
+    <!-- Settings -->
+    <string name="settings">Réglages</string>
+    <string name="navidrome">Navidrome</string>
+    <string name="phone">Téléphone</string>
+    <string name="pc">PC (par le téléphone)</string>
+    <string name="not_configured">Non configuré</string>
+    <string name="configured">Configuré</string>
+    <string name="last_sync">Dernière synchro : %1$s</string>
+    <string name="never_synced">Jamais synchronisée</string>
+    <string name="sync_now">Synchroniser</string>
+    <string name="syncing">Synchronisation…</string>
+    <string name="sync_done">Synchronisation terminée</string>
+    <string name="sync_failed">Échec : %1$s</string>
+    <string name="cache">Cache</string>
+    <string name="cache_size">%1$s sur la montre</string>
+    <string name="clear_cache">Vider le cache</string>
+    <string name="clear_cache_confirm">Les pochettes et la bibliothèque seront téléchargées de nouveau.</string>
+    <string name="auto_launch">Proposer le lecteur</string>
+    <string name="auto_launch_hint">Quand la musique démarre</string>
+    <string name="forget_setup">Oublier la configuration</string>
+    <string name="forget_setup_confirm">La montre n\'aura plus accès à la musique tant que le téléphone ne la reconfigure pas.</string>
+    <string name="confirm">Confirmer</string>
+    <string name="cancel">Annuler</string>
+    <string name="version">Version %1$s</string>
+
+    <!-- Setup -->
+    <string name="setup_title">Configurer la montre</string>
+    <string name="setup_step_phone">Sur le téléphone, ouvrez SelfHost Hub, puis Réglages, Montre, et touchez « Envoyer à la montre ».</string>
+    <string name="setup_waiting">En attente du téléphone…</string>
+    <string name="setup_bluetooth">Les deux appareils doivent être connectés en Bluetooth.</string>
+
+    <!-- Time units -->
+    <string name="ago_now">à l\'instant</string>
+    <string name="ago_minutes">il y a %1$d min</string>
+    <string name="ago_hours">il y a %1$d h</string>
+    <string name="ago_days">il y a %1$d j</string>
+    <plurals name="albums_count">
+        <item quantity="one">%d album</item>
+        <item quantity="other">%d albums</item>
+    </plurals>
+    <plurals name="songs_count">
+        <item quantity="one">%d titre</item>
+        <item quantity="other">%d titres</item>
+    </plurals>
+</resources>

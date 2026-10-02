@@ -40,6 +40,25 @@ function api() {
     clearSharedContent() {
       fake.native.clearedShares = (fake.native.clearedShares || 0) + 1
     },
+    // The watches the data layer reports, what a setup message got back, and every message sent (see watchsync.test.js).
+    async getWatches() {
+      if (fake.native.watchError) throw new Error(fake.native.watchError)
+      return fake.native.watches || []
+    },
+    async sendSetupToWatch(json) {
+      fake.native.sentSetups = fake.native.sentSetups || []
+      fake.native.sentSetups.push(json)
+      if (fake.native.sendError) throw new Error(fake.native.sendError)
+      return fake.native.outcomes || []
+    },
+    // The live link: every snapshot pushed (path and JSON), how many watches it reaches, and the listeners told of the watch's messages.
+    async sendToWatch(path, json) {
+      fake.native.pushed = fake.native.pushed || []
+      fake.native.pushed.push({ path, json })
+      if (fake.native.pushError) throw new Error(fake.native.pushError)
+      if (fake.native.pushGate) await fake.native.pushGate
+      return fake.native.pushCount === undefined ? 1 : fake.native.pushCount
+    },
     addListener(event, listener) {
       fake.native.shareListeners.push([event, listener])
       return { remove() {} }

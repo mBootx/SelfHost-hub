@@ -1,0 +1,11 @@
+{
+  "toggle": {"v":1,"targetId":"local","action":"toggle"},
+  "next": {"v":1,"targetId":"hub","action":"next"},
+  "prev": {"v":1,"targetId":"hub","action":"prev"},
+  "toggleShuffle": {"v":1,"targetId":"local","action":"toggleShuffle"},
+  "seek": {"v":1,"targetId":"hub","action":"seek","payload":{"seconds":95.5}},
+  "setVolume": {"v":1,"targetId":"hub","action":"setVolume","payload":{"volume":0.64}},
+  "setRepeatMode": {"v":1,"targetId":"local","action":"setRepeatMode","payload":{"mode":"all"}},
+  "playAlbum": {"v":1,"targetId":"local","action":"playMedia","payload":{"kind":"album","id":"al-77","songId":"s-4412","mode":"now"}},
+  "playSongNext": {"v":1,"targetId":"local","action":"playMedia","payload":{"kind":"song","id":"s-9001","mode":"next"}}
+}

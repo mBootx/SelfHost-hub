@@ -115,7 +115,8 @@ export function applyCommandLocally(action: string, payload: any): void {
   }
 }
 
-function currentStatePayload(): RemoteDeviceState {
+/** What this phone's own player is doing, in the shape the hub (and the watch, through watchLink) reads. */
+export function currentStatePayload(): RemoteDeviceState {
   const state = useNavidromeStore.getState()
   const song = state.queue[state.queueIndex] || null
   return {

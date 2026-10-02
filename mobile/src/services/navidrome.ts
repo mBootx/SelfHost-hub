@@ -138,6 +138,14 @@ export class NavidromeClient {
     }
   }
 
+  /**
+   * What another device needs to sign in without being told the password: the server, the user, a salt and the token
+   * made from them (Subsonic accepts any salt). Used to set up the watch, which never receives the password itself.
+   */
+  sharedLogin(salt: string): { url: string; username: string; salt: string; token: string } {
+    return { url: this.baseUrl, username: this.username, salt, token: md5(this.password + salt) }
+  }
+
   buildMediaUrl(endpoint: 'stream' | 'getCoverArt' | 'download', params: Record<string, string>, salt?: string): string {
     const search = new URLSearchParams({ ...this.authParams(salt), ...params })
     return `${this.baseUrl}/rest/${endpoint}.view?${search.toString()}`
@@ -186,6 +194,13 @@ export class NavidromeClient {
   async getArtist(id: string): Promise<{ artist: NDArtist; albums: NDAlbum[] }> {
     const body = await this.call<any>('getArtist', { id })
     return { artist: body.artist, albums: body.artist?.album || [] }
+  }
+
+  /** One song by id (used to play a song the watch asked for). */
+  async getSong(id: string): Promise<NDSong> {
+    const body = await this.call<any>('getSong', { id })
+    if (!body.song) throw new ApiError('Titre introuvable', 404)
+    return body.song
   }
 
   async getAlbum(id: string): Promise<{ album: NDAlbum; songs: NDSong[] }> {

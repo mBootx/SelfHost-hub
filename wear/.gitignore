@@ -1,0 +1,12 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+*.apk
+*.aab
+# The release key is shared with the phone app and lives next to it (mobile/android, itself untracked).
+keystore.properties
+*.keystore
+*.jks

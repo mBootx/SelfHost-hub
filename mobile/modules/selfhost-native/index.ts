@@ -80,12 +80,48 @@ interface SelfHostNative {
   addListener?: {
     (event: 'onShareReceived' | 'onSleepTimerEnded', listener: () => void): { remove: () => void }
     (event: 'onWidgetAction', listener: (payload: { action: string }) => void): { remove: () => void }
+    (event: 'onWatchMessage', listener: (payload: WatchMessage) => void): { remove: () => void }
   }
   /**
    * The dominant colour of the cover at url ("#rrggbb"), or null if it can't be had. Uses the same cover cache
    * as the Now Bar. Missing from older installed builds.
    */
   getCoverColor?(url: string): Promise<string | null>
+  /** The Wear OS watches connected to this phone, and whether each has the SelfHost Hub watch app. Missing from older installed builds. */
+  getWatches?(): Promise<WatchInfo[]>
+  /**
+   * Hands the watch app its setup (the JSON built by services/watchSync.ts). Resolves with one outcome per watch that has
+   * the app, once each has answered or after ten seconds; an empty list means no watch has the app.
+   */
+  sendSetupToWatch?(setupJson: string): Promise<WatchOutcome[]>
+  /**
+   * Sends one message of the live link (a snapshot of the players, see services/watchLink.ts) to every watch that has the
+   * app. Resolves with how many watches it went to (0: none is connected). Missing from older installed builds.
+   */
+  sendToWatch?(path: string, json: string): Promise<number>
+}
+
+/** What the watch sent over the data layer: a request for the state, or a command (`data` is the JSON text). */
+export interface WatchMessage {
+  nodeId: string
+  path: string
+  data: string
+}
+
+export interface WatchInfo {
+  id: string
+  name: string
+  /** In Bluetooth range right now. */
+  nearby: boolean
+  /** The watch app is installed on it. */
+  hasApp: boolean
+}
+
+export interface WatchOutcome {
+  id: string
+  name: string
+  ok: boolean
+  error: string | null
 }
 
 /** Null when the native side isn't linked (Expo Go, web), so callers can hide the feature instead of crashing. */

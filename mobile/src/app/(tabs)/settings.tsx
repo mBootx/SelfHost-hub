@@ -9,6 +9,7 @@ import AppearanceSection from '@/components/settings/AppearanceSection'
 import PlaybackSection from '@/components/settings/PlaybackSection'
 import CameraBackupSection from '@/components/settings/CameraBackupSection'
 import AppLockSection from '@/components/settings/AppLockSection'
+import WatchSection from '@/components/settings/WatchSection'
 import { useUpdateStore } from '@/store/updateStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
@@ -310,6 +311,7 @@ export default function SettingsTab() {
         <PlaybackSection />
         <CameraBackupSection />
         <AppLockSection />
+        <WatchSection />
 
         <View style={styles.sectionSpacer}>
           <SectionTitle>Stockage</SectionTitle>

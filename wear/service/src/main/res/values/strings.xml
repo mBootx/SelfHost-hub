@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_playing">Lecture en cours</string>
+    <string name="channel_playing_description">La musique qui joue sur le téléphone ou le PC, avec ses commandes</string>
+    <string name="playing_idle">Touchez pour piloter la lecture</string>
+    <string name="action_previous">Précédent</string>
+    <string name="action_play">Lecture</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_next">Suivant</string>
+</resources>

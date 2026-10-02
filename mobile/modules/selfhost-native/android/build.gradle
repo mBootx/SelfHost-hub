@@ -20,4 +20,6 @@ dependencies {
   implementation project(':expo-audio')
   // expo-audio keeps Media3 private; this only lets us compile against ExoPlayer (same version).
   compileOnly "androidx.media3:media3-exoplayer:1.9.0"
+  // The Wear OS data layer: how the phone hands the watch app its setup (WatchBridge.kt).
+  implementation "com.google.android.gms:play-services-wearable:19.0.0"
 }

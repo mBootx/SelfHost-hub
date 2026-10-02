@@ -38,3 +38,24 @@ jobs:
         working-directory: mobile
       - run: npm test
         working-directory: mobile
+
+  # The Wear OS app: its unit tests, which include the watch's link against the phone app's real watch-link code (run
+  # under Node, bundled with the repository's esbuild) and a picture of every screen. No signing key here: the build
+  # falls back to the debug key, which is all a test run needs.
+  wear:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: chmod +x gradlew
+        working-directory: wear
+      - run: ./gradlew testDebugUnitTest :app:assembleDebug
+        working-directory: wear

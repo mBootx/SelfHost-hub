@@ -158,7 +158,59 @@ class SelfHostNativeModule : Module() {
     // module's AndroidManifest.xml). JS is told when one arrives while the app is running, and asks for what
     // the app was started with. The files are copied into the cache at once - the right to read them ends with
     // the intent - which can take a while for a video, so that runs off the main thread.
-    Events("onShareReceived", "onSleepTimerEnded", "onWidgetAction")
+    // The watch: which Wear OS watches are connected and have the app, and the setup sent to them (see WatchBridge).
+    AsyncFunction("getWatches") { promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.resolve(emptyList<Map<String, Any?>>())
+        return@AsyncFunction
+      }
+      try {
+        WatchBridge(context).watches { watches, error ->
+          if (watches == null) promise.reject("E_WATCH", error ?: "Montres illisibles", null)
+          else promise.resolve(watches.map { mapOf("id" to it.id, "name" to it.name, "nearby" to it.nearby, "hasApp" to it.hasApp) })
+        }
+      } catch (e: Exception) {
+        // No Google Play services (or no Wear OS API) on this phone.
+        promise.reject("E_WATCH", e.message ?: "Montres indisponibles", e)
+      }
+    }
+
+    AsyncFunction("sendSetupToWatch") { setupJson: String, promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject("E_WATCH", "Application indisponible", null)
+        return@AsyncFunction
+      }
+      try {
+        WatchBridge(context).sendSetup(setupJson, 10_000) { outcomes, error ->
+          if (error != null) promise.reject("E_WATCH", error, null)
+          else promise.resolve(outcomes.map { mapOf("id" to it.id, "name" to it.name, "ok" to it.ok, "error" to it.error) })
+        }
+      } catch (e: Exception) {
+        promise.reject("E_WATCH", e.message ?: "Envoi impossible", e)
+      }
+    }
+
+    // The live link with the watch (services/watchLink.ts): snapshots of the players go out here to every watch that
+    // has the app (resolves with how many), and what the watch sends comes back as onWatchMessage (see WatchLinkService).
+    AsyncFunction("sendToWatch") { path: String, json: String, promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.resolve(0)
+        return@AsyncFunction
+      }
+      try {
+        WatchBridge(context).push(path, json) { count, error ->
+          if (error != null) promise.reject("E_WATCH", error, null) else promise.resolve(count)
+        }
+      } catch (e: Exception) {
+        // No Google Play services (or no Wear OS API) on this phone.
+        promise.reject("E_WATCH", e.message ?: "Envoi impossible", e)
+      }
+    }
+
+    Events("onShareReceived", "onSleepTimerEnded", "onWidgetAction", "onWatchMessage")
 
     OnCreate { live = this@SelfHostNativeModule }
 
@@ -216,6 +268,11 @@ class SelfHostNativeModule : Module() {
   /** A widget button was pressed: the app's JavaScript does what the same button on the player would. */
   fun widgetAction(name: String) {
     sendEvent("onWidgetAction", mapOf("action" to name))
+  }
+
+  /** The watch sent a request or a command over the data layer: the app's JavaScript answers it. */
+  fun watchMessage(nodeId: String, path: String, data: String) {
+    sendEvent("onWatchMessage", mapOf("nodeId" to nodeId, "path" to path, "data" to data))
   }
 
   private fun isShare(intent: Intent?): Boolean =

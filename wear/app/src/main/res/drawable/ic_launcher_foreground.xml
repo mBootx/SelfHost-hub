@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A green music note on black, inside the safe zone of an adaptive icon (the middle 66 of 108). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF1DB954"
+        android:pathData="M54,30v28.4C52.6,57.5 50.9,57 49,57c-5.5,0 -10,4.5 -10,10s4.5,10 10,10 10,-4.5 10,-10V42h10V30H54z" />
+</vector>

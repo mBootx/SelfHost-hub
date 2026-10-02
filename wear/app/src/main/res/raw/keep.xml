@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Resources that nothing in the code refers to, but that something outside the app looks up by name. The resource
+  shrinker of a release build would delete them as unused:
+  - android_wear_capabilities: read by the Wear OS data layer, and the only way the phone's "Montre" setting can tell
+    that this app is installed on a watch.
+-->
+<resources
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@array/android_wear_capabilities" />

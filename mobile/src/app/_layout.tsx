@@ -17,6 +17,7 @@ import { startDownloadWatcher } from '@/services/downloadWatcher'
 import { startCameraBackup } from '@/services/cameraBackup'
 import { startShareIntake } from '@/services/shareIntake'
 import { initSleepTimer } from '@/services/sleepTimer'
+import { startWatchLink } from '@/services/watchLink'
 import { startWidget } from '@/services/widget'
 import { useUpdateStore } from '@/store/updateStore'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
@@ -90,6 +91,7 @@ export default function RootLayout() {
     startShareIntake()
     initSleepTimer()
     startWidget()
+    startWatchLink()
     // Keeps a downloaded APK that is still newer than this install, so retrying an update doesn't re-download it.
     pruneStaleDownloads()
     checkForUpdate()

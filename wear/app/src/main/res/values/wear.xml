@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- What the phone looks for to know that a watch has this app: see SetupProtocol.CAPABILITY. -->
+    <string-array name="android_wear_capabilities">
+        <item>selfhost_watch</item>
+    </string-array>
+</resources>

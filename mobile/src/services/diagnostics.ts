@@ -6,7 +6,7 @@ import { storage } from '@/services/storage'
  * crashes - kept on the phone for the Diagnostic screen. Nothing leaves the phone unless the user copies
  * the report. It holds no passwords or tokens: messages are written by the app itself, from error texts.
  */
-export type LogScope = 'app' | 'backup' | 'photos' | 'files' | 'music' | 'scrobbler' | 'update' | 'remote' | 'connection' | 'lock'
+export type LogScope = 'app' | 'backup' | 'photos' | 'files' | 'music' | 'scrobbler' | 'update' | 'remote' | 'connection' | 'lock' | 'watch'
 export type LogLevel = 'info' | 'warn' | 'error'
 
 export interface LogEntry {

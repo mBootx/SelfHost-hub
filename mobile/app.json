@@ -59,6 +59,7 @@
       "expo-sharing",
       "expo-asset",
       "./plugins/withHighRefreshRate",
+      "./plugins/withCleartextTraffic",
       "expo-background-task",
       [
         "expo-media-library",

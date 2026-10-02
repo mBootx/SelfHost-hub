@@ -22,6 +22,22 @@
       </intent-filter>
     </activity-alias>
 
+    <!--
+      What the watch sends over the Wear OS data layer (requests for the state of the players, commands): messages
+      addressed to this app, handed to its JavaScript, which is the only thing that talks to the PC (see WatchLinkService).
+    -->
+    <service
+      android:name="expo.modules.selfhostnative.WatchLinkService"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+        <data
+          android:host="*"
+          android:pathPrefix="/selfhost/link"
+          android:scheme="wear" />
+      </intent-filter>
+    </service>
+
     <!-- The home-screen widget: the song playing, with previous / play-pause / next (see PlayerWidgetProvider). -->
     <receiver
       android:name="expo.modules.selfhostnative.PlayerWidgetProvider"

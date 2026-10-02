@@ -55,7 +55,8 @@ export const SCOPE_LABELS: Record<LogScope, string> = {
   update: 'mise à jour',
   remote: 'contrôle à distance',
   connection: 'connexion',
-  lock: 'verrouillage'
+  lock: 'verrouillage',
+  watch: 'montre'
 }
 
 function two(n: number): string {
