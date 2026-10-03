@@ -5,10 +5,16 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
+import java.io.File
+import java.io.IOException
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import org.json.JSONObject
 
 /**
@@ -140,6 +146,56 @@ class WatchBridge(private val context: Context) {
     onResult(ids.size, null)
   }
 
+  /**
+   * Sends the APK of an update to one watch, over a data layer channel: `header` (one line of JSON, built by JS, see
+   * services/watchUpdateProtocol.ts) and then the file. The watch checks the header before keeping a byte, and may close
+   * the channel; the watch tells how it went in messages (see WatchLinkService). Blocking: call it off the main thread.
+   * Throws with a sentence when the watch cannot be reached or goes away.
+   */
+  fun sendUpdate(nodeId: String, file: File, header: String, onProgress: (sent: Long, total: Long) -> Unit) {
+    val channels = Wearable.getChannelClient(context)
+    try {
+      val channel = Tasks.await(channels.openChannel(nodeId, UPDATE_APK_PATH), CHANNEL_TIMEOUT_S, TimeUnit.SECONDS)
+      try {
+        val total = file.length().coerceAtLeast(1)
+        var sent = 0L
+        var reported = -1L
+        Tasks.await(channels.getOutputStream(channel), CHANNEL_TIMEOUT_S, TimeUnit.SECONDS).use { out ->
+          out.write(header.toByteArray(Charsets.UTF_8))
+          out.write('\n'.code)
+          file.inputStream().buffered(CHUNK).use { input ->
+            val buffer = ByteArray(CHUNK)
+            while (true) {
+              val read = input.read(buffer)
+              if (read < 0) break
+              out.write(buffer, 0, read)
+              sent += read
+              // About a hundred reports for the whole file, not one per chunk.
+              if (sent * 100 / total != reported) {
+                reported = sent * 100 / total
+                onProgress(sent, total)
+              }
+            }
+          }
+          out.flush()
+        }
+        onProgress(total, total)
+      } catch (e: Exception) {
+        runCatching { channels.close(channel) }
+        throw e
+      }
+      // The watch closes the channel when it has everything. This closes it if it never does, a while from now.
+      handler.postDelayed({ runCatching { channels.close(channel) } }, CHANNEL_KEPT_MS)
+    } catch (e: ExecutionException) {
+      throw IOException(describe(e.cause as? Exception ?: e), e)
+    } catch (e: TimeoutException) {
+      throw IOException("La montre n'a pas répondu", e)
+    } catch (e: IOException) {
+      // Writing to a channel the watch closed (it refused the update, or went away).
+      throw IOException("La montre a interrompu le transfert", e)
+    }
+  }
+
   private fun describe(error: Exception): String =
     if (error is ApiException && error.statusCode == 17) "Les services Google pour les montres ne sont pas disponibles sur ce téléphone"
     else error.message ?: error.javaClass.simpleName
@@ -155,6 +211,16 @@ class WatchBridge(private val context: Context) {
     const val REQUEST_PATH = "/selfhost/link/request"
     const val COMMAND_PATH = "/selfhost/link/command"
     const val CLOSED_PATH = "/selfhost/link/closed"
+
+    // Updating the watch app; see UpdateProtocol in wear/core. The phone sends the APK on a channel and asks the version;
+    // the watch answers with statuses.
+    const val UPDATE_PREFIX = "/selfhost/update"
+    const val UPDATE_APK_PATH = "/selfhost/update/apk"
+    const val UPDATE_STATUS_PATH = "/selfhost/update/status"
+
+    private const val CHANNEL_TIMEOUT_S = 30L
+    private const val CHANNEL_KEPT_MS = 3 * 60_000L
+    private const val CHUNK = 16 * 1024
 
     private const val TARGETS_KEPT_MS = 20_000L
 

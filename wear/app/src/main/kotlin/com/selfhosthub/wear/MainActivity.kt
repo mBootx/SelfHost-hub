@@ -20,6 +20,7 @@ import com.selfhosthub.wear.ui.WatchApp
 import com.selfhosthub.wear.ui.common.AmbientState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val ambient = MutableStateFlow(AmbientState())
@@ -66,12 +67,20 @@ class MainActivity : ComponentActivity() {
             val state by ambient.collectAsStateWithLifecycle()
             WatchApp(graph, state, BuildConfig.VERSION_NAME)
         }
+        refreshLibrary()
     }
 
     override fun onStart() {
         super.onStart()
         // The screen is up: staying in touch with the phone (asking how the players are) is wanted for as long as it is.
         lease = graph.linkLeases.acquire()
+        refreshLibrary()
+    }
+
+    /** Opening the app reads the library again when it is old, or never came (the hourly job is not the only chance). */
+    private fun refreshLibrary() {
+        val graph = graph
+        graph.scope.launch { graph.refreshLibraryIfDue() }
     }
 
     override fun onStop() {

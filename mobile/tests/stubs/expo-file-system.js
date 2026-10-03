@@ -33,6 +33,23 @@ class File {
   get name() {
     return this.uri.split('/').pop()
   }
+  // The bytes of a file, for the code that hashes or reads one (fake.fileBytes[uri], a Uint8Array).
+  async arrayBuffer() {
+    const bytes = fake.fileBytes && fake.fileBytes[this.uri]
+    if (!bytes) throw new Error('no bytes for ' + this.uri)
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+  }
+  // Renames within the same folder; the instance follows the file, as the real one does.
+  rename(name) {
+    const next = this.uri.slice(0, this.uri.lastIndexOf('/')) + '/' + name
+    for (const table of [fake.files, fake.sizes, fake.fileBytes]) {
+      if (table && this.uri in table) {
+        table[next] = table[this.uri]
+        delete table[this.uri]
+      }
+    }
+    this.uri = next
+  }
   textSync() {
     return fake.files[this.uri]
   }
@@ -44,6 +61,7 @@ class File {
   }
   delete() {
     delete fake.files[this.uri]
+    if (fake.fileBytes) delete fake.fileBytes[this.uri]
   }
   createUploadTask(url, options) {
     return {
@@ -57,8 +75,15 @@ class File {
     return {
       downloadAsync: async () => {
         fake.networkTasks.push({ kind: 'download', url, options, destination: destination.uri })
+        if (fake.downloadError) throw new Error(fake.downloadError)
         fake.files[destination.uri] = ''
-        return destination
+        if (fake.downloadBytes) {
+          fake.fileBytes = fake.fileBytes || {}
+          fake.fileBytes[destination.uri] = fake.downloadBytes
+          fake.sizes[destination.uri] = fake.downloadBytes.length
+          if (options && options.onProgress) options.onProgress({ bytesWritten: fake.downloadBytes.length, totalBytes: fake.downloadBytes.length })
+        }
+        return fake.downloadReturnsNull ? null : destination
       }
     }
   }

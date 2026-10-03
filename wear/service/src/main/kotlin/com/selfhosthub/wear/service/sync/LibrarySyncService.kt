@@ -1,6 +1,7 @@
 package com.selfhosthub.wear.service.sync
 
 import android.content.Context
+import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.CoroutineWorker
 import androidx.work.Constraints
@@ -24,11 +25,31 @@ class LibrarySyncWorker(context: Context, params: WorkerParameters) : CoroutineW
     override suspend fun doWork(): Result {
         val graph = (applicationContext as? WatchGraphProvider)?.graph ?: return Result.failure()
         if (graph.setup.value?.navidrome == null) return Result.success()
-        return when (val outcome = graph.sync.run()) {
+        val outcome = graph.sync.run()
+        Log.i(TAG, "Library sync: $outcome")
+        return when (outcome) {
             is SyncOutcome.Success, SyncOutcome.Busy -> Result.success()
             // Retrying cannot help a refused account or a missing setup; the settings screen says so.
             is SyncOutcome.Failed -> if (outcome.authFailure || outcome.notConfigured) Result.success() else Result.retry()
         }
+    }
+}
+
+private const val TAG = "LibrarySyncWorker"
+
+/**
+ * When opening the app is a reason to read the library again, on top of the hourly job: the library is old (or never
+ * came), and nothing was tried a moment ago. A server that is down, or an account that is refused, is not asked at every
+ * opening, only now and then.
+ */
+object RefreshPolicy {
+    const val STALE_AFTER_MS = 30 * 60_000L
+    const val RETRY_AFTER_MS = 5 * 60_000L
+
+    fun due(lastAttemptAt: Long?, lastSuccessAt: Long?, now: Long): Boolean {
+        val stale = lastSuccessAt == null || now - lastSuccessAt > STALE_AFTER_MS
+        val justTried = lastAttemptAt != null && now - lastAttemptAt < RETRY_AFTER_MS
+        return stale && !justTried
     }
 }
 
@@ -51,12 +72,15 @@ object LibrarySyncService {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(PERIODIC_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
     }
 
-    /** One run as soon as the watch has a connection, for a new setup. */
-    fun syncSoon(context: Context) {
+    /**
+     * One run as soon as the watch has a connection. For a new setup (`replace`) it takes the place of one already
+     * waiting or running; for the refresh when the app is opened it leaves one that is already there alone.
+     */
+    fun syncSoon(context: Context, replace: Boolean = true) {
         val request = OneTimeWorkRequestBuilder<LibrarySyncWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(SOON_WORK, ExistingWorkPolicy.REPLACE, request)
+        WorkManager.getInstance(context).enqueueUniqueWork(SOON_WORK, if (replace) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP, request)
     }
 
     fun cancel(context: Context) {

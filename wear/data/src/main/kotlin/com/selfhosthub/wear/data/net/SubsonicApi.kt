@@ -7,6 +7,7 @@ import com.google.gson.JsonParser
 import com.selfhosthub.wear.core.NavidromeLogin
 import com.selfhosthub.wear.core.PrivateAddress
 import java.io.IOException
+import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
@@ -138,15 +139,11 @@ class SubsonicApi(
     suspend fun coverArt(coverId: String, size: Int): ByteArray {
         val current = login() ?: throw NotConfiguredException()
         val url = urlFor(current, "getCoverArt", "id" to coverId, "size" to size.toString())
-        val response = execute(Request.Builder().url(url).build())
-        response.use { r ->
-            if (!r.isSuccessful) throw SubsonicException("Requête échouée (${r.code})", null, r.code)
-            val type = r.header("Content-Type").orEmpty()
-            val bytes = r.body?.bytes() ?: ByteArray(0)
-            // A cover that does not exist comes back as a 200 with an error document instead of an image.
-            if (!type.startsWith("image/") || bytes.isEmpty()) throw SubsonicException("Pas de pochette", null, r.code)
-            return bytes
-        }
+        val reply = execute(Request.Builder().url(url).build())
+        if (!reply.isSuccessful) throw SubsonicException("Requête échouée (${reply.code})", null, reply.code)
+        // A cover that does not exist comes back as a 200 with an error document instead of an image.
+        if (!reply.contentType.startsWith("image/") || reply.body.isEmpty()) throw SubsonicException("Pas de pochette", null, reply.code)
+        return reply.body
     }
 
     /** The address of a call, for the tests and for anything that needs to load it itself. */
@@ -160,26 +157,29 @@ class SubsonicApi(
 
     private suspend fun call(method: String, vararg params: Pair<String, String>): JsonObject {
         val current = login() ?: throw NotConfiguredException()
-        val response = execute(Request.Builder().url(urlFor(current, method, *params)).build())
-        response.use { r ->
-            if (!r.isSuccessful) throw SubsonicException("Requête échouée (${r.code})", null, r.code)
-            val text = r.body?.string().orEmpty()
-            val root = try {
-                JsonParser.parseString(text)
-            } catch (_: Exception) {
-                throw SubsonicException("Réponse Navidrome invalide", null, r.code)
-            }
-            val body = root.takeIf { it.isJsonObject }?.asJsonObject?.objectOrNull("subsonic-response")
-                ?: throw SubsonicException("Réponse Navidrome invalide", null, r.code)
-            if (body.string("status") == "failed") {
-                val error = body.objectOrNull("error")
-                throw SubsonicException(error?.string("message") ?: "Erreur Navidrome", error?.int("code"), r.code)
-            }
-            return body
+        val reply = execute(Request.Builder().url(urlFor(current, method, *params)).build())
+        if (!reply.isSuccessful) throw SubsonicException("Requête échouée (${reply.code})", null, reply.code)
+        val root = try {
+            JsonParser.parseString(reply.text)
+        } catch (_: Exception) {
+            throw SubsonicException("Réponse Navidrome invalide", null, reply.code)
         }
+        val body = root.takeIf { it.isJsonObject }?.asJsonObject?.objectOrNull("subsonic-response")
+            ?: throw SubsonicException("Réponse Navidrome invalide", null, reply.code)
+        if (body.string("status") == "failed") {
+            val error = body.objectOrNull("error")
+            throw SubsonicException(error?.string("message") ?: "Erreur Navidrome", error?.int("code"), reply.code)
+        }
+        return body
     }
 
-    private suspend fun execute(request: Request): Response = suspendCancellableCoroutine { continuation ->
+    /** What the server answered, read in full: nothing is left holding a connection that someone has to close. */
+    private class Reply(val code: Int, val contentType: String, val body: ByteArray) {
+        val isSuccessful: Boolean get() = code in 200..299
+        val text: String get() = String(body, Charsets.UTF_8)
+    }
+
+    private suspend fun execute(request: Request): Reply = suspendCancellableCoroutine { continuation ->
         val call: Call = (if (PrivateAddress.isPrivate(request.url.host)) homeClient else client).newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
@@ -188,11 +188,17 @@ class SubsonicApi(
             }
 
             override fun onResponse(call: Call, response: Response) {
-                if (continuation.isActive) {
-                    continuation.resumeWith(Result.success(response))
-                } else {
-                    response.close()
+                // Read here, on OkHttp's own thread, and closed whatever happens next. A response handed across to a
+                // coroutine that was cancelled in the meantime would never be closed (cancelling the call does not
+                // release it): its connection stays held until a garbage collection notices, and OkHttp reports it as
+                // "A connection to ... was leaked". A screen of covers being left while they load can do that.
+                val reply = try {
+                    response.use { Reply(it.code, it.header("Content-Type").orEmpty(), it.body?.bytes() ?: ByteArray(0)) }
+                } catch (e: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(e)
+                    return
                 }
+                if (continuation.isActive) continuation.resume(reply)
             }
         })
     }

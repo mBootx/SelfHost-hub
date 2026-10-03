@@ -2,6 +2,8 @@ package com.selfhosthub.wear.service
 
 import android.os.Build
 import android.util.Log
+import com.google.android.gms.tasks.Tasks
+import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
@@ -10,6 +12,10 @@ import com.selfhosthub.wear.core.LinkProtocol
 import com.selfhosthub.wear.core.SetupCodec
 import com.selfhosthub.wear.core.SetupFormatException
 import com.selfhosthub.wear.core.SetupProtocol
+import com.selfhosthub.wear.core.UpdateProtocol
+import com.selfhosthub.wear.core.UpdateState
+import com.selfhosthub.wear.core.UpdateStatus
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -26,7 +32,27 @@ class WatchListenerService : WearableListenerService() {
     override fun onMessageReceived(event: MessageEvent) {
         when {
             event.path == SetupProtocol.SETUP_PATH -> onSetup(event)
+            event.path == UpdateProtocol.ASK_PATH -> runBlocking { watchGraph().updates.announceVersion() }
             event.path.startsWith(LinkProtocol.PREFIX) -> watchGraph().link.onMessage(event.path, event.data)
+        }
+    }
+
+    /**
+     * The phone opened a channel to send the APK of an update (see UpdateProtocol). Everything happens here, on the data
+     * layer's worker thread, which keeps the process alive until the file is received and handed to the installer.
+     */
+    override fun onChannelOpened(channel: ChannelClient.Channel) {
+        if (channel.path != UpdateProtocol.APK_PATH) return
+        val channels = Wearable.getChannelClient(this)
+        val updates = watchGraph().updates
+        try {
+            val input = Tasks.await(channels.getInputStream(channel), 30, TimeUnit.SECONDS)
+            input.use { updates.receive(it) }
+        } catch (e: Exception) {
+            Log.w(TAG, "The update could not be received", e)
+            runBlocking { updates.report(UpdateStatus(UpdateState.FAILED, message = "La montre n’a pas pu recevoir le fichier : ${e.message ?: e.javaClass.simpleName}")) }
+        } finally {
+            channels.close(channel)
         }
     }
 

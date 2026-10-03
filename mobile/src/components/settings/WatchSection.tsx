@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Alert, AppState, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Watch } from 'lucide-react-native'
 import { SectionTitle } from '@/components/Screen'
 import { ago } from '@/services/diagnosticsReport'
+import { RELEASES_PAGE_URL } from '@/services/updateAsset'
 import { useWatchLinkStatus } from '@/services/watchLink'
 import { listWatches, sendSetupToWatches, watchSupported } from '@/services/watchSync'
+import { askWatchVersion, checkWatchUpdate, dismissWatchUpdate, updateSupported, updateWatch } from '@/services/watchUpdate'
+import { describePhase, describeWatchApp } from '@/services/watchUpdateProtocol'
+import { BUSY_PHASES, useWatchUpdate } from '@/store/watchUpdateStore'
 import type { WatchInfo } from '../../../modules/selfhost-native'
 import { colors, radius, spacing } from '@/constants/theme'
 
@@ -29,12 +33,17 @@ export function describeLink(lastContactAt: number | null, error: string | null,
   return `Dernier message de la montre : ${ago(lastContactAt, now)}`
 }
 
-/** Réglages → Montre: gives a Wear OS watch the app's setup, and says whether it has been in touch. */
+/** Réglages → Montre: gives a Wear OS watch the app's setup, updates its app, and says whether it has been in touch. */
 export default function WatchSection() {
   const [listing, setListing] = useState<Listing>({ state: 'loading' })
   const [sending, setSending] = useState(false)
   const lastContactAt = useWatchLinkStatus((s) => s.lastContactAt)
   const linkError = useWatchLinkStatus((s) => s.error)
+  const watchApp = useWatchUpdate((s) => s.watch)
+  const latest = useWatchUpdate((s) => s.latest)
+  const phase = useWatchUpdate((s) => s.phase)
+  const progress = useWatchUpdate((s) => s.progress)
+  const updateMessage = useWatchUpdate((s) => s.message)
 
   const refresh = useCallback(async () => {
     if (!watchSupported()) {
@@ -42,7 +51,13 @@ export default function WatchSection() {
       return
     }
     try {
-      setListing({ state: 'ready', watches: await listWatches() })
+      const watches = await listWatches()
+      setListing({ state: 'ready', watches })
+      // The watch tells which version of its app it has (the answer lands in the store), and the latest release is looked up.
+      if (updateSupported() && watches.some((w) => w.hasApp)) {
+        void askWatchVersion()
+        void checkWatchUpdate()
+      }
     } catch (err) {
       setListing({ state: 'error', message: err instanceof Error ? err.message : 'Montres illisibles' })
     }
@@ -86,9 +101,20 @@ export default function WatchSection() {
     }
   }
 
+  function reinstall(): void {
+    Alert.alert('Réinstaller la même version ?', "L'application de la montre est renvoyée telle quelle et réinstallée : utile si elle se comporte mal. La montre demandera peut-être une confirmation.", [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Réinstaller', onPress: () => void updateWatch({ reinstall: true }) }
+    ])
+  }
+
   const summary = listing.state === 'ready' ? describeWatches(listing.watches) : null
   const text = listing.state === 'loading' ? 'Recherche des montres…' : listing.state === 'error' ? listing.message : summary!.text
   const ready = !!summary?.ready
+  const app = describeWatchApp(watchApp, latest)
+  const busy = BUSY_PHASES.includes(phase)
+  const phaseText = describePhase(phase, progress)
+  const canUpdateApp = ready && updateSupported()
 
   return (
     <>
@@ -120,6 +146,54 @@ export default function WatchSection() {
         >
           {sending ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonText}>Envoyer à la montre</Text>}
         </Pressable>
+
+        {ready && updateSupported() ? (
+          <View style={styles.updateBlock}>
+            <Text style={styles.subtitle}>Application de la montre</Text>
+            <Text style={styles.meta}>{app.text}</Text>
+            {phaseText ? (
+              <View style={styles.progressRow}>
+                <ActivityIndicator size="small" color={colors.textSecondary} />
+                <Text style={styles.meta}>{phaseText}</Text>
+              </View>
+            ) : null}
+            {updateMessage ? (
+              <Text style={[styles.meta, phase === 'error' && styles.error]} selectable>
+                {updateMessage}
+              </Text>
+            ) : null}
+            {app.canUpdate && !busy ? (
+              <Pressable
+                style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+                onPress={() => void updateWatch()}
+                accessibilityRole="button"
+                accessibilityLabel="Mettre à jour la montre"
+              >
+                <Text style={styles.buttonText}>Mettre à jour la montre</Text>
+              </Pressable>
+            ) : null}
+            {app.tooOld ? (
+              <Pressable
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+                onPress={() => void Linking.openURL(RELEASES_PAGE_URL)}
+                accessibilityRole="link"
+                accessibilityLabel="Voir la dernière version"
+              >
+                <Text style={styles.secondaryText}>Voir la dernière version</Text>
+              </Pressable>
+            ) : null}
+            {app.canReinstall && !busy && canUpdateApp ? (
+              <Pressable onPress={reinstall} accessibilityRole="button" accessibilityLabel="Réinstaller la même version" hitSlop={8}>
+                <Text style={styles.linkText}>Réinstaller cette version (dépannage)</Text>
+              </Pressable>
+            ) : null}
+            {phase === 'error' || phase === 'done' || phase === 'installing' || phase === 'confirm' ? (
+              <Pressable onPress={dismissWatchUpdate} accessibilityRole="button" accessibilityLabel="Fermer ce message" hitSlop={8}>
+                <Text style={styles.linkText}>Fermer</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </>
   )
@@ -137,5 +211,12 @@ const styles = StyleSheet.create({
   button: { backgroundColor: colors.accent, borderRadius: radius.full, paddingVertical: spacing.md, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   buttonOff: { opacity: 0.4 },
   buttonText: { color: '#000000', fontWeight: '800', fontSize: 14 },
-  pressed: { opacity: 0.8 }
+  pressed: { opacity: 0.8 },
+  updateBlock: { gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.md },
+  subtitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  error: { color: colors.danger },
+  secondaryButton: { borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.md, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
+  secondaryText: { color: colors.text, fontWeight: '600', fontSize: 14 },
+  linkText: { color: colors.textSecondary, fontSize: 12, textDecorationLine: 'underline' }
 })

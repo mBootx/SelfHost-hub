@@ -10,6 +10,7 @@
 //   {"local":{"action":"toggle","payload":{...}}}                        a command applied to the phone's own player
 //   {"forwarded":{"target":"hub","action":"next","payload":{...}}}       a command sent on to a player through the hub link
 //   {"queued":["playQueue",["al-77-1","al-77-2"],1]}                     something the phone started playing from its Navidrome
+//   {"watchApp":{"watch":{"nodeId":"watch-1","version":"2.5.2","code":20502},"phase":"idle"}}   what the phone knows of the watch app's version and of an update
 // stdin, one JSON object per line:
 //   {"cmd":"message","path":"/selfhost/link/request","data":"{\"v\":1}"}  a message from the watch
 //   {"cmd":"player","state":{...}}                                       sets fields of the phone's player store
@@ -39,6 +40,7 @@ async function main() {
       "export * from '@/services/watchLink'",
       "export { useNavidromeStore } from '@/store/navidromeStore'",
       "export { useRemoteStore } from '@/store/remoteStore'",
+      "export { useWatchUpdate } from '@/store/watchUpdateStore'",
       ''
     ].join(String.fromCharCode(10))
   )
@@ -75,6 +77,9 @@ async function main() {
     playNext: (song) => emit({ queued: ['playNext', song.id] }),
     addToQueue: (list) => emit({ queued: ['addToQueue', list.map((s) => s.id)] })
   })
+
+  // What the phone learns about the watch app (its version, how an update goes) is reported as it changes.
+  link.useWatchUpdate.subscribe((state) => emit({ watchApp: { watch: state.watch, phase: state.phase } }))
 
   link.startWatchLink()
   emit({ ready: true })

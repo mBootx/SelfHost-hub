@@ -28,6 +28,28 @@ test('a release with only the watch APK offers the phone nothing', () => {
   assert.strictEqual(m.pickPhoneApk([], '2.5.0'), undefined)
 })
 
+test('the watch APK is the one named for the version, and nothing else is taken for it', () => {
+  const assets = names(['SelfHost-Hub-2.5.2.apk', 'SelfHost-Hub-Watch-2.5.1.apk', 'SelfHost-Hub-Watch-2.5.2.apk', 'latest.yml'])
+  assert.strictEqual(m.pickWatchApk(assets, '2.5.2').name, 'SelfHost-Hub-Watch-2.5.2.apk')
+  assert.strictEqual(m.pickWatchApk(names(['SelfHost-Hub-2.5.2.apk', 'other.apk']), '2.5.2'), undefined, 'a phone APK is never the one of the watch')
+  assert.strictEqual(m.pickWatchApk(names(['SelfHost-Hub-Watch-2.5.1.apk']), '2.5.2'), undefined, 'nor another version')
+  assert.strictEqual(m.pickWatchApk([], '2.5.2'), undefined)
+})
+
+test('the name a release gives the watch APK', () => {
+  assert.strictEqual(m.watchApkName('2.5.2'), 'SelfHost-Hub-Watch-2.5.2.apk')
+})
+
+test('versions are compared part by part, and a leading v does not matter', () => {
+  assert.strictEqual(m.isNewer('2.5.2', '2.5.0'), true)
+  assert.strictEqual(m.isNewer('v2.5.2', '2.5.1'), true)
+  assert.strictEqual(m.isNewer('2.10.0', '2.9.9'), true, 'ten is more than nine')
+  assert.strictEqual(m.isNewer('2.5.0', '2.5.0'), false)
+  assert.strictEqual(m.isNewer('2.4.9', '2.5.0'), false)
+  assert.strictEqual(m.isNewer('3', '2.9.9'), true)
+  assert.strictEqual(m.isNewer('2.5', '2.5.0'), false)
+})
+
 test('the name a release gives the phone APK', () => {
   assert.strictEqual(m.phoneApkName('2.5.0'), 'SelfHost-Hub-2.5.0.apk')
 })

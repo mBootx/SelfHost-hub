@@ -18,6 +18,8 @@ import kotlinx.coroutines.launch
 object Notifications {
     const val CHANNEL_PLAYING = "playing"
     const val ID_PLAYING = 42
+    const val CHANNEL_UPDATE = "update"
+    const val ID_UPDATE = 43
 
     /** A chip nobody refreshes goes away by itself: at the end of the song at the latest, or after this long when paused. */
     private const val PAUSED_LIFETIME_MS = 10 * 60_000L
@@ -31,6 +33,32 @@ object Notifications {
                 setShowBadge(false)
             }
         )
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_UPDATE, context.getString(R.string.channel_update), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = context.getString(R.string.channel_update_description)
+                setShowBadge(false)
+            }
+        )
+    }
+
+    /**
+     * Android wants the person wearing the watch to confirm the update the phone sent: this is how it gets to them.
+     * `confirm` is the screen Android's installer handed over for that.
+     */
+    fun updateConfirm(context: Context, confirm: Intent) {
+        ensureChannels(context)
+        confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val tap = PendingIntent.getActivity(context, ID_UPDATE, confirm, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val notification = NotificationCompat.Builder(context, CHANNEL_UPDATE)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(context.getString(R.string.update_confirm_title))
+            .setContentText(context.getString(R.string.update_confirm_text))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(tap)
+            .build()
+        notifyIfAllowed(context, ID_UPDATE, notification)
     }
 
     /** The app's own screen, from a tap on a notification. */

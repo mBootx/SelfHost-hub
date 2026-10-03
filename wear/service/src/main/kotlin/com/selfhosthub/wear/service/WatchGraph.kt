@@ -16,7 +16,11 @@ import com.selfhosthub.wear.service.link.LinkLeases
 import com.selfhosthub.wear.service.link.PhoneLink
 import com.selfhosthub.wear.service.link.WearLinkTransport
 import com.selfhosthub.wear.service.sync.LibrarySyncService
+import com.selfhosthub.wear.service.sync.RefreshPolicy
 import com.selfhosthub.wear.service.sync.SyncCoordinator
+import com.selfhosthub.wear.service.update.AndroidUpdateHost
+import com.selfhosthub.wear.service.update.UpdateHost
+import com.selfhosthub.wear.service.update.WatchUpdates
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,8 +55,14 @@ interface WatchGraph {
     /** Keeps in touch with the phone for whoever needs it (the screen while it is shown). */
     val linkLeases: LinkLeases
 
+    /** Updating this app from the phone: the APK it sends, and how it goes. */
+    val updates: WatchUpdates
+
     /** Takes in what the phone sent. Another account replaces the old one, with everything that was stored for it. */
     suspend fun applySetup(incoming: WatchSetup)
+
+    /** Reads the library again if it is old, or never came, and nothing was tried a moment ago (see RefreshPolicy). */
+    suspend fun refreshLibraryIfDue()
 
     /** Forgets the library and the covers kept on the watch, but not the setup. */
     suspend fun clearCache()
@@ -97,8 +107,12 @@ class DefaultWatchGraph(appContext: Context) : WatchGraph {
 
     private val notifier: NowPlayingNotifier by lazy { NowPlayingNotifier(context, prefs) }
 
+    private val updateHost: UpdateHost by lazy { AndroidUpdateHost(context) }
+
+    override val updates: WatchUpdates by lazy { WatchUpdates(updateHost, WearLinkTransport(context)) }
+
     override val link: PhoneLink by lazy {
-        PhoneLink(WearLinkTransport(context), scope, prefs).also { phone ->
+        PhoneLink(WearLinkTransport(context), scope, prefs, appVersion = { runCatching { updateHost.installed }.getOrNull() }).also { phone ->
             // What the phone pushes puts up (or takes down) the chip of the song playing, with or without a screen.
             scope.launch { phone.state.collect { notifier.update(it) } }
         }
@@ -117,6 +131,14 @@ class DefaultWatchGraph(appContext: Context) : WatchGraph {
         setupState.value = incoming
         LibrarySyncService.schedule(context)
         LibrarySyncService.syncSoon(context)
+    }
+
+    override suspend fun refreshLibraryIfDue() = withContext(Dispatchers.IO) {
+        if (setupState.value?.navidrome == null) return@withContext
+        val log = database.syncLog()
+        if (RefreshPolicy.due(log.latest()?.lastSyncTime, log.latestSuccess()?.lastSyncTime, System.currentTimeMillis())) {
+            LibrarySyncService.syncSoon(context, replace = false)
+        }
     }
 
     override suspend fun clearCache() = withContext(Dispatchers.IO) {

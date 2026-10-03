@@ -1,5 +1,6 @@
 package com.selfhosthub.wear.service.link
 
+import com.selfhosthub.wear.core.AppVersion
 import com.selfhosthub.wear.core.DeviceState
 import com.selfhosthub.wear.core.LinkCodec
 import com.selfhosthub.wear.core.LinkMessage
@@ -45,7 +46,9 @@ class PhoneLink(
     private val prefs: WatchPrefs,
     private val clock: () -> Long = System::currentTimeMillis,
     private val answerTimeoutMs: Long = 6_000,
-    private val refreshEveryMs: Long = 30_000
+    private val refreshEveryMs: Long = 30_000,
+    /** Which version of the app this is, told to the phone in every request: that is how it knows to offer an update. */
+    private val appVersion: () -> AppVersion? = { null }
 ) : LinkSwitch {
     private val _state = MutableStateFlow(LinkUiState(manualTargetId = prefs.manualTargetId))
     val state: StateFlow<LinkUiState> = _state.asStateFlow()
@@ -175,7 +178,7 @@ class PhoneLink(
             lose(LinkStatus.NO_PHONE)
             return
         }
-        val request = LinkCodec.request().toByteArray(Charsets.UTF_8)
+        val request = LinkCodec.request(appVersion()).toByteArray(Charsets.UTF_8)
         if (phones.count { trySend(it, LinkProtocol.REQUEST_PATH, request) } == 0) {
             lose(LinkStatus.NO_PHONE)
             return

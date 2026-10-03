@@ -5,6 +5,8 @@ import { parsePlayMedia, runPlayMedia } from '@/services/playMedia'
 import type { RemoteDeviceState, RemoteDeviceSummary } from '@/services/remoteControl'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { applyCommandLocally, currentStatePayload, LOCAL_DEVICE_ID, RemoteStatus, useRemoteStore } from '@/store/remoteStore'
+import { useWatchUpdate } from '@/store/watchUpdateStore'
+import { parseUpdateStatus, parseWatchRequest, UPDATE_PATHS } from '@/services/watchUpdateProtocol'
 
 /**
  * The live link with a Wear OS watch. The watch never talks to the PC: this phone is the only thing that does (the
@@ -17,6 +19,9 @@ import { applyCommandLocally, currentStatePayload, LOCAL_DEVICE_ID, RemoteStatus
  *
  * Nothing here relies on a timer: React Native stops its JS timers while the app is off screen, which is when a
  * watch is used most. Everything runs on events (a message from the watch, a change of the stores).
+ *
+ * The watch also says here which version of its app it is (in its request), and how an update this phone sent it is
+ * going (services/watchUpdate.ts): both go to the store the Montre setting reads.
  *
  * The messages are read by wear/core/.../LinkProtocol.kt; tests/watchlink.test.js and wear's LinkCodec tests check
  * against shared sample files, and wear's RealPhoneIntegrationTest runs this very file against the watch's code.
@@ -348,8 +353,16 @@ export function handleWatchMessage(message: WatchMessage): void {
   if (firstContact) logEvent('watch', 'La montre est en contact avec le téléphone')
 
   if (message.path === LINK_PATHS.request) {
+    // The request says which version of the app the watch has: that is how the Montre setting knows to offer an update.
+    const app = parseWatchRequest(message.data)
+    if (app) useWatchUpdate.getState().noteWatch(message.nodeId, app)
     reconnectPc()
     void push(true)
+    return
+  }
+  if (message.path === UPDATE_PATHS.status) {
+    const status = parseUpdateStatus(message.data)
+    if (status) useWatchUpdate.getState().applyStatus(message.nodeId, status)
     return
   }
   if (message.path !== LINK_PATHS.command) return

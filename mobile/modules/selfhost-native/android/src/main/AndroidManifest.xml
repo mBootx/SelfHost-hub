@@ -36,6 +36,14 @@
           android:pathPrefix="/selfhost/link"
           android:scheme="wear" />
       </intent-filter>
+      <!-- What the watch says about an update of its app (see services/watchUpdate.ts). -->
+      <intent-filter>
+        <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+        <data
+          android:host="*"
+          android:pathPrefix="/selfhost/update"
+          android:scheme="wear" />
+      </intent-filter>
     </service>
 
     <!-- The home-screen widget: the song playing, with previous / play-pause / next (see PlayerWidgetProvider). -->

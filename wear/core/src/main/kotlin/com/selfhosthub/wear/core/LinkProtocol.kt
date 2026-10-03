@@ -140,8 +140,14 @@ enum class MediaKind(val wire: String) { SONG("song"), ALBUM("album"), PLAYLIST(
 enum class PlayMode(val wire: String) { NOW("now"), NEXT("next"), LAST("last") }
 
 object LinkCodec {
-    /** What the watch sends to ask for a snapshot. */
-    fun request(): String = JsonObject().apply { addProperty("v", LinkProtocol.VERSION) }.toString()
+    /**
+     * What the watch sends to ask for a snapshot. It says which version of the app it is: that is how the phone knows
+     * whether to offer an update (see UpdateProtocol). A phone that does not read it simply ignores it.
+     */
+    fun request(app: AppVersion? = null): String = JsonObject().apply {
+        addProperty("v", LinkProtocol.VERSION)
+        if (app != null) add("app", JsonObject().apply { addProperty("name", app.name); addProperty("code", app.code) })
+    }.toString()
 
     fun command(targetId: String, command: PlayerCommand): String {
         val obj = JsonObject()

@@ -165,6 +165,22 @@ class LibrarySyncTest {
     }
 
     @Test
+    fun `a failure that has no message of its own still says what kind it was`() = runBlocking {
+        // Some network failures carry no text at all; the settings screen used to show a sentence that meant nothing.
+        val silent = OkHttpClient.Builder().addInterceptor { throw java.io.IOException() }.build()
+        val outcome = LibrarySync(SubsonicApi(silent) { navidrome.login(server) }, db).run() as SyncOutcome.Failed
+        assertEquals("Synchronisation impossible (IOException)", outcome.message)
+        assertEquals("Synchronisation impossible (IOException)", db.syncLog().latest()!!.message)
+    }
+
+    @Test
+    fun `a failure that has a message says it`() = runBlocking {
+        val refusing = OkHttpClient.Builder().addInterceptor { throw java.net.UnknownHostException("Unable to resolve host") }.build()
+        val outcome = LibrarySync(SubsonicApi(refusing) { navidrome.login(server) }, db).run() as SyncOutcome.Failed
+        assertEquals("Unable to resolve host", outcome.message)
+    }
+
+    @Test
     fun `no login at all is reported as not configured`() = runBlocking {
         val unconfigured = LibrarySync(SubsonicApi(OkHttpClient()) { null }, db)
         val outcome = unconfigured.run() as SyncOutcome.Failed

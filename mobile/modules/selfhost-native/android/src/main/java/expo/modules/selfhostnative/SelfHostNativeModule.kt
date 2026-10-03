@@ -210,7 +210,29 @@ class SelfHostNativeModule : Module() {
       }
     }
 
-    Events("onShareReceived", "onSleepTimerEnded", "onWidgetAction", "onWatchMessage")
+    // Updating the watch app (services/watchUpdate.ts): the APK goes to one watch over a data layer channel, which takes a
+    // while over Bluetooth, so it runs on a thread of its own; progress comes back as onWatchUpdateProgress.
+    AsyncFunction("sendUpdateToWatch") { nodeId: String, fileUri: String, header: String, promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject("E_WATCH", "Application indisponible", null)
+        return@AsyncFunction
+      }
+      Thread {
+        try {
+          val path = Uri.parse(fileUri).path ?: fileUri
+          WatchBridge(context).sendUpdate(nodeId, File(path), header) { sent, total ->
+            sendEvent("onWatchUpdateProgress", mapOf("sent" to sent, "total" to total))
+          }
+          promise.resolve(null)
+        } catch (e: Exception) {
+          // No Google Play services (or no Wear OS API) on this phone, or the watch went away.
+          promise.reject("E_WATCH", e.message ?: "Envoi impossible", e)
+        }
+      }.apply { name = "watch-update" }.start()
+    }
+
+    Events("onShareReceived", "onSleepTimerEnded", "onWidgetAction", "onWatchMessage", "onWatchUpdateProgress")
 
     OnCreate { live = this@SelfHostNativeModule }
 

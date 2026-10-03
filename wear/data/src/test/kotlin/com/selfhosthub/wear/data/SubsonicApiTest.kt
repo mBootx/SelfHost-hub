@@ -4,8 +4,17 @@ import com.selfhosthub.wear.core.NavidromeLogin
 import com.selfhosthub.wear.data.net.NotConfiguredException
 import com.selfhosthub.wear.data.net.SubsonicApi
 import com.selfhosthub.wear.data.net.SubsonicException
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -199,6 +208,87 @@ class SubsonicApiTest {
         changing.ping()
         assertEquals(1, navidrome.callsTo("ping"))
     }
+
+    @Test
+    fun `every answer is read and closed, whatever the call does with it`() = runBlocking {
+        val bodies = mutableListOf<okhttp3.ResponseBody>()
+        val tracking = OkHttpClient.Builder().addInterceptor { chain ->
+            val response = chain.proceed(chain.request())
+            bodies += checkNotNull(response.body)
+            response
+        }.build()
+        val tracked = SubsonicApi(tracking) { login }
+        tracked.ping()
+        tracked.artists()
+        runCatching { tracked.coverArt("al-1", 160) }
+        navidrome.failure = { MockResponse().setResponseCode(500).setBody("oops") }
+        runCatching { tracked.ping() }
+        navidrome.failure = { MockResponse().setBody("<html>not json</html>") }
+        runCatching { tracked.artists() }
+        assertEquals(5, bodies.size)
+        for (body in bodies) assertTrue("the body of every answer was read to the end and closed", isClosed(body))
+    }
+
+    @Test
+    fun `an answer that reaches a caller cancelled in the meantime is closed all the same`() {
+        // The answer is handed to the caller's dispatcher, which is kept busy until the caller is cancelled: the answer is
+        // then on its way to somebody who will never look at it, and whoever took it off the network has to close it.
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            val bodies = CopyOnWriteArrayList<okhttp3.ResponseBody>()
+            val answered = CountDownLatch(1)
+            val tracking = OkHttpClient.Builder().addInterceptor { chain ->
+                val response = chain.proceed(chain.request())
+                bodies += checkNotNull(response.body)
+                answered.countDown()
+                response
+            }.build()
+            navidrome.failure = { MockResponse().setHeader("Content-Type", "image/jpeg").setBody("pixels").setHeadersDelay(500, TimeUnit.MILLISECONDS) }
+            val caller = CoroutineScope(executor.asCoroutineDispatcher()).launch { SubsonicApi(tracking) { login }.coverArt("al-1", 160) }
+
+            // Asked, and not answered yet: now the dispatcher can be kept busy.
+            val asked = System.currentTimeMillis() + 5_000
+            while (navidrome.callsTo("getCoverArt") < 1 && System.currentTimeMillis() < asked) Thread.sleep(10)
+            val busy = CountDownLatch(1)
+            executor.execute { busy.await(10, TimeUnit.SECONDS) }
+            assertTrue("the answer came", answered.await(5, TimeUnit.SECONDS))
+            Thread.sleep(200) // time to be handed to the caller
+            caller.cancel()
+            busy.countDown()
+            runBlocking { withTimeout(5_000) { caller.join() } }
+
+            assertEquals(1, bodies.size)
+            assertTrue("an answer that nobody was left to read was closed, not just cancelled", isClosed(bodies[0]))
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `a call cancelled while its answer is still arriving lets go at once and closes it`() {
+        val bodies = CopyOnWriteArrayList<okhttp3.ResponseBody>()
+        val answered = CountDownLatch(1)
+        val tracking = OkHttpClient.Builder().addInterceptor { chain ->
+            val response = chain.proceed(chain.request())
+            bodies += checkNotNull(response.body)
+            answered.countDown()
+            response
+        }.build()
+        navidrome.failure = { MockResponse().setHeader("Content-Type", "image/jpeg").setBody("a body that takes its time").throttleBody(1, 500, TimeUnit.MILLISECONDS) }
+        runBlocking {
+            val caller = launch(Dispatchers.IO) { SubsonicApi(tracking) { login }.coverArt("al-1", 160) }
+            assertTrue("the answer began", answered.await(5, TimeUnit.SECONDS))
+            val cancelledAt = System.nanoTime()
+            caller.cancelAndJoin()
+            assertTrue("the caller was let go at once, not after the whole body", System.nanoTime() - cancelledAt < 2_000_000_000L)
+        }
+        val closing = System.currentTimeMillis() + 3_000
+        while (!isClosed(bodies[0]) && System.currentTimeMillis() < closing) Thread.sleep(20)
+        assertTrue("the answer that was cut short was closed", isClosed(bodies[0]))
+    }
+
+    /** A body that was closed refuses to be read ("closed"); one that was only cancelled fails on the network instead, still holding its connection. */
+    private fun isClosed(body: okhttp3.ResponseBody): Boolean = runCatching { body.source().exhausted() }.exceptionOrNull() is IllegalStateException
 
     @Test
     fun `a server on the home network is reached with the home client, any other with the ordinary one`() = runBlocking {

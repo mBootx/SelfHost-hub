@@ -5,6 +5,12 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+      To update this app with the APK the phone sends (see UpdateProtocol). Android only lets an app install other
+      apps once "install unknown apps" is allowed for it, which the watch refuses to receive anything without.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application>
 
         <!--
@@ -29,7 +35,36 @@
                     android:pathPrefix="/selfhost/link"
                     android:scheme="wear" />
             </intent-filter>
+            <!-- An update: the phone asks which version this is (a message), and opens a channel to send the APK. -->
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/selfhost/update"
+                    android:scheme="wear" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.CHANNEL_EVENT" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/selfhost/update"
+                    android:scheme="wear" />
+            </intent-filter>
         </service>
+
+        <!-- Android's package installer answers here when an update was handed to it. -->
+        <receiver
+            android:name="com.selfhosthub.wear.service.update.InstallResultReceiver"
+            android:exported="false" />
+
+        <!-- The app was just replaced: the new version tells the phone which one it is. Not a boot receiver. -->
+        <receiver
+            android:name="com.selfhosthub.wear.service.update.PackageReplacedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- The previous / play-pause / next buttons of the notification. -->
         <receiver

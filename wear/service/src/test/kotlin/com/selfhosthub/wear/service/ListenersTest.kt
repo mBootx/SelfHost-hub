@@ -5,9 +5,11 @@ import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import com.google.android.gms.wearable.MessageEvent
+import com.selfhosthub.wear.core.AppVersion
 import com.selfhosthub.wear.core.LinkProtocol
 import com.selfhosthub.wear.core.MemoryWatchPrefs
 import com.selfhosthub.wear.core.SetupProtocol
+import com.selfhosthub.wear.core.UpdateProtocol
 import com.selfhosthub.wear.core.WatchPrefs
 import com.selfhosthub.wear.core.WatchSetup
 import com.selfhosthub.wear.data.ArtworkRepository
@@ -18,6 +20,8 @@ import com.selfhosthub.wear.service.link.LinkLeases
 import com.selfhosthub.wear.service.link.LinkStatus
 import com.selfhosthub.wear.service.link.PhoneLink
 import com.selfhosthub.wear.service.sync.SyncCoordinator
+import com.selfhosthub.wear.service.update.FakeUpdateHost
+import com.selfhosthub.wear.service.update.WatchUpdates
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +43,8 @@ class TestApplication : Application(), WatchGraphProvider {
     internal val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     internal val testPrefs = MemoryWatchPrefs()
     val phoneLink: PhoneLink by lazy { PhoneLink(transport, testScope, testPrefs) }
+    val updateHost = FakeUpdateHost(java.io.File(System.getProperty("java.io.tmpdir"), "wear-update-test"))
+    val watchUpdates: WatchUpdates by lazy { WatchUpdates(updateHost, transport) }
 
     override val graph: WatchGraph by lazy { FakeGraph(this) }
 }
@@ -55,10 +61,13 @@ private class FakeGraph(private val app: TestApplication) : WatchGraph {
     override val sync: SyncCoordinator get() = error("not used by these tests")
     override val link: PhoneLink get() = app.phoneLink
     override val linkLeases: LinkLeases get() = error("not used by these tests")
+    override val updates: WatchUpdates get() = app.watchUpdates
 
     override suspend fun applySetup(incoming: WatchSetup) {
         app.appliedSetups += incoming
     }
+
+    override suspend fun refreshLibraryIfDue() = Unit
 
     override suspend fun clearCache() = Unit
 
@@ -111,6 +120,15 @@ class ListenersTest {
         service().onMessageReceived(Event(SetupProtocol.SETUP_PATH, """{"v":1,"navidrome":{"url":"ftp://x","username":"u","salt":"s","token":"t"}}""".toByteArray()))
         service().onMessageReceived(Event(SetupProtocol.SETUP_PATH, "garbage".toByteArray()))
         assertTrue(app.appliedSetups.isEmpty())
+    }
+
+    @Test
+    fun `the phone asking which version of the app this is gets the answer`() {
+        app.updateHost.installed = AppVersion("2.5.2", 20502)
+        service().onMessageReceived(Event(UpdateProtocol.ASK_PATH, """{"v":1}""".toByteArray()))
+        val said = app.transport.sent.single { it.path == UpdateProtocol.STATUS_PATH }
+        assertEquals("phone-1", said.nodeId)
+        assertEquals("""{"v":1,"state":"version","versionName":"2.5.2","versionCode":20502}""", said.text)
     }
 
     @Test

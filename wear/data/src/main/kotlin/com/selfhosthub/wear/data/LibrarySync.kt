@@ -1,5 +1,6 @@
 package com.selfhosthub.wear.data
 
+import android.util.Log
 import com.selfhosthub.wear.data.db.AlbumEntity
 import com.selfhosthub.wear.data.db.ArtistEntity
 import com.selfhosthub.wear.data.db.PlaylistEntity
@@ -126,15 +127,21 @@ class LibrarySync(
             log.upsert(attempt.copy(status = SyncLogEntity.FAILED, message = e.message))
             return SyncOutcome.Failed(e.message ?: "Navidrome n'est pas configuré", notConfigured = true)
         } catch (e: Exception) {
+            Log.w(TAG, "The synchronisation failed", e)
             val auth = e is SubsonicException && e.isAuthFailure
-            val message = if (auth) "Compte refusé par Navidrome" else e.message ?: "Synchronisation impossible"
+            val message = if (auth) "Compte refusé par Navidrome" else describe(e)
             log.upsert(attempt.copy(status = SyncLogEntity.FAILED, message = message))
             log.prune(KEEP_LOG)
             return SyncOutcome.Failed(message, authFailure = auth)
         }
     }
 
+    /** Why it failed, in a few words: the server's or the network's own sentence, else at least what kind of failure it was. */
+    private fun describe(e: Exception): String =
+        e.message?.takeIf { it.isNotBlank() } ?: "Synchronisation impossible (${e.javaClass.simpleName})"
+
     companion object {
+        private const val TAG = "LibrarySync"
         const val PAGE_SIZE = 500
         const val MAX_PAGES = 400
         const val NEWEST_COUNT = 60

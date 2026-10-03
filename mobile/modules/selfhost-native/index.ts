@@ -81,6 +81,7 @@ interface SelfHostNative {
     (event: 'onShareReceived' | 'onSleepTimerEnded', listener: () => void): { remove: () => void }
     (event: 'onWidgetAction', listener: (payload: { action: string }) => void): { remove: () => void }
     (event: 'onWatchMessage', listener: (payload: WatchMessage) => void): { remove: () => void }
+    (event: 'onWatchUpdateProgress', listener: (payload: { sent: number; total: number }) => void): { remove: () => void }
   }
   /**
    * The dominant colour of the cover at url ("#rrggbb"), or null if it can't be had. Uses the same cover cache
@@ -99,6 +100,12 @@ interface SelfHostNative {
    * app. Resolves with how many watches it went to (0: none is connected). Missing from older installed builds.
    */
   sendToWatch?(path: string, json: string): Promise<number>
+  /**
+   * Sends the APK at `fileUri` to the watch `nodeId` over a data layer channel, after `header` (one line of JSON, see
+   * services/watchUpdateProtocol.ts). Resolves once every byte was handed to the channel, rejects with a sentence when
+   * the watch cannot be reached or closes the channel. Progress comes as onWatchUpdateProgress. Missing from builds before 2.5.2.
+   */
+  sendUpdateToWatch?(nodeId: string, fileUri: string, header: string): Promise<void>
 }
 
 /** What the watch sent over the data layer: a request for the state, or a command (`data` is the JSON text). */

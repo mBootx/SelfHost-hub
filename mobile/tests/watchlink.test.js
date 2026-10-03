@@ -587,6 +587,57 @@ test('a command that could not be carried out gets the watch the true state at o
   assert.ok(logs().some((l) => /watch:warn:.*toggle.*PC n’est pas connecté/.test(l)))
 })
 
+// --- The watch's version and its updates ---
+
+const UPDATE_STATUS = '/selfhost/update/status'
+const freshUpdates = () => m.useWatchUpdate.setState({ watch: null, latest: null, checkedAt: 0, phase: 'idle', progress: 0, message: null })
+
+test('the request says which version of the app the watch has, and that is remembered (shared sample)', async () => {
+  await fresh()
+  freshUpdates()
+  m.startWatchLink()
+  fromWatch(REQUEST, golden('watch-request.json'))
+  assert.deepStrictEqual(m.useWatchUpdate.getState().watch, { nodeId: 'watch-1', version: '2.5.2', code: 20502 })
+})
+
+test('a request that says nothing about the version, or garbage, leaves what is known alone, and is still answered', async () => {
+  await fresh()
+  freshUpdates()
+  m.startWatchLink()
+  fromWatch(REQUEST, golden('watch-request.json'))
+  const before = fake.native.pushed.length
+  fromWatch(REQUEST, { v: 1 })
+  fromWatch(REQUEST, 'garbage')
+  fromWatch(REQUEST, { v: 1, app: { name: 'x', code: 'y' } })
+  await tick()
+  assert.deepStrictEqual(m.useWatchUpdate.getState().watch, { nodeId: 'watch-1', version: '2.5.2', code: 20502 })
+  assert.ok(fake.native.pushed.length > before, 'each request got its answer')
+})
+
+test('what the watch says about an update goes to the store, and is not taken for a command or a request', async () => {
+  await fresh()
+  freshUpdates()
+  m.useWatchUpdate.setState({ phase: 'sending' })
+  m.startWatchLink()
+  const before = fake.native.pushed.length
+  fromWatch(UPDATE_STATUS, { v: 1, state: 'confirm', message: 'Confirmez' })
+  assert.strictEqual(m.useWatchUpdate.getState().phase, 'confirm')
+  fromWatch(UPDATE_STATUS, { v: 1, state: 'installed', versionName: '2.5.3', versionCode: 20503 })
+  assert.strictEqual(m.useWatchUpdate.getState().phase, 'done')
+  assert.deepStrictEqual(m.useWatchUpdate.getState().watch, { nodeId: 'watch-1', version: '2.5.3', code: 20503 })
+  assert.strictEqual(fake.native.pushed.length, before, 'no snapshot is pushed in answer to a status')
+  assert.deepStrictEqual(fake.localCommands, [])
+})
+
+test('a status that is not one is dropped', async () => {
+  await fresh()
+  freshUpdates()
+  m.useWatchUpdate.setState({ phase: 'sending' })
+  m.startWatchLink()
+  for (const text of ['garbage', '[]', { v: 2, state: 'confirm' }, { v: 1, state: 'exploded' }]) fromWatch(UPDATE_STATUS, text)
+  assert.strictEqual(m.useWatchUpdate.getState().phase, 'sending')
+})
+
 test('stopping lets go of the stores and the watch', async () => {
   await fresh()
   m.startWatchLink()
@@ -607,6 +658,7 @@ test('stopping lets go of the stores and the watch', async () => {
       "export { useNavidromeStore } from '@/store/navidromeStore'",
       "export { useRemoteStore } from '@/store/remoteStore'",
       "export { useDiagnosticsStore } from '@/services/diagnostics'",
+      "export { useWatchUpdate } from '@/store/watchUpdateStore'",
       ''
     ].join(NL)
   )

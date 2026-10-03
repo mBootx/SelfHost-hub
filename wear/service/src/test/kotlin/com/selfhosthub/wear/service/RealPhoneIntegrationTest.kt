@@ -3,6 +3,7 @@ package com.selfhosthub.wear.service
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.selfhosthub.wear.core.AppVersion
 import com.selfhosthub.wear.core.LinkProtocol
 import com.selfhosthub.wear.core.MediaKind
 import com.selfhosthub.wear.core.MemoryWatchPrefs
@@ -10,9 +11,14 @@ import com.selfhosthub.wear.core.PcState
 import com.selfhosthub.wear.core.PlayMode
 import com.selfhosthub.wear.core.PlayerCommand
 import com.selfhosthub.wear.core.RepeatMode
+import com.selfhosthub.wear.core.UpdateRefusal
+import com.selfhosthub.wear.core.UpdateState
+import com.selfhosthub.wear.core.UpdateStatus
 import com.selfhosthub.wear.service.link.LinkStatus
 import com.selfhosthub.wear.service.link.LinkTransport
 import com.selfhosthub.wear.service.link.PhoneLink
+import com.selfhosthub.wear.service.update.FakeUpdateHost
+import com.selfhosthub.wear.service.update.WatchUpdates
 import java.io.BufferedWriter
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
@@ -117,8 +123,8 @@ class RealPhoneIntegrationTest {
         return Phone().also { phones += it }.waitReady()
     }
 
-    private fun linkTo(phone: Phone): PhoneLink {
-        val link = PhoneLink(PipeTransport(phone), scope, MemoryWatchPrefs(), answerTimeoutMs = 4_000, refreshEveryMs = 60_000)
+    private fun linkTo(phone: Phone, app: AppVersion? = null): PhoneLink {
+        val link = PhoneLink(PipeTransport(phone), scope, MemoryWatchPrefs(), answerTimeoutMs = 4_000, refreshEveryMs = 60_000, appVersion = { app })
         phone.onPushed = { path, json -> link.onMessage(path, json.toByteArray(Charsets.UTF_8)) }
         return link
     }
@@ -300,6 +306,53 @@ class RealPhoneIntegrationTest {
         link.start()
         await("the phone's answer") { link.state.value.connected }
         assertEquals(LinkStatus.CONNECTED, link.state.value.status)
+    }
+
+    @Test
+    fun `the real phone code learns which version the watch app is from the watch's own request`() {
+        val phone = startPhone()
+        val link = linkTo(phone, AppVersion("2.5.2", 20502))
+        link.start()
+        await("the phone's answer") { link.state.value.connected }
+
+        await("the phone to know the version") { phone.all("watchApp").any { it.getAsJsonObject("watch")?.get("code")?.asLong == 20502L } }
+        val watch = phone.all("watchApp").last().getAsJsonObject("watch")
+        assertEquals("watch-1", watch.get("nodeId").asString)
+        assertEquals("2.5.2", watch.get("version").asString)
+        assertTrue("and the request was answered all the same", link.state.value.connected)
+    }
+
+    @Test
+    fun `a watch app that says no version leaves the phone not knowing, and still answered`() {
+        val phone = startPhone()
+        val link = linkTo(phone)
+        link.start()
+        await("the phone's answer") { link.state.value.connected }
+        Thread.sleep(300)
+        assertTrue(phone.all("watchApp").none { it.get("watch")?.isJsonNull == false })
+    }
+
+    @Test
+    fun `what the watch says about its version and about an update is understood by the real phone code`() {
+        val phone = startPhone()
+        val dir = java.nio.file.Files.createTempDirectory("real-phone-update").toFile()
+        try {
+            val host = FakeUpdateHost(File(dir, "update")).apply { installed = AppVersion("2.5.3", 20503) }
+            val updates = WatchUpdates(host, PipeTransport(phone))
+
+            kotlinx.coroutines.runBlocking { updates.announceVersion() }
+            await("the phone to know the version") { phone.all("watchApp").any { it.getAsJsonObject("watch")?.get("version")?.asString == "2.5.3" } }
+
+            // A refusal and a failure while nothing is under way are no news to the phone: its phase stays idle.
+            kotlinx.coroutines.runBlocking {
+                updates.report(UpdateStatus(UpdateState.REFUSED, "2.5.3", 20503, UpdateRefusal.NOT_ALLOWED, "x"))
+                updates.report(UpdateStatus(UpdateState.FAILED, message = "x"))
+            }
+            Thread.sleep(300)
+            assertTrue(phone.all("watchApp").all { it.get("phase").asString == "idle" })
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     // --- Helpers ---

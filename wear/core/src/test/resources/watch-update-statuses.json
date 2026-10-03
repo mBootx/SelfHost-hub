@@ -1,0 +1,8 @@
+{
+  "received": {"v":1,"state":"received","versionName":"2.5.2","versionCode":20502},
+  "confirm": {"v":1,"state":"confirm","message":"Confirmez la mise à jour sur la montre"},
+  "installed": {"v":1,"state":"installed","versionName":"2.5.2","versionCode":20502},
+  "version": {"v":1,"state":"version","versionName":"2.5.2","versionCode":20502},
+  "refusedNotAllowed": {"v":1,"state":"refused","versionName":"2.5.2","versionCode":20502,"reason":"not-allowed","message":"L’application n’a pas le droit d’installer des applications sur la montre"},
+  "failed": {"v":1,"state":"failed","versionName":"2.5.2","versionCode":20502,"message":"Fichier endommagé pendant le transfert"}
+}

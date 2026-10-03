@@ -1,5 +1,6 @@
 package com.selfhosthub.wear.service
 
+import com.selfhosthub.wear.core.AppVersion
 import com.selfhosthub.wear.core.DeviceState
 import com.selfhosthub.wear.core.LinkProtocol
 import com.selfhosthub.wear.core.MediaKind
@@ -76,6 +77,22 @@ class PhoneLinkTest {
         assertEquals("Titre", s.target!!.state.song!!.title)
         assertEquals(1, transport.requests().size)
         assertEquals("""{"v":1}""", transport.requests().single().text)
+    }
+
+    @Test
+    fun `every request says which version of the app asks, so that the phone can offer an update`() = runTest {
+        val transport = FakeTransport()
+        lateinit var link: PhoneLink
+        link = PhoneLink(transport, backgroundScope, MemoryWatchPrefs(), clock = { 1_000_000 + currentTime }, appVersion = { AppVersion("2.5.2", 20502) })
+        transport.answeringWith({ link }) { snapshot() }
+
+        link.start()
+        runCurrent()
+        link.refresh()
+        runCurrent()
+
+        assertEquals(2, transport.requests().size)
+        for (request in transport.requests()) assertEquals("""{"v":1,"app":{"name":"2.5.2","code":20502}}""", request.text)
     }
 
     @Test

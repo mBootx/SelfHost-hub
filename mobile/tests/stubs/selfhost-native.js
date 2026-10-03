@@ -59,9 +59,22 @@ function api() {
       if (fake.native.pushGate) await fake.native.pushGate
       return fake.native.pushCount === undefined ? 1 : fake.native.pushCount
     },
+    // An update for the watch: what was handed over (watch, file, header line), and a hook for the test to play the watch.
+    async sendUpdateToWatch(nodeId, fileUri, header) {
+      fake.native.updates = fake.native.updates || []
+      fake.native.updates.push({ nodeId, fileUri, header })
+      if (fake.native.updateHook) await fake.native.updateHook({ nodeId, fileUri, header })
+      if (fake.native.updateError) throw new Error(fake.native.updateError)
+    },
     addListener(event, listener) {
-      fake.native.shareListeners.push([event, listener])
-      return { remove() {} }
+      const entry = [event, listener]
+      fake.native.shareListeners.push(entry)
+      return {
+        remove() {
+          const at = fake.native.shareListeners.indexOf(entry)
+          if (at >= 0) fake.native.shareListeners.splice(at, 1)
+        }
+      }
     }
   }
 }

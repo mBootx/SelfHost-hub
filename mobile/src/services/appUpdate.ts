@@ -3,9 +3,10 @@ import { startActivityAsync } from 'expo-intent-launcher'
 import { Directory, File, Paths } from 'expo-file-system'
 import { fetchWithTimeout } from './http'
 import { expectExternalScreen } from './appLock'
-import { phoneApkName, pickPhoneApk } from './updateAsset'
+import { isNewer, LATEST_RELEASE_URL, phoneApkName, pickPhoneApk } from './updateAsset'
 
-const LATEST_RELEASE_URL = 'https://api.github.com/repos/mBootx/SelfHost-hub/releases/latest'
+export { isNewer }
+
 const FLAG_GRANT_READ_URI_PERMISSION = 1
 const updatesDir = new Directory(Paths.cache, 'updates')
 const COMPLETE_APK = /^SelfHost-Hub-(.+)\.apk$/
@@ -14,23 +15,6 @@ export interface AvailableUpdate {
   version: string
   apkUrl: string
   sizeBytes: number
-}
-
-function versionParts(version: string): number[] {
-  return version
-    .replace(/^v/i, '')
-    .split('.')
-    .map((n) => parseInt(n, 10) || 0)
-}
-
-export function isNewer(candidate: string, current: string): boolean {
-  const a = versionParts(candidate)
-  const b = versionParts(current)
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const diff = (a[i] ?? 0) - (b[i] ?? 0)
-    if (diff !== 0) return diff > 0
-  }
-  return false
 }
 
 const apkName = phoneApkName

@@ -1,6 +1,8 @@
 package com.selfhosthub.wear.service
 
+import com.selfhosthub.wear.core.UpdateProtocol
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -64,6 +66,27 @@ class AppManifestContractTest {
         // Both the setup and the live link, the two paths the phone writes (see SetupProtocol and LinkProtocol).
         assertTrue(manifest.contains("""android:pathPrefix="/selfhost/setup""""))
         assertTrue(manifest.contains("""android:pathPrefix="/selfhost/link""""))
+    }
+
+    @Test
+    fun `the phone can send an update, the channel is heard, the installer answers, and the new version announces itself`() {
+        val manifest = read(service, "AndroidManifest.xml")
+        // The permission an app needs to install an app (here, itself), and what it receives the file on.
+        assertTrue(manifest.contains("android.permission.REQUEST_INSTALL_PACKAGES"))
+        assertTrue(manifest.contains("com.google.android.gms.wearable.CHANNEL_EVENT"))
+        assertTrue(manifest.contains("""android:pathPrefix="/selfhost/update""""))
+        assertTrue(manifest.contains("com.selfhosthub.wear.service.update.InstallResultReceiver"))
+        assertTrue(manifest.contains("android.intent.action.MY_PACKAGE_REPLACED"))
+        // Not a boot receiver, and not reachable by other apps.
+        assertFalse(Regex("""InstallResultReceiver"\s+android:exported="true"""").containsMatchIn(manifest))
+        assertFalse(Regex("""PackageReplacedReceiver"\s+android:exported="true"""").containsMatchIn(manifest))
+    }
+
+    @Test
+    fun `the paths the manifests listen on are the ones the protocol writes`() {
+        assertEquals("/selfhost/update/apk", UpdateProtocol.APK_PATH)
+        assertEquals("/selfhost/update/status", UpdateProtocol.STATUS_PATH)
+        assertEquals("/selfhost/update", UpdateProtocol.PREFIX)
     }
 
     @Test
