@@ -9,6 +9,19 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '2.5.2',
+    items: [
+      {
+        title: 'Mettre à jour la montre depuis le téléphone',
+        text: "Réglages → Montre indique la version de l'application de la montre et, quand une nouvelle version est publiée, propose « Mettre à jour la montre » : elle est envoyée par Bluetooth et installée. La montre doit y être autorisée une fois (installation d'applications, voir wear/README.md) ; la première fois, Android peut demander une confirmation sur la montre."
+      },
+      {
+        title: 'Montre : bibliothèque plus fiable',
+        text: "La bibliothèque se relit à l'ouverture de l'application quand elle est ancienne, et une synchronisation qui échoue dit de quel échec il s'agit. Un défaut qui laissait des connexions ouvertes en quittant un écran de pochettes est corrigé."
+      }
+    ]
+  },
+  {
     version: '2.5.0',
     items: [
       {

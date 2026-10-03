@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.5.2 — 2026-10-03
+
+### Added
+- **The phone can update the watch app (Android phone + Wear OS watch).** Réglages → Montre now says which version of the app the watch has (the watch tells it, in every request and when asked) and whether a newer one is published on GitHub. "Mettre à jour la montre" downloads `SelfHost-Hub-Watch-<version>.apk` from the release, checks it against the SHA-256 GitHub gives, sends it to the watch over the Wear OS data layer (Bluetooth, no Wi-Fi or cable needed) and the watch installs it.
+  - **The watch checks before it installs anything:** that it is the version that was announced and newer than its own, that the size and SHA-256 match, and that the file is this app, signed with the same key. It refuses an update before receiving a byte when it already has that version, has no room, or is not allowed to install apps.
+  - **One thing has to be allowed on the watch, once:** the watch app needs the "install unknown apps" permission, and a Wear OS watch may have no screen for it (the settings of a Galaxy Watch Ultra have no page for it that we could find). It is granted from a computer with `adb shell cmd appops set com.selfhosthub.mobile REQUEST_INSTALL_PACKAGES allow`; without it the watch says no, and the phone shows that command. Android may then ask for a confirmation on the watch (a notification takes you to it).
+  - **The first version that can be updated this way is 2.5.2 itself**, installed by hand like 2.5.0 (steps in `wear/README.md`): an older watch app cannot receive an update, and the phone says so and links to the release page.
+  - "Réinstaller cette version" sends the version the watch already has again, to repair it.
+
+### Fixed
+- **Watch: connections left open when a screen of covers was left.** A response that reached a caller cancelled in the meantime was never closed, and OkHttp reported "A connection … was leaked" (seen on a Galaxy Watch Ultra while the library screens loaded covers during a synchronisation). Every answer is now read and closed on the network thread, whatever the caller does meanwhile.
+- **Watch: the library is read again when the app is opened if it is more than 30 minutes old** (and not sooner than 5 minutes after a try that failed). Only the hourly job did, and a watch lying still with its screen off is in deep sleep and gives background apps no network at all, so the library could stay stale or empty for hours.
+- **Watch: a synchronisation that fails says what kind of failure it was** ("Synchronisation impossible (ConnectionShutdownException)") instead of a sentence that meant nothing, and logs it.
+
 ## 2.5.0 — 2026-10-02
 
 ### Added
