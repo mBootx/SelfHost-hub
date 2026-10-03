@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.6.0 — 2026-10-03
+
+### Added
+- **Big Picture: a full-screen player (Windows).** Press F, click the new button in the player bar, or click the cover: the window goes full screen with the cover large on the left, a blurred copy of it drifting behind, and the song's synced lyrics on the right, the sung line lit word by word. Click a lyric line to jump to it; L shows or hides the lyrics, Escape (or F) leaves. The glow, the highlight and the sliders take the cover's colour. The bars and the cursor hide after a few seconds without movement. It also follows the phone when the phone is the output.
+- **Car mode (Android).** Réglages → Mode voiture → "Démarrer le mode voiture", or the "…" menu of the player: a black full screen with the song in big type, a large red ✕ to leave, and three big buttons (previous, play/pause, next) that act when held a moment, so that brushing them does nothing. With the camera allowed, hand gestures in front of the phone drive the player:
+  - pinch thumb and index: play / pause;
+  - sweep the hand right or left: next / previous;
+  - hold an open hand high or low in the picture: the phone's media volume up or down, step by step while it stays there;
+  - thumb up: add the song to your favourites (never removes it).
+  - **On screen:** each gesture shows big and buzzes. Gestures drive whatever the player drives: this phone, or the PC picked as the output.
+  - **Settings:** how sensitive the gestures are, which ones are on, the orientation (automatic, portrait, landscape), full brightness in the sun (light sensor), a battery saver (15 images a second instead of 24), and a test mode that shows the camera with the hand drawn over it.
+  - **Privacy:** the gestures are read on the phone by Google's MediaPipe hand tracking, from the front camera, only while the car mode is on screen and the app unlocked. No picture is kept or sent. MediaPipe's own usage statistics, which it would send to Google, are switched off in this build.
+  - The camera permission is asked the first time; without it the car mode keeps its buttons. The app grows by about 23 MB (the hand-tracking model and library).
+
+### Changed
+- **Now Playing in the cover's colours (Android).** The screen used one colour from the cover for its background and the app's green for everything else. It now takes a palette from the cover: the background is the cover's main colour all the way down, a second colour of the cover glows from the top corner, and the controls (play button, seek bar, heart, shuffle, repeat, output device, sleep timer, download, the current song in the queue) take another colourful colour of the cover, or its own. Black-and-white covers stay grey with white controls. Text and controls are kept readable whatever the cover.
+
 ## 2.5.2 — 2026-10-03
 
 ### Added

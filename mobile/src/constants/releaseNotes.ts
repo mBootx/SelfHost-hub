@@ -9,6 +9,23 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '2.6.0',
+    items: [
+      {
+        title: 'Mode voiture',
+        text: "Réglages → Mode voiture : plein écran, gros boutons à maintenir un instant, et des gestes de la main devant la caméra frontale. Pincer : lecture / pause. Main vers la droite ou la gauche : suivant / précédent. Main ouverte en haut ou en bas : volume. Pouce levé : favori."
+      },
+      {
+        title: 'Gestes et vie privée',
+        text: "Les gestes sont reconnus sur le téléphone, seulement pendant que le mode voiture est à l'écran. Aucune image n'est enregistrée ni envoyée. La caméra est demandée la première fois ; sans elle, les boutons restent."
+      },
+      {
+        title: 'Lecteur aux couleurs de la pochette',
+        text: "L'écran de lecture prend les couleurs de la pochette : le fond dans sa couleur principale, une deuxième couleur en halo, et les boutons, la barre de progression et le cœur dans une autre de ses couleurs."
+      }
+    ]
+  },
+  {
     version: '2.5.2',
     items: [
       {

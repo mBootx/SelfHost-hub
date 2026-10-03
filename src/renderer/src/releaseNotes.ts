@@ -9,6 +9,15 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '2.6.0',
+    items: [
+      {
+        title: 'Lecteur plein écran',
+        text: "Appuyez sur F, cliquez sur le nouveau bouton de la barre de lecture ou sur la pochette : la pochette en grand, dans ses couleurs, et les paroles synchronisées qui s'allument mot à mot. Cliquez sur une ligne pour y aller ; L masque les paroles, Échap ou F referme."
+      }
+    ]
+  },
+  {
     version: '2.4.0',
     items: [
       {
