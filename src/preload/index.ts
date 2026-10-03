@@ -19,6 +19,19 @@ export interface TraySettings {
 export type TrayCommand = 'toggle' | 'next' | 'prev'
 
 const api = {
+  window: {
+    /** Real full screen (the taskbar goes too), for the full-screen player. Resolves with whether the window is in it. */
+    setFullScreen: (on: boolean): Promise<boolean> => ipcRenderer.invoke('window:setFullScreen', on),
+    isFullScreen: (): Promise<boolean> => ipcRenderer.invoke('window:isFullScreen'),
+    /** Told when the window enters or leaves full screen, whoever asked. */
+    onFullScreenChange: (callback: (on: boolean) => void) => {
+      const listener = (_event: unknown, on: boolean): void => callback(on)
+      ipcRenderer.on('window:fullScreen', listener)
+      return (): void => {
+        ipcRenderer.removeListener('window:fullScreen', listener)
+      }
+    }
+  },
   store: {
     get: (key: string) => ipcRenderer.invoke('store:get', key),
     set: (key: string, value: unknown) => ipcRenderer.invoke('store:set', key, value),

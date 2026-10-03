@@ -17,6 +17,7 @@ import {
   Laptop,
   Smartphone,
   GripVertical,
+  Maximize2,
   X
 } from 'lucide-react'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
@@ -25,6 +26,7 @@ import { useRemoteStore, LOCAL_DEVICE_ID } from '@renderer/store/remoteStore'
 import { useHistoryStore } from '@renderer/store/historyStore'
 import { useToastStore } from '@renderer/store/toastStore'
 import { useAudioSettingsStore } from '@renderer/store/audioSettingsStore'
+import { useUIStore } from '@renderer/store/uiStore'
 import { getAudioEngine, seekTo } from '@renderer/services/playbackEngine'
 import { resumePosition } from '@renderer/services/playbackMemory'
 
@@ -249,6 +251,10 @@ export default function Player(): JSX.Element {
       } else if (e.key === '/') {
         e.preventDefault()
         window.dispatchEvent(new Event('shub:focus-search'))
+      } else if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // The full-screen player; the same key closes it.
+        e.preventDefault()
+        useUIStore.getState().toggleBigPicture()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -401,11 +407,19 @@ export default function Player(): JSX.Element {
       <div className="grid grid-cols-3 items-center gap-4 px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           {song && client ? (
-            <img
-              src={client.coverArtUrl(song.coverArt || song.albumId || song.id, 64)}
-              alt=""
-              className="h-14 w-14 rounded object-cover shadow-md"
-            />
+            <button
+              onClick={() => useUIStore.getState().openBigPicture()}
+              title="Plein écran (F)"
+              aria-label="Ouvrir le lecteur plein écran"
+              className="group relative h-14 w-14 shrink-0 overflow-hidden rounded shadow-md"
+            >
+              <img
+                src={client.coverArtUrl(song.coverArt || song.albumId || song.id, 64)}
+                alt=""
+                className="h-14 w-14 object-cover transition-opacity group-hover:opacity-50"
+              />
+              <Maximize2 className="absolute inset-0 m-auto h-5 w-5 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+            </button>
           ) : (
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded bg-surface-hover">
               <Music className="h-5 w-5 text-gray-600" />
@@ -520,6 +534,13 @@ export default function Player(): JSX.Element {
               {localPlaybackRate}x
             </button>
           )}
+          <button
+            onClick={() => useUIStore.getState().openBigPicture()}
+            title="Plein écran (F)"
+            className="rounded-full p-1.5 text-gray-400 transition-colors hover:text-white"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
           <button
             onClick={() => setShowQueue((v) => !v)}
             title="File de lecture"

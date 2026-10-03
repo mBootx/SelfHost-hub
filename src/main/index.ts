@@ -73,6 +73,11 @@ function createWindow(): void {
     if (!startHidden) mainWindow?.show()
   })
 
+  // The full-screen player (renderer/components/Navidrome/BigPicture) follows the window: it also closes when
+  // the window leaves full screen some other way (Windows+Down, the window menu).
+  mainWindow.on('enter-full-screen', () => mainWindow?.webContents.send('window:fullScreen', true))
+  mainWindow.on('leave-full-screen', () => mainWindow?.webContents.send('window:fullScreen', false))
+
   // Only web links go to the browser: anything else (file:, smb:, a custom scheme) could start a program.
   mainWindow.webContents.setWindowOpenHandler((details) => {
     if (details.url.startsWith('https://') || details.url.startsWith('http://')) shell.openExternal(details.url)
@@ -186,6 +191,12 @@ const pairingStore: PairingStore = {
 
 function registerIpc(): void {
   // Plain (non-sensitive) settings: server URLs, usernames, UI prefs
+  ipcMain.handle('window:setFullScreen', (_e, on: boolean) => {
+    mainWindow?.setFullScreen(on === true)
+    return mainWindow?.isFullScreen() ?? false
+  })
+  ipcMain.handle('window:isFullScreen', () => mainWindow?.isFullScreen() ?? false)
+
   ipcMain.handle('store:get', (_e, key: string) => store.get(key) ?? null)
   ipcMain.handle('store:set', (_e, key: string, value: unknown) => {
     store.set(key, value)

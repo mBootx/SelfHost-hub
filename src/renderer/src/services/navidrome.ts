@@ -77,7 +77,8 @@ function randomSalt(): string {
 
 /** Every requested cover size maps to one of these, so a cover is downloaded (and cached) at most three times. */
 function coverSizeBucket(size: number): number {
-  return size <= 160 ? 160 : size <= 320 ? 320 : 640
+  // 1280 is for the full-screen player: a cover blown up to a whole screen from 640 px looks soft.
+  return size <= 160 ? 160 : size <= 320 ? 320 : size <= 640 ? 640 : 1280
 }
 
 export class ApiError extends Error {

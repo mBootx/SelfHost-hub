@@ -7,6 +7,7 @@ import FileBrowserModule from '@renderer/components/FileBrowser'
 import SettingsModule from '@renderer/components/Settings'
 import ServerDashboard from '@renderer/components/Server'
 import Player from '@renderer/components/Navidrome/Player'
+import BigPicture from '@renderer/components/Navidrome/BigPicture'
 import UploadManager from '@renderer/components/FileBrowser/UploadManager'
 import ToastHost from '@renderer/components/Toast'
 import UpdateBanner from '@renderer/components/UpdateBanner'
@@ -115,6 +116,12 @@ export default function App(): JSX.Element {
       {navidromeConnected && (
         <ErrorBoundary label="Lecteur Navidrome">
           <Player />
+        </ErrorBoundary>
+      )}
+      {/* The full-screen player covers everything while it is open; the player bar underneath keeps playing. */}
+      {navidromeConnected && (
+        <ErrorBoundary label="Plein écran">
+          <BigPicture />
         </ErrorBoundary>
       )}
       {/* Global so an upload keeps reporting progress even after leaving the FileBrowser tab. */}
