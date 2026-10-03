@@ -7,6 +7,8 @@ import { colors, radius, spacing } from '@/constants/theme'
 interface Props {
   queue: NDSong[]
   queueIndex: number
+  /** The song playing is picked out in the cover's colour. */
+  accent: string
   bottomInset: number
   onPlay: (index: number) => void
   onRemove: (index: number) => void
@@ -15,7 +17,7 @@ interface Props {
 }
 
 /** The play queue, over the same coloured backdrop as the player. Tap a row to jump to it. */
-export default function QueueView({ queue, queueIndex, bottomInset, onPlay, onRemove, onMove, onClear }: Props) {
+export default function QueueView({ queue, queueIndex, accent, bottomInset, onPlay, onRemove, onMove, onClear }: Props) {
   const [confirmClear, setConfirmClear] = useState(false)
 
   return (
@@ -51,7 +53,7 @@ export default function QueueView({ queue, queueIndex, bottomInset, onPlay, onRe
       {queue.map((song, i) => (
         <View key={`${song.id}-${i}`} style={[styles.row, i === queueIndex && styles.rowActive]}>
           <Pressable style={styles.rowMain} onPress={() => onPlay(i)}>
-            <Text style={[styles.rowTitle, i === queueIndex && styles.rowTitleActive]} numberOfLines={1}>
+            <Text style={[styles.rowTitle, i === queueIndex && { color: accent }]} numberOfLines={1}>
               {song.title}
             </Text>
             <Text style={styles.rowArtist} numberOfLines={1}>
@@ -86,6 +88,5 @@ const styles = StyleSheet.create({
   rowActive: { backgroundColor: 'rgba(255,255,255,0.12)' },
   rowMain: { flex: 1, minWidth: 0 },
   rowTitle: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
-  rowTitleActive: { color: colors.accent },
   rowArtist: { color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 1 }
 })

@@ -123,13 +123,13 @@ export default function LyricsOverlay(props: Props) {
               <Rect x="0" y="0" width="100%" height="100%" fill="url(#lyrics-bar-fade)" />
             </Svg>
           </View>
-          <SeekBar />
+          <SeekBar accent={look.accent} />
           <View style={styles.controls}>
             <Pressable onPress={props.onPrev} hitSlop={12} accessibilityRole="button" accessibilityLabel="Titre précédent">
               <SkipBack size={28} color="#ffffff" fill="#ffffff" />
             </Pressable>
-            <Pressable style={styles.play} onPress={props.onTogglePlay} accessibilityRole="button" accessibilityLabel={isPlaying ? 'Pause' : 'Lecture'}>
-              {isPlaying ? <Pause size={26} color="#000000" fill="#000000" /> : <Play size={26} color="#000000" fill="#000000" />}
+            <Pressable style={[styles.play, { backgroundColor: look.accent }]} onPress={props.onTogglePlay} accessibilityRole="button" accessibilityLabel={isPlaying ? 'Pause' : 'Lecture'}>
+              {isPlaying ? <Pause size={26} color={look.onAccent} fill={look.onAccent} /> : <Play size={26} color={look.onAccent} fill={look.onAccent} />}
             </Pressable>
             <Pressable onPress={props.onNext} hitSlop={12} accessibilityRole="button" accessibilityLabel="Titre suivant">
               <SkipForward size={28} color="#ffffff" fill="#ffffff" />
@@ -152,5 +152,5 @@ const styles = StyleSheet.create({
   plain: { color: 'rgba(255,255,255,0.92)', fontSize: 22, lineHeight: 33, fontWeight: '800' },
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 44, paddingHorizontal: spacing.xl },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 44, marginTop: spacing.sm },
-  play: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' }
+  play: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center' }
 })

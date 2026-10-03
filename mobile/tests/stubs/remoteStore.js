@@ -15,6 +15,11 @@ exports.useRemoteStore = miniStore({
   deviceList: [],
   devices: {},
   selectedDeviceId: 'local',
+  /** What the player's buttons would send: to this phone's player, or to the device picked as the output (recorded). */
+  sendCommand: (action, payload) => {
+    fake.sentCommands = fake.sentCommands || []
+    fake.sentCommands.push(payload === undefined ? { action } : { action, payload })
+  },
   /** Reconnecting to the PC; counted, not done. */
   autoConnect: async () => {
     fake.autoConnects = (fake.autoConnects || 0) + 1

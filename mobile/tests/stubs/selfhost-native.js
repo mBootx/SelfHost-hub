@@ -5,7 +5,7 @@ fake.native = fake.native || { clock: { elapsed: 1000, boot: 7 }, privacy: [], c
 
 function api() {
   if (fake.native.missing) return {}
-  return {
+  const all = {
     setPrivacyScreen(enabled) {
       fake.native.privacy.push(enabled)
       return true
@@ -66,6 +66,34 @@ function api() {
       if (fake.native.updateHook) await fake.native.updateHook({ nodeId, fileUri, header })
       if (fake.native.updateError) throw new Error(fake.native.updateError)
     },
+    // The cover's pixels and main colour, by URL (fake.native.covers[url] = { pixels, color }); fake.native.coverCalls counts.
+    async getCoverPixels(url, side) {
+      fake.native.coverCalls = (fake.native.coverCalls || 0) + 1
+      fake.native.coverSides = (fake.native.coverSides || []).concat(side)
+      if (fake.native.coverError) throw new Error(fake.native.coverError)
+      return fake.native.covers?.[url]?.pixels ?? null
+    },
+    async getCoverColor(url) {
+      fake.native.colorCalls = (fake.native.colorCalls || 0) + 1
+      return fake.native.covers?.[url]?.color ?? null
+    },
+    // The car mode: the phone's media volume (fake.native.mediaVolume, 0 to 1, steps of a fifteenth) and the camera permission.
+    stepMediaVolume(direction) {
+      if (fake.native.mediaVolume === undefined) return -1
+      fake.native.mediaVolume = Math.min(1, Math.max(0, fake.native.mediaVolume + direction / 15))
+      fake.native.volumeSteps = (fake.native.volumeSteps || []).concat(direction)
+      return fake.native.mediaVolume
+    },
+    async getCameraPermission() {
+      if (fake.native.cameraError) throw new Error(fake.native.cameraError)
+      return fake.native.camera || { status: 'undetermined', granted: false, canAskAgain: true }
+    },
+    async requestCameraPermission() {
+      fake.native.cameraAsks = (fake.native.cameraAsks || 0) + 1
+      if (fake.native.cameraError) throw new Error(fake.native.cameraError)
+      if (fake.native.cameraAnswer) fake.native.camera = fake.native.cameraAnswer
+      return fake.native.camera || { status: 'undetermined', granted: false, canAskAgain: true }
+    },
     addListener(event, listener) {
       const entry = [event, listener]
       fake.native.shareListeners.push(entry)
@@ -77,6 +105,9 @@ function api() {
       }
     }
   }
+  // A build from before the palette: only the cover's main colour.
+  if (fake.native.oldCoverBuild) delete all.getCoverPixels
+  return all
 }
 
 // Looked up on every use so a test can switch the build between calls.

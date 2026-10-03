@@ -7,6 +7,7 @@ import { useIsOwner } from '@/hooks/useIsOwner'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
 import AppearanceSection from '@/components/settings/AppearanceSection'
 import PlaybackSection from '@/components/settings/PlaybackSection'
+import CarModeSection from '@/components/settings/CarModeSection'
 import CameraBackupSection from '@/components/settings/CameraBackupSection'
 import AppLockSection from '@/components/settings/AppLockSection'
 import WatchSection from '@/components/settings/WatchSection'
@@ -309,6 +310,7 @@ export default function SettingsTab() {
 
         <AppearanceSection />
         <PlaybackSection />
+        <CarModeSection />
         <CameraBackupSection />
         <AppLockSection />
         <WatchSection />

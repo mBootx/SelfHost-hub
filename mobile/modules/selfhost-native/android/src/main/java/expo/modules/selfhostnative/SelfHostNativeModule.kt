@@ -1,7 +1,10 @@
 package expo.modules.selfhostnative
 
+import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.media.audiofx.Equalizer
@@ -16,11 +19,15 @@ import android.provider.Settings
 import android.view.WindowManager
 import android.webkit.MimeTypeMap
 import androidx.annotation.OptIn
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import expo.modules.audio.AudioPlayer
 import expo.modules.audio.service.NowPlayingArtwork
+import expo.modules.interfaces.permissions.Permissions.askForPermissionsWithPermissionsManager
+import expo.modules.interfaces.permissions.Permissions.getPermissionsWithPermissionsManager
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
@@ -45,6 +52,9 @@ class SelfHostNativeModule : Module() {
 
   // A share that arrived while the app was already running, kept until JS asks for it.
   private var pendingShare: Intent? = null
+
+  // The car mode's light sensor, while it is listening.
+  private var lightSensor: CarScreen.LightSensor? = null
 
   // The sleep timer: the wait, then the fade. Both are posts on the main thread's handler.
   private var sleepWait: Runnable? = null
@@ -86,6 +96,12 @@ class SelfHostNativeModule : Module() {
     // cover cache the Now Bar fills for the same URL, so the picture is usually already downloaded.
     AsyncFunction("getCoverColor") { url: String, promise: Promise ->
       NowPlayingArtwork.request(url) { art -> promise.resolve(art?.let { dominantColor(it.bitmap) }) }
+    }
+
+    // A small copy of the cover, [side x side] pixels as r, g, b, r, g, b...: the Now Playing screen works out its
+    // palette from it (services/coverColor.ts). Same cover cache as above. Null when the cover can't be had.
+    AsyncFunction("getCoverPixels") { url: String, side: Int, promise: Promise ->
+      NowPlayingArtwork.request(url) { art -> promise.resolve(art?.let { pixelsOf(it.bitmap, side.coerceIn(8, 64)) }) }
     }
 
     // The volume ramp of a crossfade runs here, on the main thread's clock. As a JS setInterval it stopped
@@ -232,7 +248,78 @@ class SelfHostNativeModule : Module() {
       }.apply { name = "watch-update" }.start()
     }
 
-    Events("onShareReceived", "onSleepTimerEnded", "onWidgetAction", "onWatchMessage", "onWatchUpdateProgress")
+    // The car mode (app/car-mode.tsx): the camera permission, the hand tracker that turns the front camera into points
+    // (HandTracker, frames come back as onHandFrame), and what the car mode does to the screen and the volume (CarScreen).
+    AsyncFunction("getCameraPermission") { promise: Promise ->
+      getPermissionsWithPermissionsManager(appContext.permissions, promise, Manifest.permission.CAMERA)
+    }
+
+    AsyncFunction("requestCameraPermission") { promise: Promise ->
+      askForPermissionsWithPermissionsManager(appContext.permissions, promise, Manifest.permission.CAMERA)
+    }
+
+    // False when it cannot start (no screen to tie the camera to, or no permission); otherwise how it went comes back as
+    // onHandTrackerState. Called again while running, it only changes the frame rate.
+    Function("startHandTracking") { fps: Int ->
+      val context = appContext.reactContext ?: return@Function false
+      val owner = appContext.currentActivity as? LifecycleOwner ?: return@Function false
+      if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return@Function false
+      HandTracker.start(context, owner, fps, trackerListener)
+      true
+    }
+
+    Function("stopHandTracking") { ->
+      HandTracker.stop()
+      Unit
+    }
+
+    View(HandCameraPreview::class) {}
+
+    Function("setKeepScreenOn") { on: Boolean ->
+      onActivity { CarScreen.keepScreenOn(it, on) }
+    }
+
+    Function("setScreenBrightness") { level: Double ->
+      onActivity { CarScreen.setBrightness(it, level) }
+    }
+
+    Function("setScreenOrientation") { mode: String ->
+      onActivity { CarScreen.setOrientation(it, mode) }
+    }
+
+    Function("restoreCarScreen") { ->
+      onActivity { CarScreen.restore(it) }
+    }
+
+    Function("stepMediaVolume") { direction: Int ->
+      val context = appContext.reactContext ?: return@Function -1.0
+      CarScreen.stepMediaVolume(context, direction)
+    }
+
+    Function("startLightSensor") { ->
+      val context = appContext.reactContext ?: return@Function false
+      lightSensor?.stop()
+      val sensor = CarScreen.LightSensor(context) { lux -> sendEvent("onAmbientLight", mapOf("lux" to lux)) }
+      lightSensor = sensor
+      sensor.start()
+    }
+
+    Function("stopLightSensor") { ->
+      lightSensor?.stop()
+      lightSensor = null
+      Unit
+    }
+
+    Events(
+      "onShareReceived",
+      "onSleepTimerEnded",
+      "onWidgetAction",
+      "onWatchMessage",
+      "onWatchUpdateProgress",
+      "onHandFrame",
+      "onHandTrackerState",
+      "onAmbientLight"
+    )
 
     OnCreate { live = this@SelfHostNativeModule }
 
@@ -278,6 +365,9 @@ class SelfHostNativeModule : Module() {
 
     OnDestroy {
       if (live === this@SelfHostNativeModule) live = null
+      HandTracker.stop()
+      lightSensor?.stop()
+      lightSensor = null
       mainHandler.post {
         stopCrossfade()
         cancelSleep()
@@ -285,6 +375,24 @@ class SelfHostNativeModule : Module() {
       equalizers.values.forEach { it.release() }
       equalizers.clear()
     }
+  }
+
+  private val trackerListener = object : HandTracker.Listener {
+    override fun onFrame(frame: Map<String, Any?>) = sendEvent("onHandFrame", frame)
+    override fun onState(state: String, error: String?) = sendEvent("onHandTrackerState", mapOf("state" to state, "error" to error))
+  }
+
+  /** Runs [block] on the main thread with the app's activity; false when there is none (the app is going away). */
+  private fun onActivity(block: (Activity) -> Unit): Boolean {
+    val activity = appContext.currentActivity ?: return false
+    activity.runOnUiThread {
+      try {
+        block(activity)
+      } catch (e: RuntimeException) {
+        // The activity is going away: nothing left to change.
+      }
+    }
+    return true
   }
 
   /** A widget button was pressed: the app's JavaScript does what the same button on the player would. */
@@ -527,6 +635,21 @@ class SelfHostNativeModule : Module() {
       (green[best] / weight[best]).roundToInt(),
       (blue[best] / weight[best]).roundToInt()
     )
+  }
+
+  private fun pixelsOf(source: Bitmap, side: Int): List<Int> {
+    val small = Bitmap.createScaledBitmap(source, side, side, true)
+    val pixels = IntArray(side * side)
+    small.getPixels(pixels, 0, side, 0, 0, side, side)
+    // The source is shared with the notification: only a copy made here may be recycled.
+    if (small !== source) small.recycle()
+    val out = ArrayList<Int>(pixels.size * 3)
+    for (pixel in pixels) {
+      out.add(Color.red(pixel))
+      out.add(Color.green(pixel))
+      out.add(Color.blue(pixel))
+    }
+    return out
   }
 
   // ExoPlayer must be read on its own (main) thread, hence Queues.MAIN on the functions above.

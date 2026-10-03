@@ -3,6 +3,7 @@ import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View, useW
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
+  Car,
   Cast,
   ChevronDown,
   Disc3,
@@ -29,8 +30,9 @@ import { usePlaylistPickerStore } from '@/store/playlistPickerStore'
 import { seekTo } from '@/services/playbackEngine'
 import { fetchLyrics, LyricsResult } from '@/services/lyrics'
 import { lookFor } from '@/services/coverColor'
-import { useCoverColor } from '@/hooks/useCoverColor'
+import { useCoverPalette } from '@/hooks/useCoverPalette'
 import ActionSheet, { ActionSheetItem } from '@/components/ActionSheet'
+import { openCarMode } from '@/components/carmode/CarModeToggle'
 import CoverImage from '@/components/CoverImage'
 import OfflineButton from '@/components/navidrome/OfflineButton'
 import SleepButton from '@/components/nowplaying/SleepButton'
@@ -126,8 +128,9 @@ export default function NowPlayingScreen() {
   const searchArtwork = useArtworkStore((s) => s.search)
 
   const coverUrl = song && client ? (song.coverArt || song.albumId ? client.coverArtUrl(song.coverArt || song.albumId || song.id, 600) : override || null) : null
-  const tint = useCoverColor(coverUrl)
-  const look = useMemo(() => lookFor(tint), [tint])
+  // The whole screen is dressed in the cover's colours: the backdrop, the lyrics, and the controls.
+  const palette = useCoverPalette(coverUrl)
+  const look = useMemo(() => lookFor(palette), [palette])
 
   // The cover is as wide as the page allows, unless the phone is too short to also fit the controls; the
   // player block then fills the screen except for the lyrics card's peek (a sliver on a short phone).
@@ -300,7 +303,8 @@ export default function NowPlayingScreen() {
     ...(song.albumId
       ? [{ label: "Voir l'album", icon: Disc3, onPress: () => router.push({ pathname: '/album/[id]', params: { id: song.albumId! } }) }]
       : []),
-    { label: 'Recherche auto (paroles, pochette)', icon: Sparkles, onPress: handleAutoSearch }
+    { label: 'Recherche auto (paroles, pochette)', icon: Sparkles, onPress: handleAutoSearch },
+    { label: 'Mode voiture', icon: Car, onPress: () => openCarMode((path) => router.push(path)) }
   ]
 
   return (
@@ -344,6 +348,7 @@ export default function NowPlayingScreen() {
         <QueueView
           queue={queue}
           queueIndex={queueIndex}
+          accent={look.accent}
           bottomInset={insets.bottom}
           onPlay={(i) => playQueue(queue, i)}
           onRemove={removeFromQueueAt}
@@ -383,31 +388,31 @@ export default function NowPlayingScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={starred ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                 >
-                  <Heart size={28} color={starred ? colors.accent : '#ffffff'} fill={starred ? colors.accent : 'none'} />
+                  <Heart size={28} color={starred ? look.accent : '#ffffff'} fill={starred ? look.accent : 'none'} />
                 </Pressable>
               </View>
-              <SeekBar />
+              <SeekBar accent={look.accent} />
             </View>
 
             <View>
               <View style={styles.controls}>
                 <Pressable onPress={handleToggleShuffle} hitSlop={12} accessibilityRole="button" accessibilityLabel="Lecture aléatoire">
-                  <Shuffle size={24} color={shuffle ? colors.accent : SOFT_WHITE} />
+                  <Shuffle size={24} color={shuffle ? look.accent : SOFT_WHITE} />
                 </Pressable>
                 <Pressable onPress={handlePrev} hitSlop={12} accessibilityRole="button" accessibilityLabel="Titre précédent">
                   <SkipBack size={34} color="#ffffff" fill="#ffffff" />
                 </Pressable>
-                <Pressable style={styles.playButton} onPress={handleTogglePlay} accessibilityRole="button" accessibilityLabel={isPlaying ? 'Pause' : 'Lecture'}>
-                  {isPlaying ? <Pause size={30} color="#000000" fill="#000000" /> : <Play size={30} color="#000000" fill="#000000" />}
+                <Pressable style={[styles.playButton, { backgroundColor: look.accent }]} onPress={handleTogglePlay} accessibilityRole="button" accessibilityLabel={isPlaying ? 'Pause' : 'Lecture'}>
+                  {isPlaying ? <Pause size={30} color={look.onAccent} fill={look.onAccent} /> : <Play size={30} color={look.onAccent} fill={look.onAccent} />}
                 </Pressable>
                 <Pressable onPress={handleNext} hitSlop={12} accessibilityRole="button" accessibilityLabel="Titre suivant">
                   <SkipForward size={34} color="#ffffff" fill="#ffffff" />
                 </Pressable>
                 <Pressable onPress={cycleRepeat} hitSlop={12} accessibilityRole="button" accessibilityLabel="Répétition">
                   {repeatMode === 'one' ? (
-                    <Repeat1 size={24} color={colors.accent} />
+                    <Repeat1 size={24} color={look.accent} />
                   ) : (
-                    <Repeat size={24} color={repeatMode === 'all' ? colors.accent : SOFT_WHITE} />
+                    <Repeat size={24} color={repeatMode === 'all' ? look.accent : SOFT_WHITE} />
                   )}
                 </Pressable>
               </View>
@@ -420,9 +425,9 @@ export default function NowPlayingScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Changer d'appareil de sortie"
                 >
-                  <Cast size={22} color={isRemote ? colors.accent : SOFT_WHITE} />
+                  <Cast size={22} color={isRemote ? look.accent : SOFT_WHITE} />
                   {isRemote && (
-                    <Text style={styles.deviceName} numberOfLines={1}>
+                    <Text style={[styles.deviceName, { color: look.accent }]} numberOfLines={1}>
                       {deviceName}
                     </Text>
                   )}
@@ -430,11 +435,11 @@ export default function NowPlayingScreen() {
                 <View style={styles.bottomRight}>
                   {!isRemote && (
                     <Pressable onPress={cycleSpeed} hitSlop={10} accessibilityRole="button" accessibilityLabel="Vitesse de lecture">
-                      <Text style={[styles.speed, playbackRate !== 1 && styles.speedActive]}>{playbackRate}x</Text>
+                      <Text style={[styles.speed, playbackRate !== 1 && { color: look.accent }]}>{playbackRate}x</Text>
                     </Pressable>
                   )}
-                  {!isRemote && <SleepButton idleColor={SOFT_WHITE} />}
-                  <OfflineButton song={song} client={client} size={22} idleColor={SOFT_WHITE} />
+                  {!isRemote && <SleepButton idleColor={SOFT_WHITE} activeColor={look.accent} />}
+                  <OfflineButton song={song} client={client} size={22} idleColor={SOFT_WHITE} activeColor={look.accent} />
                   <Pressable onPress={() => setView('queue')} hitSlop={10} accessibilityRole="button" accessibilityLabel="File de lecture">
                     <ListMusic size={22} color={SOFT_WHITE} />
                   </Pressable>
@@ -515,12 +520,11 @@ const styles = StyleSheet.create({
   title: { color: '#ffffff', fontSize: 23, fontWeight: '800' },
   artist: { color: 'rgba(255,255,255,0.7)', fontSize: 16, marginTop: 2 },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg },
-  playButton: { width: 68, height: 68, borderRadius: 34, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
+  playButton: { width: 68, height: 68, borderRadius: 34, alignItems: 'center', justifyContent: 'center' },
   bottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xl, minHeight: 32 },
   deviceButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
-  deviceName: { color: colors.accent, fontSize: 12, fontWeight: '700', flexShrink: 1 },
+  deviceName: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
   bottomRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   speed: { color: SOFT_WHITE, fontSize: 13, fontWeight: '800', minWidth: 32, textAlign: 'center' },
-  speedActive: { color: colors.accent },
   lyricsWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md }
 })

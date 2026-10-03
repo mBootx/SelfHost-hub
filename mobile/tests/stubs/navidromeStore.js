@@ -9,6 +9,10 @@ exports.useNavidromeStore = miniStore({
   currentTime: 0,
   duration: 0,
   isPlaying: false,
+  volume: 0.8,
+  setVolume(v) {
+    exports.useNavidromeStore.setState({ volume: v })
+  },
   refreshRecentlyPlayed() {
     fake.refreshes = (fake.refreshes || 0) + 1
   }

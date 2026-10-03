@@ -1,5 +1,27 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+  <!--
+    The car mode reads hand gestures from the front camera (HandTracker), on the phone only. Asked for the first time
+    the car mode starts; without it the car mode keeps its buttons. A phone without a front camera can still install the app.
+  -->
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+  <uses-feature android:name="android.hardware.camera" android:required="false" />
+
   <application>
+    <!--
+      MediaPipe (the hand tracking) sends statistics about how its APIs are used to Google, through Google's data
+      transport and its "cct" backend; the camera pictures never leave the phone. Removing the backend's registration
+      leaves the data transport with nowhere to send them, so nothing goes out.
+    -->
+    <service
+      android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+      tools:node="merge">
+      <meta-data
+        android:name="backend:com.google.android.datatransport.cct.CctBackendFactory"
+        tools:node="remove" />
+    </service>
+
     <!--
       "SelfHost Hub" in the share sheet of other apps, for files (and text, which becomes a note). It opens the
       app's own activity; the module reads what was sent (SelfHostNative.consumeSharedContent) and the app

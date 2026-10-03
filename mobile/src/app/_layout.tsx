@@ -23,6 +23,7 @@ import { useUpdateStore } from '@/store/updateStore'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
 import { startAppLock } from '@/store/appLockStore'
 import { useAudioSettingsStore } from '@/store/audioSettingsStore'
+import { useCarModeStore } from '@/store/carModeStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 import { useDowntifyStore } from '@/store/downtifyStore'
@@ -70,6 +71,7 @@ export default function RootLayout() {
   const loadHistory = useHistoryStore((s) => s.loadFromDisk)
   const checkForUpdate = useUpdateStore((s) => s.check)
   const loadAudioSettings = useAudioSettingsStore((s) => s.load)
+  const loadCarMode = useCarModeStore((s) => s.load)
   const checkWhatsNew = useWhatsNewStore((s) => s.check)
 
   useEffect(() => {
@@ -84,6 +86,7 @@ export default function RootLayout() {
     loadHistory()
     loadPlaybackPrefs()
     loadAudioSettings()
+    loadCarMode()
     startPlaybackMemory()
     startScrobbler()
     startDownloadWatcher()
@@ -138,6 +141,7 @@ export default function RootLayout() {
         <Stack.Screen name="diagnostics" options={detailHeader} />
         <Stack.Screen name="trash" options={detailHeader} />
         <Stack.Screen name="now-playing" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="car-mode" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
       </Stack>
       <PlayerOverlay />
       <UpdatePrompt />

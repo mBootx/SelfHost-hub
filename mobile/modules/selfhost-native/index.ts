@@ -1,4 +1,6 @@
-import { requireOptionalNativeModule } from 'expo'
+import type { ComponentType } from 'react'
+import type { ViewProps } from 'react-native'
+import { requireNativeView, requireOptionalNativeModule } from 'expo'
 import type { AudioPlayer } from 'expo-audio'
 
 export interface EqualizerBands {
@@ -82,12 +84,20 @@ interface SelfHostNative {
     (event: 'onWidgetAction', listener: (payload: { action: string }) => void): { remove: () => void }
     (event: 'onWatchMessage', listener: (payload: WatchMessage) => void): { remove: () => void }
     (event: 'onWatchUpdateProgress', listener: (payload: { sent: number; total: number }) => void): { remove: () => void }
+    (event: 'onHandFrame', listener: (payload: NativeHandFrame) => void): { remove: () => void }
+    (event: 'onHandTrackerState', listener: (payload: HandTrackerState) => void): { remove: () => void }
+    (event: 'onAmbientLight', listener: (payload: { lux: number }) => void): { remove: () => void }
   }
   /**
    * The dominant colour of the cover at url ("#rrggbb"), or null if it can't be had. Uses the same cover cache
    * as the Now Bar. Missing from older installed builds.
    */
   getCoverColor?(url: string): Promise<string | null>
+  /**
+   * A `side` by `side` copy of the cover at url, as r, g, b numbers one pixel after the other (the Now Playing screen's
+   * palette is read from it), or null if it can't be had. Same cover cache as the Now Bar. Missing from older installed builds.
+   */
+  getCoverPixels?(url: string, side: number): Promise<number[] | null>
   /** The Wear OS watches connected to this phone, and whether each has the SelfHost Hub watch app. Missing from older installed builds. */
   getWatches?(): Promise<WatchInfo[]>
   /**
@@ -106,6 +116,57 @@ interface SelfHostNative {
    * the watch cannot be reached or closes the channel. Progress comes as onWatchUpdateProgress. Missing from builds before 2.5.2.
    */
   sendUpdateToWatch?(nodeId: string, fileUri: string, header: string): Promise<void>
+  /** The camera permission (for the car mode's gestures), and asking for it. Missing from older installed builds. */
+  getCameraPermission?(): Promise<PermissionAnswer>
+  requestCameraPermission?(): Promise<PermissionAnswer>
+  /**
+   * Starts the front camera and MediaPipe's hand landmarker at about `fps` frames a second (or changes the rate of one
+   * already running). False when it cannot start: no screen, or no permission. Frames come as onHandFrame, how the
+   * tracker is doing as onHandTrackerState. Missing from older installed builds.
+   */
+  startHandTracking?(fps: number): boolean
+  stopHandTracking?(): void
+  /** What the car mode does around the screen (each false when there is no activity to change). */
+  setKeepScreenOn?(on: boolean): boolean
+  /** 0 to 1, or -1 for the phone's own brightness. */
+  setScreenBrightness?(level: number): boolean
+  setScreenOrientation?(mode: 'portrait' | 'landscape' | 'auto' | 'app'): boolean
+  /** Screen awake, brightness and orientation back as they were before the car mode. */
+  restoreCarScreen?(): boolean
+  /** One step of the phone's media volume up (+1) or down (-1), with its volume panel; the volume after it (0 to 1), or -1. */
+  stepMediaVolume?(direction: number): number
+  /** The ambient light sensor, as onAmbientLight (lux, at most twice a second). False without a sensor. */
+  startLightSensor?(): boolean
+  stopLightSensor?(): void
+}
+
+/** An answer about a permission, as Expo modules give it. */
+export interface PermissionAnswer {
+  status: 'granted' | 'denied' | 'undetermined'
+  granted: boolean
+  canAskAgain: boolean
+}
+
+/** One hand in a camera frame: 21 points (x, y, z each; x and y from 0 to 1 across the mirrored, upright picture). */
+export interface NativeHand {
+  score: number
+  side: string
+  points: number[]
+}
+
+export interface NativeHandFrame {
+  /** Milliseconds since the phone started (only goes forward). */
+  t: number
+  /** How long the landmarker took with the frame, in milliseconds. */
+  ms: number
+  width: number
+  height: number
+  hands: NativeHand[]
+}
+
+export interface HandTrackerState {
+  state: 'running' | 'stopped' | 'error'
+  error: string | null
 }
 
 /** What the watch sent over the data layer: a request for the state, or a command (`data` is the JSON text). */
@@ -132,4 +193,12 @@ export interface WatchOutcome {
 }
 
 /** Null when the native side isn't linked (Expo Go, web), so callers can hide the feature instead of crashing. */
-export default requireOptionalNativeModule<SelfHostNative>('SelfHostNative')
+const native = requireOptionalNativeModule<SelfHostNative>('SelfHostNative')
+export default native
+
+/**
+ * What the front camera sees, for the car mode's test mode (HandCameraPreview.kt); null in a build without it. While it
+ * is on screen the hand tracker feeds it too.
+ */
+export const HandCameraPreview: ComponentType<ViewProps> | null =
+  native && typeof native.startHandTracking === 'function' ? requireNativeView<ViewProps>('SelfHostNative') : null

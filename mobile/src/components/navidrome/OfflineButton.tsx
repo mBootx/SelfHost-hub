@@ -11,9 +11,11 @@ interface Props {
   size?: number
   /** Colour of the not-yet-downloaded icon: the muted grey is too dim over a coloured backdrop. */
   idleColor?: string
+  /** Colour of the downloaded tick and the spinner (the cover's, on the player). */
+  activeColor?: string
 }
 
-export default function OfflineButton({ song, client, size = 18, idleColor = colors.textMuted }: Props) {
+export default function OfflineButton({ song, client, size = 18, idleColor = colors.textMuted, activeColor = colors.accent }: Props) {
   const isOffline = useOfflineStore((s) => !!s.tracks[song.id])
   const downloading = useOfflineStore((s) => s.downloading[song.id])
   const downloadTrack = useOfflineStore((s) => s.downloadTrack)
@@ -22,7 +24,7 @@ export default function OfflineButton({ song, client, size = 18, idleColor = col
   if (downloading) {
     return (
       <Pressable style={styles.button} disabled hitSlop={8}>
-        <ActivityIndicator size="small" color={colors.accent} />
+        <ActivityIndicator size="small" color={activeColor} />
       </Pressable>
     )
   }
@@ -30,7 +32,7 @@ export default function OfflineButton({ song, client, size = 18, idleColor = col
   if (isOffline) {
     return (
       <Pressable style={styles.button} onPress={() => removeOffline(song.id)} hitSlop={8}>
-        <CircleCheck size={size} color={colors.accent} />
+        <CircleCheck size={size} color={activeColor} />
       </Pressable>
     )
   }

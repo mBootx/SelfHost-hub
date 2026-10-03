@@ -14,9 +14,10 @@ export function formatTime(sec: number): string {
 
 /**
  * The seek bar and the two times under it. It owns the playhead subscription, so the cover, the title and
- * the buttons around it don't redraw four times a second. Follows whichever device is selected.
+ * the buttons around it don't redraw four times a second. Follows whichever device is selected; the part already
+ * played is in the cover's colour.
  */
-export default function SeekBar() {
+export default function SeekBar({ accent }: { accent: string }) {
   const { currentTime, duration, isRemote } = usePlayhead()
   const setProgress = useNavidromeStore((s) => s.setProgress)
   const sendCommand = useRemoteStore((s) => s.sendCommand)
@@ -28,9 +29,9 @@ export default function SeekBar() {
         minimumValue={0}
         maximumValue={duration || 0}
         value={currentTime}
-        minimumTrackTintColor="#ffffff"
+        minimumTrackTintColor={accent}
         maximumTrackTintColor="rgba(255,255,255,0.3)"
-        thumbTintColor="#ffffff"
+        thumbTintColor={accent}
         accessibilityLabel="Position dans le titre"
         onSlidingComplete={(value) => {
           if (isRemote) {

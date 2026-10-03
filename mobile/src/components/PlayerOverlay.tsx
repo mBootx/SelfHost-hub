@@ -25,12 +25,13 @@ export default function PlayerOverlay() {
 
   const root = segments[0] as string | undefined
   const onTabs = root === '(tabs)'
-  const onNowPlaying = root === 'now-playing'
+  // The full-screen player and the car mode have their own controls.
+  const fullScreen = root === 'now-playing' || root === 'car-mode'
 
   // The tab bar is only drawn on tab routes; elsewhere the overlay owns the
   // bottom inset itself.
   const bottom = onTabs ? layout.tabBar + insets.bottom : insets.bottom
-  const hideChrome = onNowPlaying || keyboardVisible
+  const hideChrome = fullScreen || keyboardVisible
 
   return (
     <>

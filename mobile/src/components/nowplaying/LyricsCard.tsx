@@ -63,18 +63,18 @@ export default function LyricsCard({ look, lines, plain, loading, searching, onO
             <MicVocal size={26} color="rgba(255,255,255,0.75)" />
             <Text style={styles.emptyTitle}>Aucune parole trouvée</Text>
             <Pressable
-              style={({ pressed }) => [styles.searchButton, (searching || pressed) && styles.pressed]}
+              style={({ pressed }) => [styles.searchButton, { backgroundColor: look.accent }, (searching || pressed) && styles.pressed]}
               onPress={onAutoSearch}
               disabled={searching}
               accessibilityRole="button"
               accessibilityLabel="Recherche automatique"
             >
               {searching ? (
-                <ActivityIndicator color="#000000" />
+                <ActivityIndicator color={look.onAccent} />
               ) : (
                 <>
-                  <Sparkles size={15} color="#000000" />
-                  <Text style={styles.searchButtonText}>Recherche auto</Text>
+                  <Sparkles size={15} color={look.onAccent} />
+                  <Text style={[styles.searchButtonText, { color: look.onAccent }]}>Recherche auto</Text>
                 </>
               )}
             </Pressable>
@@ -100,12 +100,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    backgroundColor: '#ffffff',
     borderRadius: radius.full,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm + 2,
     marginTop: spacing.xs
   },
-  searchButtonText: { color: '#000000', fontWeight: '700', fontSize: 14 },
+  searchButtonText: { fontWeight: '700', fontSize: 14 },
   pressed: { opacity: 0.6 }
 })

@@ -10,7 +10,16 @@ function presetLabel(minutes: number): string {
 }
 
 /** The moon on the player: sets the sleep timer, and says how long is left on it. */
-export default function SleepButton({ idleColor, size = 22 }: { idleColor: string; size?: number }) {
+export default function SleepButton({
+  idleColor,
+  activeColor = colors.accent,
+  size = 22
+}: {
+  idleColor: string
+  /** The colour it takes while a timer is set (the cover's, on the player). */
+  activeColor?: string
+  size?: number
+}) {
   const mode = useSleepTimerStore((s) => s.mode)
   const endsAt = useSleepTimerStore((s) => s.endsAt)
   const startTimer = useSleepTimerStore((s) => s.startTimer)
@@ -46,8 +55,12 @@ export default function SleepButton({ idleColor, size = 22 }: { idleColor: strin
         accessibilityRole="button"
         accessibilityLabel={active ? `Minuterie de sommeil active${remaining ? `, ${remaining}` : ''}` : 'Minuterie de sommeil'}
       >
-        <Moon size={size} color={active ? colors.accent : idleColor} fill={active ? colors.accent : 'none'} />
-        {remaining ? <Text style={styles.remaining}>{remaining}</Text> : mode === 'track' ? <Text style={styles.remaining}>fin du titre</Text> : null}
+        <Moon size={size} color={active ? activeColor : idleColor} fill={active ? activeColor : 'none'} />
+        {remaining ? (
+          <Text style={[styles.remaining, { color: activeColor }]}>{remaining}</Text>
+        ) : mode === 'track' ? (
+          <Text style={[styles.remaining, { color: activeColor }]}>fin du titre</Text>
+        ) : null}
       </Pressable>
       <ActionSheet visible={open} title={title} items={items} onClose={() => setOpen(false)} />
     </>
@@ -56,5 +69,5 @@ export default function SleepButton({ idleColor, size = 22 }: { idleColor: strin
 
 const styles = StyleSheet.create({
   button: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  remaining: { color: colors.accent, fontSize: 12, fontWeight: '700' }
+  remaining: { fontSize: 12, fontWeight: '700' }
 })
