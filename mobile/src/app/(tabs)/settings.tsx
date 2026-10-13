@@ -8,9 +8,11 @@ import { useWhatsNewStore } from '@/store/whatsNewStore'
 import AppearanceSection from '@/components/settings/AppearanceSection'
 import PlaybackSection from '@/components/settings/PlaybackSection'
 import CarModeSection from '@/components/settings/CarModeSection'
+import CoverStorageRow from '@/components/settings/CoverStorageRow'
 import CameraBackupSection from '@/components/settings/CameraBackupSection'
 import AppLockSection from '@/components/settings/AppLockSection'
 import WatchSection from '@/components/settings/WatchSection'
+import WrappedSection from '@/components/settings/WrappedSection'
 import { useUpdateStore } from '@/store/updateStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
@@ -308,6 +310,7 @@ export default function SettingsTab() {
           </>
         )}
 
+        <WrappedSection />
         <AppearanceSection />
         <PlaybackSection />
         <CarModeSection />
@@ -339,6 +342,8 @@ export default function SettingsTab() {
             </Pressable>
           )}
         </View>
+
+        <CoverStorageRow />
 
         <View style={styles.sectionSpacer}>
           <SectionTitle>Application</SectionTitle>

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { File, Directory, Paths } from 'expo-file-system'
 import { NavidromeClient, NDSong } from '@/services/navidrome'
 import { storage } from '@/services/storage'
+import { SONG_COVER_SIZES, storeCover } from '@/services/coverStore'
 
 export interface OfflineTrack {
   id: string
@@ -101,6 +102,8 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
         duration: song.duration,
         filename
       }
+      // Its cover too, at every size the app shows, so the song looks the same with no network.
+      if (track.coverArt) for (const size of SONG_COVER_SIZES) void storeCover(client.coverArtUrl(track.coverArt, size))
       set((s) => {
         const { [song.id]: _removed, ...downloading } = s.downloading
         const tracks = { ...s.tracks, [song.id]: track }

@@ -55,7 +55,10 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import com.selfhosthub.wear.core.formatClock
 import com.selfhosthub.wear.ui.R
+import com.selfhosthub.wear.ui.common.CoverBackdrop
 import com.selfhosthub.wear.ui.common.CoverBox
+import com.selfhosthub.wear.ui.common.CoverLook
+import com.selfhosthub.wear.ui.common.CoverTheme
 import com.selfhosthub.wear.ui.common.rememberHaptics
 import com.selfhosthub.wear.ui.theme.WatchColors
 
@@ -72,13 +75,16 @@ class NowPlayingActions(
     val onVolumeStep: (Int) -> Unit,
     val onLibrary: () -> Unit,
     val onDevices: () -> Unit,
-    val onSettings: () -> Unit
+    val onSettings: () -> Unit,
+    /** Adds the song playing to the favourites (never takes it out). */
+    val onLike: () -> Unit = {}
 )
 
 /**
  * The first screen: what is playing, where it is in the song, and the three big buttons. Swiping up leads to the
  * second page, with the shuffle and repeat buttons, the volume, which player the controls act on, and the way into
- * the library and the settings. The crown changes the volume from either page.
+ * the library and the settings. The crown changes the volume from either page. The cover of the song, blurred, is
+ * behind both pages, and the controls take its colour (`look`; black and green without one).
  */
 @Composable
 fun NowPlayingContent(
@@ -87,6 +93,9 @@ fun NowPlayingContent(
     actions: NowPlayingActions,
     volumeOverlayPercent: Int?,
     modifier: Modifier = Modifier,
+    look: CoverLook? = null,
+    /** The song playing was liked from the watch (this session). */
+    liked: Boolean = false,
     onCoverClick: () -> Unit = {}
 ) {
     val pager = rememberPagerState(pageCount = { 2 })
@@ -103,11 +112,16 @@ fun NowPlayingContent(
             .focusRequester(focus)
             .focusable()
     ) {
-        VerticalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
-            if (page == 0) PlayerPage(ui, cover, actions, onCoverClick) else OptionsPage(ui, actions)
+        CoverBackdrop(if (ui.hasSong) look else null)
+        CoverTheme(if (ui.hasSong) look?.colours else null) {
+            Box(Modifier.fillMaxSize()) {
+                VerticalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+                    if (page == 0) PlayerPage(ui, cover, actions, onCoverClick) else OptionsPage(ui, actions, liked)
+                }
+                PageDots(pager.currentPage, pager.pageCount, Modifier.align(Alignment.CenterEnd).padding(end = 5.dp))
+                if (volumeOverlayPercent != null) VolumeOverlay(volumeOverlayPercent)
+            }
         }
-        PageDots(pager.currentPage, pager.pageCount, Modifier.align(Alignment.CenterEnd).padding(end = 5.dp))
-        if (volumeOverlayPercent != null) VolumeOverlay(volumeOverlayPercent)
     }
 }
 
@@ -142,7 +156,7 @@ private fun PlayerPage(ui: NowPlayingUi, cover: ImageBitmap?, actions: NowPlayin
         Text(
             ui.statusLine ?: ui.artist.orEmpty(),
             style = MaterialTheme.typography.caption2,
-            color = if (ui.statusLine != null) WatchColors.Warning else WatchColors.OnSurfaceMuted,
+            color = if (ui.statusLine != null) WatchColors.Warning else MaterialTheme.colors.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
@@ -159,8 +173,8 @@ private fun PlayerPage(ui: NowPlayingUi, cover: ImageBitmap?, actions: NowPlayin
             actions.onSeek(ControlMath.secondsFor(fraction, ui.duration))
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatClock(shownPosition), style = MaterialTheme.typography.caption3, color = WatchColors.OnSurfaceMuted)
-            Text(formatClock(ui.duration), style = MaterialTheme.typography.caption3, color = WatchColors.OnSurfaceMuted)
+            Text(formatClock(shownPosition), style = MaterialTheme.typography.caption3, color = MaterialTheme.colors.onSurfaceVariant)
+            Text(formatClock(ui.duration), style = MaterialTheme.typography.caption3, color = MaterialTheme.colors.onSurfaceVariant)
         }
         Spacer(Modifier.height(2.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -224,7 +238,7 @@ private fun TransportButton(icon: ImageVector, description: String, size: Dp, fi
         colors = if (filled) ButtonDefaults.primaryButtonColors() else ButtonDefaults.iconButtonColors(),
         shape = CircleShape
     ) {
-        Icon(icon, contentDescription = description, modifier = Modifier.size(size * 0.55f), tint = if (filled) Color.Black else WatchColors.OnSurface)
+        Icon(icon, contentDescription = description, modifier = Modifier.size(size * 0.55f), tint = if (filled) MaterialTheme.colors.onPrimary else WatchColors.OnSurface)
     }
 }
 
@@ -235,12 +249,12 @@ private fun VolumeOverlay(percent: Int, modifier: Modifier = Modifier) {
         CircularProgressIndicator(
             progress = percent / 100f,
             modifier = Modifier.fillMaxSize().padding(3.dp),
-            indicatorColor = WatchColors.Accent,
+            indicatorColor = MaterialTheme.colors.primary,
             trackColor = Color(0xFF333333),
             strokeWidth = 6.dp
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = WatchColors.Accent, modifier = Modifier.size(22.dp))
+            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = MaterialTheme.colors.primary, modifier = Modifier.size(22.dp))
             Text(stringResource(R.string.volume_percent, percent), style = MaterialTheme.typography.display2)
         }
     }
@@ -251,7 +265,7 @@ private fun VolumeOverlay(percent: Int, modifier: Modifier = Modifier) {
 private fun PageDots(current: Int, count: Int, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
         repeat(count) { index ->
-            Box(Modifier.size(5.dp).background(if (index == current) WatchColors.Accent else Color(0xFF555555), CircleShape))
+            Box(Modifier.size(5.dp).background(if (index == current) MaterialTheme.colors.primary else Color(0xFF555555), CircleShape))
         }
     }
 }

@@ -47,6 +47,14 @@ interface SelfHostNative {
   /** Stops a crossfade where it is, leaving the volumes as they are. */
   cancelCrossfade?(): void
   /**
+   * Asks for the app's audio focus before the music plays (held for the music as a whole, kept while paused):
+   * 'granted', 'delayed' (a call is on; onAudioFocus 'resume' comes when it ends) or 'failed'. Missing from older
+   * installed builds, where expo-audio handles focus itself.
+   */
+  requestAudioFocus?(): 'granted' | 'delayed' | 'failed'
+  /** Gives the audio focus back: nothing is left to play. */
+  abandonAudioFocus?(): void
+  /**
    * Hides the app from the recents screen (and, before Android 13, from screenshots) while the app lock is on.
    * Returns false when there is no activity to apply it to. Missing from older installed builds.
    */
@@ -87,6 +95,11 @@ interface SelfHostNative {
     (event: 'onHandFrame', listener: (payload: NativeHandFrame) => void): { remove: () => void }
     (event: 'onHandTrackerState', listener: (payload: HandTrackerState) => void): { remove: () => void }
     (event: 'onAmbientLight', listener: (payload: { lux: number }) => void): { remove: () => void }
+    /**
+     * Another app took the sound for a moment (a call, a voice message: 'interrupt'), gave it back ('resume'), or
+     * started its own playback ('lost').
+     */
+    (event: 'onAudioFocus', listener: (payload: { change: 'interrupt' | 'resume' | 'lost' }) => void): { remove: () => void }
   }
   /**
    * The dominant colour of the cover at url ("#rrggbb"), or null if it can't be had. Uses the same cover cache
@@ -110,6 +123,8 @@ interface SelfHostNative {
    * app. Resolves with how many watches it went to (0: none is connected). Missing from older installed builds.
    */
   sendToWatch?(path: string, json: string): Promise<number>
+  /** The same, to the one watch `nodeId` (the answer to its request). Missing from builds before 2.7.0. */
+  sendToWatchNode?(nodeId: string, path: string, json: string): Promise<number>
   /**
    * Sends the APK at `fileUri` to the watch `nodeId` over a data layer channel, after `header` (one line of JSON, see
    * services/watchUpdateProtocol.ts). Resolves once every byte was handed to the channel, rejects with a sentence when

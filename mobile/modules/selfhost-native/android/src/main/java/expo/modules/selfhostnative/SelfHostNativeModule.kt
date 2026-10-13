@@ -124,6 +124,18 @@ class SelfHostNativeModule : Module() {
       Unit
     }
 
+    // The app's audio focus, held for the music as a whole (see MusicFocus). What other apps do with it comes back
+    // as onAudioFocus.
+    Function("requestAudioFocus") { ->
+      val context = appContext.reactContext ?: return@Function "failed"
+      MusicFocus.request(context)
+    }
+
+    Function("abandonAudioFocus") { ->
+      MusicFocus.abandon()
+      Unit
+    }
+
     // With the app lock on, the recents screen must not show the last screen of the app. Android 13 can turn the
     // preview off by itself; before that the whole window is marked secure, which also blocks screenshots.
     Function("setPrivacyScreen") { enabled: Boolean ->
@@ -210,21 +222,10 @@ class SelfHostNativeModule : Module() {
 
     // The live link with the watch (services/watchLink.ts): snapshots of the players go out here to every watch that
     // has the app (resolves with how many), and what the watch sends comes back as onWatchMessage (see WatchLinkService).
-    AsyncFunction("sendToWatch") { path: String, json: String, promise: Promise ->
-      val context = appContext.reactContext
-      if (context == null) {
-        promise.resolve(0)
-        return@AsyncFunction
-      }
-      try {
-        WatchBridge(context).push(path, json) { count, error ->
-          if (error != null) promise.reject("E_WATCH", error, null) else promise.resolve(count)
-        }
-      } catch (e: Exception) {
-        // No Google Play services (or no Wear OS API) on this phone.
-        promise.reject("E_WATCH", e.message ?: "Envoi impossible", e)
-      }
-    }
+    AsyncFunction("sendToWatch") { path: String, json: String, promise: Promise -> pushToWatch(path, json, null, promise) }
+
+    // The answer to one watch's own request: straight to it, no looking up which watches have the app.
+    AsyncFunction("sendToWatchNode") { nodeId: String, path: String, json: String, promise: Promise -> pushToWatch(path, json, nodeId, promise) }
 
     // Updating the watch app (services/watchUpdate.ts): the APK goes to one watch over a data layer channel, which takes a
     // while over Bluetooth, so it runs on a thread of its own; progress comes back as onWatchUpdateProgress.
@@ -318,10 +319,14 @@ class SelfHostNativeModule : Module() {
       "onWatchUpdateProgress",
       "onHandFrame",
       "onHandTrackerState",
-      "onAmbientLight"
+      "onAmbientLight",
+      "onAudioFocus"
     )
 
-    OnCreate { live = this@SelfHostNativeModule }
+    OnCreate {
+      live = this@SelfHostNativeModule
+      MusicFocus.onChange = { change -> live?.sendEvent("onAudioFocus", mapOf("change" to change)) }
+    }
 
     // The home-screen widget shows what JS saves here (the song playing); its buttons come back as onWidgetAction.
     Function("updateWidget") { title: String, artist: String, coverUrl: String, playing: Boolean ->
@@ -365,6 +370,8 @@ class SelfHostNativeModule : Module() {
 
     OnDestroy {
       if (live === this@SelfHostNativeModule) live = null
+      // The app's players are stopped with it (expo-audio): the focus goes back.
+      MusicFocus.abandon()
       HandTracker.stop()
       lightSensor?.stop()
       lightSensor = null
@@ -393,6 +400,23 @@ class SelfHostNativeModule : Module() {
       }
     }
     return true
+  }
+
+  /** One message of the live link to the watches (or to the one `nodeId`); resolves with how many it went to. */
+  private fun pushToWatch(path: String, json: String, nodeId: String?, promise: Promise) {
+    val context = appContext.reactContext
+    if (context == null) {
+      promise.resolve(0)
+      return
+    }
+    try {
+      WatchBridge(context).push(path, json, nodeId) { count, error ->
+        if (error != null) promise.reject("E_WATCH", error, null) else promise.resolve(count)
+      }
+    } catch (e: Exception) {
+      // No Google Play services (or no Wear OS API) on this phone.
+      promise.reject("E_WATCH", e.message ?: "Envoi impossible", e)
+    }
   }
 
   /** A widget button was pressed: the app's JavaScript does what the same button on the player would. */

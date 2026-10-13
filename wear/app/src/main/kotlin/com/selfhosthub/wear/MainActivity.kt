@@ -2,6 +2,7 @@ package com.selfhosthub.wear
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -13,6 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.ambient.AmbientLifecycleObserver
+import com.selfhosthub.wear.core.LinkProtocol
 import com.selfhosthub.wear.service.WatchGraph
 import com.selfhosthub.wear.service.WatchGraphProvider
 import com.selfhosthub.wear.service.link.LinkLeases
@@ -24,6 +26,8 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val ambient = MutableStateFlow(AmbientState())
+    /** Grows each time the app is opened again for the player (the phone opening it when music starts). */
+    private val playerRequests = MutableStateFlow(0)
     private var lease: LinkLeases.Lease? = null
 
     // Lint mistakes this for a Fragment calling registerForActivityResult; a ComponentActivity has always had it.
@@ -65,15 +69,22 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val state by ambient.collectAsStateWithLifecycle()
-            WatchApp(graph, state, BuildConfig.VERSION_NAME)
+            val requests by playerRequests.collectAsStateWithLifecycle()
+            WatchApp(graph, state, BuildConfig.VERSION_NAME, requests)
         }
         refreshLibrary()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.data?.toString()?.startsWith(LinkProtocol.OPEN_URI) == true) playerRequests.update { it + 1 }
     }
 
     override fun onStart() {
         super.onStart()
         // The screen is up: staying in touch with the phone (asking how the players are) is wanted for as long as it is.
         lease = graph.linkLeases.acquire()
+        graph.appVisible = true
         refreshLibrary()
     }
 
@@ -86,6 +97,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         lease?.close()
         lease = null
+        graph.appVisible = false
         super.onStop()
     }
 

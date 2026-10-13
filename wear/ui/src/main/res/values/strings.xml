@@ -74,8 +74,11 @@
     <string name="cache_size">%1$s sur la montre</string>
     <string name="clear_cache">Vider le cache</string>
     <string name="clear_cache_confirm">Les pochettes et la bibliothèque seront téléchargées de nouveau.</string>
-    <string name="auto_launch">Proposer le lecteur</string>
-    <string name="auto_launch_hint">Quand la musique démarre</string>
+    <string name="auto_launch">Ouvrir le lecteur</string>
+    <string name="auto_launch_hint">Quand la musique démarre après un silence</string>
+    <string name="builtin_player">Lecteur intégré de la montre</string>
+    <string name="builtin_player_hint">Il s\'ouvre lui aussi quand la musique démarre. Pour que SelfHost Hub s\'ouvre à sa place, désactivez l\'ouverture automatique des commandes multimédias dans les paramètres de la montre.</string>
+    <string name="watch_settings">Paramètres de la montre</string>
     <string name="forget_setup">Oublier la configuration</string>
     <string name="forget_setup_confirm">La montre n\'aura plus accès à la musique tant que le téléphone ne la reconfigure pas.</string>
     <string name="confirm">Confirmer</string>
@@ -101,4 +104,7 @@
         <item quantity="one">%d titre</item>
         <item quantity="other">%d titres</item>
     </plurals>
+    <string name="like">J’aime</string>
+    <string name="liked">Dans vos favoris</string>
+    <string name="like_failed">Favoris injoignables</string>
 </resources>

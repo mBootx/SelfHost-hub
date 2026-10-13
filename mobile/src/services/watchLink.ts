@@ -331,6 +331,26 @@ async function push(force: boolean): Promise<void> {
 }
 
 /**
+ * Answers one watch's request: straight to that watch (it just spoke, so there is no looking it up), and whatever else
+ * is being sent at the moment, which used to hold the answer back. An older build without the direct way, or a failed
+ * answer, falls back to a push to every watch.
+ */
+async function answer(nodeId: string): Promise<void> {
+  const native = SelfHostNative
+  if (!native?.sendToWatchNode || !nodeId) return push(true)
+  const now = Date.now()
+  const snapshot = currentSnapshot()
+  try {
+    const count = await native.sendToWatchNode(nodeId, LINK_PATHS.snapshot, JSON.stringify(snapshot))
+    useWatchLinkStatus.setState({ lastPushAt: Date.now(), watches: Math.max(count, useWatchLinkStatus.getState().watches ?? 0), error: null })
+    if (count > 0) lastPushed = { at: now, snapshot, signature: snapshotSignature(snapshot) }
+  } catch (err) {
+    useWatchLinkStatus.setState({ error: describeError(err) })
+    return push(true)
+  }
+}
+
+/**
  * The watch asks while the link to the PC is down: this phone tries to get it back (what opening the app does), at most
  * once in a while, so that a PC that is off is not looked for on the network every time the watch wakes up.
  */
@@ -357,7 +377,7 @@ export function handleWatchMessage(message: WatchMessage): void {
     const app = parseWatchRequest(message.data)
     if (app) useWatchUpdate.getState().noteWatch(message.nodeId, app)
     reconnectPc()
-    void push(true)
+    void answer(message.nodeId)
     return
   }
   if (message.path === UPDATE_PATHS.status) {
@@ -374,9 +394,10 @@ export function handleWatchMessage(message: WatchMessage): void {
   const outcome = applyWatchCommand(command)
   if (outcome === 'pc-offline' || outcome === 'unknown-player') {
     logEvent('watch', `Commande « ${command.action} » pour ${command.targetId} impossible : ${outcome === 'pc-offline' ? 'le PC n’est pas connecté' : 'appareil inconnu'}`, 'warn')
-    // The watch has already shown the effect it expected; tell it how things really are.
-    void push(true)
   }
+  // The watch has already shown the effect it expected: it is told at once how things really are (the song that came
+  // next, a pause that did not take), rather than when the next change happens to be pushed.
+  if (outcome !== 'media' && outcome !== 'forwarded') void answer(message.nodeId)
 }
 
 /** At app start: answers the watch, and tells it when the players change. */

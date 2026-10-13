@@ -26,7 +26,7 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.selfhosthub.wear.ui.theme.WatchColors
+import androidx.wear.compose.material.MaterialTheme
 
 /**
  * The progress of the song, which can be touched: a tap jumps there, a drag moves a handle and the position is
@@ -50,6 +50,8 @@ fun SeekBar(
     val shown = (dragging ?: progress).coerceIn(0f, 1f)
     val thumbRadius = with(LocalDensity.current) { (if (dragging != null) 7.dp else 5.dp).toPx() }
     val trackHeight = with(LocalDensity.current) { 4.dp.toPx() }
+    // The cover's colour when the player has one (see CoverTheme).
+    val accent = MaterialTheme.colors.primary
 
     Box(
         modifier
@@ -96,7 +98,7 @@ fun SeekBar(
             val trackWidth = (right - left).coerceAtLeast(1f)
             drawRoundRect(Color(0xFF3A3A3A), Offset(left, y - trackHeight / 2), Size(trackWidth, trackHeight), CornerRadius(trackHeight / 2))
             val x = left + trackWidth * shown
-            if (x > left) drawRoundRect(WatchColors.Accent, Offset(left, y - trackHeight / 2), Size(x - left, trackHeight), CornerRadius(trackHeight / 2))
+            if (x > left) drawRoundRect(accent, Offset(left, y - trackHeight / 2), Size(x - left, trackHeight), CornerRadius(trackHeight / 2))
             if (enabled) drawCircle(Color.White, thumbRadius, Offset(x, y))
         }
     }

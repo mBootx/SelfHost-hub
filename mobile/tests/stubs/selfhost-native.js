@@ -23,6 +23,15 @@ function api() {
     cancelCrossfade() {
       fake.native.cancelledFades++
     },
+    // The app's audio focus: each request and what Android answered ('granted' unless a test sets focusAnswer), and
+    // each time it was given back. A test plays Android's side with focusChange() in nowbar.test.js.
+    requestAudioFocus() {
+      fake.native.focusRequests = (fake.native.focusRequests || 0) + 1
+      return fake.native.focusAnswer || 'granted'
+    },
+    abandonAudioFocus() {
+      fake.native.focusAbandons = (fake.native.focusAbandons || 0) + 1
+    },
     startSleepTimer(first, second, durationMs, fadeMs) {
       fake.native.sleep = { first, second, durationMs, fadeMs }
       return !fake.native.sleepFails

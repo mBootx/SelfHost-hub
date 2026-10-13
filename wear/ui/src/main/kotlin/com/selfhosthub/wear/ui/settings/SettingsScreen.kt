@@ -1,5 +1,7 @@
 package com.selfhosthub.wear.ui.settings
 
+import android.content.Intent
+import android.provider.Settings as SystemSettings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -10,6 +12,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,7 +75,9 @@ class SettingsActions(
     val onRetryPhone: () -> Unit,
     val onClearCache: () -> Unit,
     val onAutoLaunch: (Boolean) -> Unit,
-    val onForget: () -> Unit
+    val onForget: () -> Unit,
+    /** Opens the watch's own settings, where its built-in media controls stop opening by themselves. */
+    val onSystemSettings: () -> Unit = {}
 )
 
 /** "à l'instant", "il y a 12 min", "il y a 3 h", "il y a 2 j". */
@@ -171,6 +176,16 @@ fun SettingsContent(ui: SettingsUi, now: Long, actions: SettingsActions) {
             SwitchChip(stringResource(R.string.auto_launch), stringResource(R.string.auto_launch_hint), ui.autoLaunch) {
                 haptics.tap()
                 actions.onAutoLaunch(it)
+            }
+        }
+        // The watch's built-in media controls open by themselves too, and only its own settings can stop that.
+        if (ui.autoLaunch) {
+            item { InfoCard(stringResource(R.string.builtin_player), stringResource(R.string.builtin_player_hint)) }
+            item {
+                ActionChip(Icons.Filled.Settings, stringResource(R.string.watch_settings)) {
+                    haptics.tap()
+                    actions.onSystemSettings()
+                }
             }
         }
 
@@ -307,6 +322,11 @@ fun SettingsRoute(graph: WatchGraph, versionName: String, onForgotten: () -> Uni
             onAutoLaunch = { on ->
                 autoLaunch = on
                 graph.prefs.autoLaunch = on
+            },
+            onSystemSettings = {
+                runCatching {
+                    graph.context.startActivity(Intent(SystemSettings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
             },
             onForget = {
                 scope.launch {

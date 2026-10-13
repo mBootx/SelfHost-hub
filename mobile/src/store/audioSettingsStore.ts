@@ -44,10 +44,23 @@ interface PersistedSettings {
   eqCustomGains: number[]
   /** Turns loud tracks down to even out the volume, from their ReplayGain tags. */
   normalize: NormalizeMode
+  /** When the network is too slow or gone, the songs on the phone come first in the queue. */
+  offlineFirst: boolean
+  /** When the network is slow, songs are streamed at a lower bitrate. */
+  reduceWhenSlow: boolean
 }
 
 const PREF_KEY = 'audio.settings'
-const DEFAULTS: PersistedSettings = { crossfadeSeconds: 0, gapless: true, eqEnabled: false, eqPreset: 'flat', eqCustomGains: [], normalize: 'off' }
+const DEFAULTS: PersistedSettings = {
+  crossfadeSeconds: 0,
+  gapless: true,
+  eqEnabled: false,
+  eqPreset: 'flat',
+  eqCustomGains: [],
+  normalize: 'off',
+  offlineFirst: true,
+  reduceWhenSlow: true
+}
 
 interface AudioSettingsState extends PersistedSettings {
   /** The phone's equalizer layout once the native side reports it; null while unknown or unsupported. */
@@ -58,6 +71,8 @@ interface AudioSettingsState extends PersistedSettings {
   setGapless: (on: boolean) => void
   setEqEnabled: (on: boolean) => void
   setNormalize: (mode: NormalizeMode) => void
+  setOfflineFirst: (on: boolean) => void
+  setReduceWhenSlow: (on: boolean) => void
   applyEqPreset: (id: string) => void
   setEqBand: (index: number, db: number) => void
   /** The gain of each of the phone's bands for the current preset or custom curve. */
@@ -67,8 +82,8 @@ interface AudioSettingsState extends PersistedSettings {
 export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => {
   function update(patch: Partial<PersistedSettings>): void {
     set(patch)
-    const { crossfadeSeconds, gapless, eqEnabled, eqPreset, eqCustomGains, normalize } = get()
-    storage.savePref(PREF_KEY, { crossfadeSeconds, gapless, eqEnabled, eqPreset, eqCustomGains, normalize })
+    const { crossfadeSeconds, gapless, eqEnabled, eqPreset, eqCustomGains, normalize, offlineFirst, reduceWhenSlow } = get()
+    storage.savePref(PREF_KEY, { crossfadeSeconds, gapless, eqEnabled, eqPreset, eqCustomGains, normalize, offlineFirst, reduceWhenSlow })
   }
 
   return {
@@ -85,6 +100,8 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => {
     setGapless: (gapless) => update({ gapless }),
     setEqEnabled: (eqEnabled) => update({ eqEnabled }),
     setNormalize: (normalize) => update({ normalize }),
+    setOfflineFirst: (offlineFirst) => update({ offlineFirst }),
+    setReduceWhenSlow: (reduceWhenSlow) => update({ reduceWhenSlow }),
 
     applyEqPreset: (id) => {
       if (EQ_PRESETS.some((p) => p.id === id)) update({ eqPreset: id, eqEnabled: true })

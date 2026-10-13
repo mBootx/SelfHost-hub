@@ -50,6 +50,7 @@ class TestApplication : Application(), WatchGraphProvider {
 }
 
 private class FakeGraph(private val app: TestApplication) : WatchGraph {
+    override var appVisible: Boolean = false
     override val context: Context get() = app
     override val scope: CoroutineScope get() = app.testScope
     override val prefs: WatchPrefs get() = app.testPrefs

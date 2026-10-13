@@ -1,5 +1,6 @@
 package com.selfhosthub.wear.ui.nowplaying
 
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -8,13 +9,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.selfhosthub.wear.core.PlayerCommand
 import com.selfhosthub.wear.data.ArtworkSize
 import com.selfhosthub.wear.service.WatchGraph
 import com.selfhosthub.wear.service.link.LinkUiState
+import com.selfhosthub.wear.ui.R
 import com.selfhosthub.wear.ui.common.AmbientState
 import com.selfhosthub.wear.ui.common.rememberCover
+import com.selfhosthub.wear.ui.common.rememberCoverLook
 import com.selfhosthub.wear.ui.common.rememberHaptics
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -47,11 +51,15 @@ fun NowPlayingRoute(
 ) {
     val (_, ui) = rememberNowPlaying(graph, periodMs = 1_000)
     val cover = rememberCover(graph, ui.coverArt, ArtworkSize.MEDIUM)
+    val look = rememberCoverLook(cover, hasCover = ui.coverArt != null)
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
     val link = graph.link
 
     var carried by remember { mutableFloatStateOf(0f) }
+    // The songs liked from the watch this time: the heart stays full for them.
+    var liked by remember { mutableStateOf(emptySet<String>()) }
+    val context = LocalContext.current
     var overlay by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(overlay) {
         if (overlay != null) {
@@ -85,9 +93,20 @@ fun NowPlayingRoute(
         onVolumeStep = { steps -> changeVolume(steps) },
         onLibrary = onLibrary,
         onDevices = onDevices,
-        onSettings = onSettings
+        onSettings = onSettings,
+        onLike = {
+            val songId = ui.songId
+            if (songId != null) {
+                haptics.confirm()
+                scope.launch {
+                    val ok = runCatching { graph.api.star(songId) }.isSuccess
+                    if (ok) liked = liked + songId
+                    Toast.makeText(context, if (ok) R.string.liked else R.string.like_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     )
-    NowPlayingContent(ui, cover, actions, overlay, onCoverClick = onArt)
+    NowPlayingContent(ui, cover, actions, overlay, look = look, liked = ui.songId in liked, onCoverClick = onArt)
 }
 
 /** The always-on version, redrawn at most once a second and each minute when the system updates the screen. */

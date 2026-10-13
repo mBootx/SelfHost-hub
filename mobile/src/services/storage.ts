@@ -38,5 +38,8 @@ export const storage = {
   async loadPref<T>(key: string): Promise<T | null> {
     const raw = await AsyncStorage.getItem(`prefs.${key}`)
     return raw ? (JSON.parse(raw) as T) : null
+  },
+  async removePref(key: string): Promise<void> {
+    await AsyncStorage.removeItem(`prefs.${key}`)
   }
 }

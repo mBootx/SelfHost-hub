@@ -135,6 +135,11 @@ class SubsonicApi(
             NowPlayingEntry(song, entry.string("username").orEmpty(), entry.int("minutesAgo") ?: 0, entry.string("playerName"))
         }
 
+    /** Adds a song to the favourites (Navidrome's "starred"). */
+    suspend fun star(id: String) {
+        call("star", "id" to id)
+    }
+
     /** A cover, resized by the server to `size` pixels square. */
     suspend fun coverArt(coverId: String, size: Int): ByteArray {
         val current = login() ?: throw NotConfiguredException()

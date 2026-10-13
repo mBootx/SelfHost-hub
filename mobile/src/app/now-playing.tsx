@@ -31,6 +31,8 @@ import { seekTo } from '@/services/playbackEngine'
 import { fetchLyrics, LyricsResult } from '@/services/lyrics'
 import { lookFor } from '@/services/coverColor'
 import { useCoverPalette } from '@/hooks/useCoverPalette'
+import { useNetworkStore } from '@/services/offlineMode'
+import { useAudioSettingsStore } from '@/store/audioSettingsStore'
 import ActionSheet, { ActionSheetItem } from '@/components/ActionSheet'
 import { openCarMode } from '@/components/carmode/CarModeToggle'
 import CoverImage from '@/components/CoverImage'
@@ -92,6 +94,8 @@ export default function NowPlayingScreen() {
   const showToast = useToastStore((s) => s.show)
   const openPlaylistPicker = usePlaylistPickerStore((s) => s.open)
   const toggleStar = useStarStore((s) => s.toggle)
+  const network = useNetworkStore((s) => s.quality)
+  const offlineFirst = useAudioSettingsStore((s) => s.offlineFirst)
 
   const selectedDeviceId = useRemoteStore((s) => s.selectedDeviceId)
   const sendCommand = useRemoteStore((s) => s.sendCommand)
@@ -334,6 +338,12 @@ export default function NowPlayingScreen() {
               </Text>
             </>
           ) : null}
+          {view === 'player' && network !== 'good' && !isRemote && (
+            <Text style={styles.networkLine} numberOfLines={1}>
+              {network === 'offline' ? 'Hors connexion' : 'Réseau lent'}
+              {offlineFirst ? ' · téléchargés d’abord' : ''}
+            </Text>
+          )}
         </View>
         {view === 'player' ? (
           <Pressable onPress={() => setMenuOpen(true)} hitSlop={12} style={styles.topButton} accessibilityRole="button" accessibilityLabel="Plus d'options">
@@ -503,6 +513,7 @@ const styles = StyleSheet.create({
   topCenter: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.sm },
   topLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
   topTitle: { color: '#ffffff', fontSize: 13, fontWeight: '800', marginTop: 1 },
+  networkLine: { color: colors.warning, fontSize: 11, fontWeight: '700', marginTop: 2 },
   scroll: { flex: 1 },
   player: { paddingHorizontal: SIDE, paddingTop: spacing.sm, justifyContent: 'space-between' },
   coverWrap: { alignItems: 'center' },

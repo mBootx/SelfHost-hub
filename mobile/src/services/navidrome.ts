@@ -213,6 +213,12 @@ export class NavidromeClient {
     return body.albumList2?.album || []
   }
 
+  /** One page of every album, by name (what saving all the covers walks through). */
+  async getAlbumPage(offset: number, size = 500): Promise<NDAlbum[]> {
+    const body = await this.call<any>('getAlbumList2', { type: 'alphabeticalByName', size: String(size), offset: String(offset) })
+    return body.albumList2?.album || []
+  }
+
   /** Songs like this one, as the server works them out (Last.fm or its own tags). Often empty on a small library. */
   async getSimilarSongs(id: string, count = 40): Promise<NDSong[]> {
     const body = await this.call<any>('getSimilarSongs', { id, count: String(count) })
@@ -339,8 +345,9 @@ export class NavidromeClient {
     return { version: body.serverVersion || null, latencyMs: Date.now() - started }
   }
 
-  streamUrl(songId: string): string {
-    return this.buildMediaUrl('stream', { id: songId })
+  /** The song's audio; with `maxBitRate` (kbit/s) the server sends it re-encoded at that rate when it can (a slow network). */
+  streamUrl(songId: string, maxBitRate?: number | null): string {
+    return this.buildMediaUrl('stream', maxBitRate ? { id: songId, maxBitRate: String(maxBitRate) } : { id: songId })
   }
 
   /**

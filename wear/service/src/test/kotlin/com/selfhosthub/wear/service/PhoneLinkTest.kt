@@ -274,6 +274,59 @@ class PhoneLinkTest {
         assertNull(prefs.manualTargetId)
     }
 
+    @Test
+    fun `a player picked by hand gives way to music that starts elsewhere after the choice`() = runTest {
+        val prefs = MemoryWatchPrefs()
+        val link = newLink(FakeTransport(), prefs)
+        link.hear(snapshot(phone = state(song("a", "A"), false), hub = state(song("b", "B"), false)))
+        link.selectTarget("hub")
+        advanceTimeBy(5_000)
+        link.hear(snapshot(phone = state(song("a", "A"), false), hub = state(song("b", "B"), false)))
+        assertEquals("hub", link.state.value.targetId)
+
+        advanceTimeBy(5_000)
+        link.hear(snapshot(phone = state(song("a", "A"), true), hub = state(song("b", "B"), false)))
+        assertEquals("the phone started: the watch follows it", "local", link.state.value.targetId)
+        assertNull(link.state.value.manualTargetId)
+        assertNull(prefs.manualTargetId)
+        assertEquals(0L, prefs.manualTargetAt)
+    }
+
+    @Test
+    fun `music that was already playing when the player was picked leaves the choice alone`() = runTest {
+        val link = newLink(FakeTransport())
+        link.hear(snapshot(phone = state(song("a", "A"), true), hub = state(song("b", "B"), false)))
+        // The phone plays; the PC is picked to be controlled anyway (to start it, say).
+        link.selectTarget("hub")
+        advanceTimeBy(5_000)
+        link.hear(snapshot(phone = state(song("a", "A"), true, 5.0), hub = state(song("b", "B"), false)))
+        assertEquals("hub", link.state.value.targetId)
+        // The picked player itself starting does not undo the choice either.
+        advanceTimeBy(5_000)
+        link.hear(snapshot(phone = state(song("a", "A"), true, 10.0), hub = state(song("b", "B"), true)))
+        assertEquals("hub", link.state.value.targetId)
+        assertEquals("hub", link.state.value.manualTargetId)
+    }
+
+    @Test
+    fun `after the app restarts, music already playing does not undo a choice made before`() = runTest {
+        val prefs = MemoryWatchPrefs(manualTargetId = "hub", manualTargetAt = 1_000_000L)
+        advanceTimeBy(60_000)
+        val link = newLink(FakeTransport(), prefs)
+        link.hear(snapshot(phone = state(song("a", "A"), true), hub = state(song("b", "B"), false)))
+        assertEquals("hub", link.state.value.targetId)
+        // The phone lost and found again: what plays then is not a new start either.
+        link.onMessage(LinkProtocol.CLOSED_PATH, """{"v":1}""".toByteArray())
+        link.hear(snapshot(phone = state(song("a", "A"), true), hub = state(song("b", "B"), false)))
+        assertEquals("hub", link.state.value.targetId)
+        // A real start afterwards does.
+        advanceTimeBy(5_000)
+        link.hear(snapshot(phone = state(song("a", "A"), false), hub = state(song("b", "B"), false)))
+        advanceTimeBy(5_000)
+        link.hear(snapshot(phone = state(song("a", "A"), true), hub = state(song("b", "B"), false)))
+        assertEquals("local", link.state.value.targetId)
+    }
+
     // --- Commands ---
 
     @Test

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the tile picker shows for the tile: a disc with a note and the three buttons. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <path android:fillColor="#FF000000" android:pathData="M96,0a96,96 0,1 1,0 192a96,96 0,1 1,0 -192z" />
+    <path android:fillColor="#FF1DB954" android:pathData="M96,34v34.5c-2.6,-1.5 -5.6,-2.5 -9,-2.5c-9.4,0 -17,7.6 -17,17s7.6,17 17,17s17,-7.6 17,-17V52h18V34H96z" />
+    <path android:fillColor="#FFF2F2F2" android:pathData="M48,124h6v24h-6zM56,136l18,12V124z" />
+    <path android:fillColor="#FF1DB954" android:pathData="M96,120a16,16 0,1 1,0 32a16,16 0,1 1,0 -32z" />
+    <path android:fillColor="#FF000000" android:pathData="M92,128v16l12,-8z" />
+    <path android:fillColor="#FFF2F2F2" android:pathData="M118,148l18,-12L118,124zM138,124h6v24h-6z" />
+</vector>

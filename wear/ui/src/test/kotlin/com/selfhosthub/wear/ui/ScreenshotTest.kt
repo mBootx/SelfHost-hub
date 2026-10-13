@@ -2,6 +2,7 @@ package com.selfhosthub.wear.ui
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.selfhosthub.wear.core.DeviceState
@@ -28,6 +31,9 @@ import com.selfhosthub.wear.service.link.LinkStatus
 import com.selfhosthub.wear.service.link.LinkUiState
 import com.selfhosthub.wear.service.link.PlayerSnapshot
 import com.selfhosthub.wear.ui.common.AmbientState
+import com.selfhosthub.wear.ui.common.CoverBackdrop
+import com.selfhosthub.wear.ui.common.CoverTheme
+import com.selfhosthub.wear.ui.common.coverLookOf
 import com.selfhosthub.wear.ui.devices.DevicesContent
 import com.selfhosthub.wear.ui.library.AlbumsContent
 import com.selfhosthub.wear.ui.library.ArtistsContent
@@ -110,6 +116,33 @@ class ScreenshotTest {
 
     @Test fun nowPlayingLongTitle() = shot("now-playing-long-title") {
         NowPlayingContent(player("Les cornichons sont dans le frigo de la cuisine", "Jean-Michel Un-Artiste-Au-Nom-Très-Long", playing = false), null, noActions, null)
+    }
+
+    /** A cover drawn here: a background colour and, if given, a big disc of another (a sun). */
+    private fun coverBitmap(background: Int, sun: Int?): ImageBitmap {
+        val bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(background)
+        if (sun != null) canvas.drawCircle(160f, 150f, 95f, Paint().apply { color = sun; isAntiAlias = true })
+        return bitmap.asImageBitmap()
+    }
+
+    @Test fun nowPlayingCover() = shot("now-playing-cover") {
+        val cover = coverBitmap(0xFF1F8A9E.toInt(), 0xFFF2D16B.toInt())
+        NowPlayingContent(player("Neon Rivers", "Halcyon Drive"), cover, noActions, null, look = coverLookOf(cover))
+    }
+
+    @Test fun nowPlayingWhiteCover() = shot("now-playing-white-cover") {
+        val cover = coverBitmap(0xFFFFFFFF.toInt(), 0xFFF5F0E6.toInt())
+        NowPlayingContent(player("Blanc sur blanc", "Les Pâles"), cover, noActions, null, look = coverLookOf(cover))
+    }
+
+    @Test fun optionsCoverLiked() = shot("options-cover-liked") {
+        val look = coverLookOf(coverBitmap(0xFF7A1F5C.toInt(), 0xFF35C2A0.toInt()))
+        Box(Modifier.fillMaxSize()) {
+            CoverBackdrop(look)
+            CoverTheme(look?.colours) { OptionsPage(player("Neon Rivers", "Halcyon Drive").copy(songId = "s1"), noActions, liked = true) }
+        }
     }
 
     @Test fun nowPlayingVolume() = shot("now-playing-volume") { NowPlayingContent(player("Tessellate", "alt-J"), null, noActions, 62) }

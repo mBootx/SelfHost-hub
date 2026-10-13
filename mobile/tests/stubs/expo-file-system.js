@@ -71,6 +71,22 @@ class File {
       }
     }
   }
+  // A one-shot download (the cover store's): fake.downloadSize bytes (2000 by default), fake.downloadDelayMs to keep it
+  // in flight, fake.failUrls to make some fail (a 404 leaves no file); fake.activeDownloads counts those in flight.
+  static async downloadFileAsync(url, destination, options) {
+    fake.networkTasks.push({ kind: 'downloadFile', url, options, destination: destination.uri })
+    fake.activeDownloads = (fake.activeDownloads || 0) + 1
+    fake.maxActiveDownloads = Math.max(fake.maxActiveDownloads || 0, fake.activeDownloads)
+    try {
+      if (fake.downloadDelayMs) await new Promise((resolve) => setTimeout(resolve, fake.downloadDelayMs))
+      if (fake.failUrls && fake.failUrls.has(url)) throw new Error('UnableToDownload: 404')
+      fake.files[destination.uri] = 'image'
+      fake.sizes[destination.uri] = fake.downloadSize ?? 2000
+      return destination
+    } finally {
+      fake.activeDownloads--
+    }
+  }
   static createDownloadTask(url, destination, options) {
     return {
       downloadAsync: async () => {

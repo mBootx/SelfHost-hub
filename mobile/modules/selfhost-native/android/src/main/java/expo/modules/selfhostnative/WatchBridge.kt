@@ -15,6 +15,7 @@ import java.io.IOException
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 
 /**
@@ -112,24 +113,57 @@ class WatchBridge(private val context: Context) {
 
   /**
    * Sends one message of the live link (a snapshot of the players, see services/watchLink.ts) to every watch that has
-   * the app. `onResult` gets how many watches it was handed to (0 when none is connected), or why it could not go.
-   * The watches are looked up through Google's services at most every few seconds, not at every message: a snapshot
-   * can follow another within a second while a song plays.
+   * the app, or only to `nodeId` (the answer to that watch's own request, which needs no looking up: it just spoke).
+   * `onResult` gets how many watches it was handed to (0 when none is connected), or why it could not go, once, and
+   * within RESULT_TIMEOUT_MS whatever Google's services do: JS sends one snapshot at a time, and a lookup that never
+   * came back held every later one, the answers to the watch included.
+   *
+   * The watches are looked up through Google's services at most every few seconds, not at every message: a snapshot can
+   * follow another within a second while a song plays. The watches that declare the app are asked for first; when that
+   * comes back empty or fails, every connected watch gets it (one without the app simply never hears it). A failed
+   * capability lookup used to leave the phone silent for minutes while the watch stood right there.
    */
-  fun push(path: String, json: String, onResult: (Int, String?) -> Unit) {
+  fun push(path: String, json: String, nodeId: String?, onResult: (Int, String?) -> Unit) {
+    val answered = AtomicBoolean(false)
+    val timeout = Runnable { if (answered.compareAndSet(false, true)) onResult(0, "Les services Google n'ont pas répondu à temps") }
+    handler.postDelayed(timeout, RESULT_TIMEOUT_MS)
+    val once: (Int, String?) -> Unit = { count, error ->
+      if (answered.compareAndSet(false, true)) {
+        handler.removeCallbacks(timeout)
+        onResult(count, error)
+      }
+    }
+    if (nodeId != null) {
+      deliver(listOf(nodeId), path, json, once)
+      return
+    }
     val known = targets
     if (known != null && SystemClock.elapsedRealtime() - targetsAt < TARGETS_KEPT_MS) {
-      deliver(known, path, json, onResult)
+      deliver(known, path, json, once)
       return
     }
     Wearable.getCapabilityClient(context).getCapability(CAPABILITY, CapabilityClient.FILTER_REACHABLE)
       .addOnSuccessListener { info ->
         val ids = info.nodes.map { it.id }
-        targets = ids
-        targetsAt = SystemClock.elapsedRealtime()
+        if (ids.isEmpty()) pushToConnected(path, json, once) else remember(ids).also { deliver(ids, path, json, once) }
+      }
+      .addOnFailureListener { pushToConnected(path, json, once) }
+  }
+
+  /** The fallback of [push]: every watch connected now, without asking which ones have the app. */
+  private fun pushToConnected(path: String, json: String, onResult: (Int, String?) -> Unit) {
+    Wearable.getNodeClient(context).connectedNodes
+      .addOnSuccessListener { nodes ->
+        val ids = nodes.map { it.id }
+        remember(ids)
         deliver(ids, path, json, onResult)
       }
       .addOnFailureListener { onResult(0, describe(it)) }
+  }
+
+  private fun remember(ids: List<String>) {
+    targets = ids
+    targetsAt = SystemClock.elapsedRealtime()
   }
 
   private fun deliver(ids: List<String>, path: String, json: String, onResult: (Int, String?) -> Unit) {
@@ -211,6 +245,10 @@ class WatchBridge(private val context: Context) {
     const val REQUEST_PATH = "/selfhost/link/request"
     const val COMMAND_PATH = "/selfhost/link/command"
     const val CLOSED_PATH = "/selfhost/link/closed"
+    /** The watch asks to have its player opened (music started): see WatchLinkService. */
+    const val OPEN_PATH = "/selfhost/link/open"
+    /** What the watch app's activity answers to (wear/app AndroidManifest.xml, LinkProtocol.OPEN_URI). */
+    const val OPEN_URI = "selfhosthub-watch://player"
 
     // Updating the watch app; see UpdateProtocol in wear/core. The phone sends the APK on a channel and asks the version;
     // the watch answers with statuses.
@@ -223,6 +261,7 @@ class WatchBridge(private val context: Context) {
     private const val CHUNK = 16 * 1024
 
     private const val TARGETS_KEPT_MS = 20_000L
+    private const val RESULT_TIMEOUT_MS = 10_000L
 
     /** The watches that had the app the last time they were looked up; null when that has to be done again. */
     @Volatile

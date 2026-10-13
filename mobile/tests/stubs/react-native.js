@@ -1,5 +1,6 @@
 const fake = require('./fake')
 exports.AppState = {
+  currentState: 'active',
   addEventListener(event, cb) {
     fake.appStateListeners.push(cb)
     return { remove() {} }

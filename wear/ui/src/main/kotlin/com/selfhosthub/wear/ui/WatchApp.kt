@@ -2,6 +2,7 @@ package com.selfhosthub.wear.ui
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
@@ -53,9 +54,13 @@ object Routes {
  * setting, and until it has arrived the library is the setup instructions.
  */
 @Composable
-fun WatchApp(graph: WatchGraph, ambient: AmbientState, versionName: String) {
+fun WatchApp(graph: WatchGraph, ambient: AmbientState, versionName: String, playerRequests: Int = 0) {
     // Created before the ambient branch, so that the place in the library is still there when the screen wakes up.
     val nav = rememberSwipeDismissableNavController()
+    // Opened again for the player (music started, see AutoOpener) while another screen was up: back to the player.
+    LaunchedEffect(playerRequests) {
+        if (playerRequests > 0) runCatching { nav.popBackStack(Routes.NOW_PLAYING, inclusive = false) }
+    }
     SelfHostWatchTheme {
         if (ambient.isAmbient) {
             AmbientNowPlayingRoute(graph, ambient)

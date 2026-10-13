@@ -16,7 +16,12 @@ const MAX_PENDING = 500
 /** A play the server fails on without saying why is tried this many times in all, then given up on. */
 const MAX_TRIES = 5
 /** A bigger jump between two progress ticks is a seek, not listening. */
-const MAX_TICK_S = 3
+export const MAX_TICK_S = 3
+
+/** Whether `listened` seconds of a song `duration` seconds long make a play (also the weekly Wrapped's rule). */
+export function countsAsPlay(listened: number, duration: number): boolean {
+  return duration >= MIN_DURATION_S && listened >= Math.min(duration / 2, MAX_REQUIRED_S)
+}
 /** "Recently played" is refreshed this long after a play is recorded, once for a burst of plays. */
 const RECENT_REFRESH_MS = 5000
 
@@ -155,7 +160,7 @@ export function startScrobbler(): void {
     if (s.isPlaying && sameSong && delta > 0 && delta <= MAX_TICK_S) play.listened += delta
 
     const duration = song.duration || s.duration
-    if (!play.submitted && duration >= MIN_DURATION_S && play.listened >= Math.min(duration / 2, MAX_REQUIRED_S)) {
+    if (!play.submitted && countsAsPlay(play.listened, duration)) {
       play.submitted = true
       flush({ id: song.id, time: play.startedAt || Date.now() })
     }

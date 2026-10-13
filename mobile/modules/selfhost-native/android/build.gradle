@@ -22,6 +22,8 @@ dependencies {
   compileOnly "androidx.media3:media3-exoplayer:1.9.0"
   // The Wear OS data layer: how the phone hands the watch app its setup (WatchBridge.kt).
   implementation "com.google.android.gms:play-services-wearable:19.0.0"
+  // Opening the watch app's player on the watch when it asks (music started, WatchLinkService).
+  implementation "androidx.wear:wear-remote-interactions:1.2.0"
   // The car mode's hand tracking (HandTracker.kt): the front camera through CameraX, read by MediaPipe's hand
   // landmarker on the phone (its model is assets/hand_landmarker.task). MediaPipe's usage statistics to Google are
   // switched off in AndroidManifest.xml.

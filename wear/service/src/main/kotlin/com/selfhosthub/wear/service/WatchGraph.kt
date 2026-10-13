@@ -18,6 +18,7 @@ import com.selfhosthub.wear.service.link.WearLinkTransport
 import com.selfhosthub.wear.service.sync.LibrarySyncService
 import com.selfhosthub.wear.service.sync.RefreshPolicy
 import com.selfhosthub.wear.service.sync.SyncCoordinator
+import com.selfhosthub.wear.service.tile.TileRefresher
 import com.selfhosthub.wear.service.update.AndroidUpdateHost
 import com.selfhosthub.wear.service.update.UpdateHost
 import com.selfhosthub.wear.service.update.WatchUpdates
@@ -57,6 +58,9 @@ interface WatchGraph {
 
     /** Updating this app from the phone: the APK it sends, and how it goes. */
     val updates: WatchUpdates
+
+    /** Whether the app's screen is up (set by the activity): it is not opened again over itself. */
+    var appVisible: Boolean
 
     /** Takes in what the phone sent. Another account replaces the old one, with everything that was stored for it. */
     suspend fun applySetup(incoming: WatchSetup)
@@ -107,6 +111,12 @@ class DefaultWatchGraph(appContext: Context) : WatchGraph {
 
     private val notifier: NowPlayingNotifier by lazy { NowPlayingNotifier(context, prefs) }
 
+    @Volatile override var appVisible: Boolean = false
+
+    private val tiles: TileRefresher by lazy { TileRefresher(context) }
+
+    private val autoOpener: AutoOpener by lazy { AutoOpener(prefs, WearLinkTransport(context), scope, appVisible = { appVisible }) }
+
     private val updateHost: UpdateHost by lazy { AndroidUpdateHost(context) }
 
     override val updates: WatchUpdates by lazy { WatchUpdates(updateHost, WearLinkTransport(context)) }
@@ -114,7 +124,13 @@ class DefaultWatchGraph(appContext: Context) : WatchGraph {
     override val link: PhoneLink by lazy {
         PhoneLink(WearLinkTransport(context), scope, prefs, appVersion = { runCatching { updateHost.installed }.getOrNull() }).also { phone ->
             // What the phone pushes puts up (or takes down) the chip of the song playing, with or without a screen.
-            scope.launch { phone.state.collect { notifier.update(it) } }
+            scope.launch {
+                phone.state.collect {
+                    notifier.update(it)
+                    autoOpener.update(it)
+                    tiles.update(it)
+                }
+            }
         }
     }
 

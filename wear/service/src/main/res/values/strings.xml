@@ -11,4 +11,6 @@
     <string name="channel_update_description">La mise à jour de l’application envoyée par le téléphone, à confirmer sur la montre</string>
     <string name="update_confirm_title">Mise à jour de SelfHost Hub</string>
     <string name="update_confirm_text">Touchez pour installer la nouvelle version</string>
+    <string name="tile_label">En lecture</string>
+    <string name="tile_description">La musique qui joue, avec précédent, lecture et suivant</string>
 </resources>

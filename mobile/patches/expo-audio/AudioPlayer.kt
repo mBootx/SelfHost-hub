@@ -15,7 +15,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
-import androidx.media3.session.MediaSession
 import expo.modules.audio.service.AudioControlsService
 import expo.modules.audio.service.AudioPlaybackServiceConnection
 import expo.modules.audio.service.ServiceBindingState
@@ -65,7 +64,10 @@ class AudioPlayer(
   var isActiveForLockScreen = false
   internal var metadata: Metadata? = null
   internal var lockScreenOptions: AudioLockScreenOptions? = null
-  internal var mediaSession: MediaSession = buildBasicMediaSession(context, ref)
+  // Stock expo-audio also gives every player a "basic" MediaSession of its own, live from the moment the player is
+  // created. Here the app has two decks and AudioControlsService holds the one session the system should see: a deck's
+  // own session was an extra, active session with no title whose buttons drove that deck, and while the next song
+  // started on the other deck it could become the one the Now Bar and headset buttons went to. So there is none.
   val serviceConnection = AudioPlaybackServiceConnection(WeakReference(this), appContext)
 
   val isLive: Boolean
@@ -235,11 +237,6 @@ class AudioPlayer(
     )
   }
 
-  internal fun assignBasicMediaSession() {
-    mediaSession.release()
-    mediaSession = buildBasicMediaSession(context, ref)
-  }
-
   private fun sendAudioSampleUpdate(sample: List<Float>) {
     val body = mapOf(
       "channels" to listOf(
@@ -293,7 +290,6 @@ class AudioPlayer(
   }
 
   override fun releasePlayer() {
-    mediaSession.release()
     if (isActiveForLockScreen) {
       lockScreenService()?.unregisterPlayer(this)
     }

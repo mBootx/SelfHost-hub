@@ -8,19 +8,24 @@ import PlayerOverlay from '@/components/PlayerOverlay'
 import ShareSheet from '@/components/ShareSheet'
 import UpdatePrompt from '@/components/UpdatePrompt'
 import WhatsNewModal from '@/components/WhatsNewModal'
+import WrappedModal from '@/components/wrapped/WrappedModal'
 import LockScreen from '@/components/lock/LockScreen'
 import { pruneStaleDownloads } from '@/services/appUpdate'
 import { installErrorLogging } from '@/services/diagnostics'
 import { startPlaybackMemory } from '@/services/playbackMemory'
 import { startScrobbler } from '@/services/scrobbler'
+import { startListeningLog } from '@/services/listeningLog'
 import { startDownloadWatcher } from '@/services/downloadWatcher'
 import { startCameraBackup } from '@/services/cameraBackup'
 import { startShareIntake } from '@/services/shareIntake'
 import { initSleepTimer } from '@/services/sleepTimer'
 import { startWatchLink } from '@/services/watchLink'
+import { startOfflineMode } from '@/services/offlineMode'
+import { loadCoverStore, setCoverPinning } from '@/services/coverStore'
 import { startWidget } from '@/services/widget'
 import { useUpdateStore } from '@/store/updateStore'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
+import { startWrappedSchedule } from '@/store/wrappedStore'
 import { startAppLock } from '@/store/appLockStore'
 import { useAudioSettingsStore } from '@/store/audioSettingsStore'
 import { useCarModeStore } from '@/store/carModeStore'
@@ -89,12 +94,19 @@ export default function RootLayout() {
     loadCarMode()
     startPlaybackMemory()
     startScrobbler()
+    // What is listened to, week by week, and the Wrapped of the week before every Monday from 10:00.
+    startListeningLog()
+    startWrappedSchedule()
     startDownloadWatcher()
     startCameraBackup()
     startShareIntake()
     initSleepTimer()
     startWidget()
     startWatchLink()
+    startOfflineMode()
+    // The covers of downloaded songs stay on the phone whatever the size of the store.
+    setCoverPinning((coverId) => Object.values(useOfflineStore.getState().tracks).some((t) => t.coverArt === coverId))
+    loadCoverStore()
     // Keeps a downloaded APK that is still newer than this install, so retrying an update doesn't re-download it.
     pruneStaleDownloads()
     checkForUpdate()
@@ -146,6 +158,7 @@ export default function RootLayout() {
       <PlayerOverlay />
       <UpdatePrompt />
       <WhatsNewModal />
+      <WrappedModal />
       <ShareSheet />
       {/* Last, so it opens above every other window. */}
       <LockScreen />

@@ -1,5 +1,6 @@
 package com.selfhosthub.wear.service
 
+import com.selfhosthub.wear.core.LinkProtocol
 import com.selfhosthub.wear.core.UpdateProtocol
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -96,6 +97,19 @@ class AppManifestContractTest {
         assertFalse(manifest.contains("foregroundServiceType"))
         assertFalse(manifest.contains("BLUETOOTH"))
         assertFalse(manifest.contains("BOOT_COMPLETED"))
+    }
+
+    @Test
+    fun `the phone can open the player, and the tile is offered, bound only by the system`() {
+        val appManifest = read(app, "AndroidManifest.xml")
+        assertTrue(appManifest.contains("android:scheme=\"selfhosthub-watch\"") && appManifest.contains("android:host=\"player\""))
+        assertTrue(appManifest.contains("android.intent.category.BROWSABLE"))
+        assertEquals("selfhosthub-watch://player", LinkProtocol.OPEN_URI)
+        val serviceManifest = read(service, "AndroidManifest.xml")
+        assertTrue(serviceManifest.contains("tile.NowPlayingTileService"))
+        assertTrue(serviceManifest.contains("com.google.android.wearable.permission.BIND_TILE_PROVIDER"))
+        assertTrue(serviceManifest.contains("androidx.wear.tiles.action.BIND_TILE_PROVIDER"))
+        assertTrue(serviceManifest.contains("androidx.wear.tiles.PREVIEW"))
     }
 
     @Test

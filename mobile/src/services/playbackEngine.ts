@@ -3,11 +3,28 @@ import SelfHostNative from '../../modules/selfhost-native'
 
 type DeckIndex = 0 | 1
 
+/** What the lock screen, the media notification and Samsung's Now Bar show for a track. */
+export interface NowPlayingInfo {
+  title: string
+  artist?: string
+  album?: string
+  artworkUrl?: string
+}
+
 export interface NextTrack {
   id: string
   source: string
   /** What its volume is multiplied by (1 = as it is): the loudness evening-out, see services/loudness. */
   gain?: number
+  /** What the Now Bar shows once it takes over. */
+  info?: NowPlayingInfo
+}
+
+/** Previous and next carry track skip; the +/-10 s buttons sit in the notification's overflow (see patches/expo-audio). */
+const LOCK_SCREEN_OPTIONS = { showSeekForward: true, showSeekBackward: true }
+
+function sameInfo(a: NowPlayingInfo, b: NowPlayingInfo): boolean {
+  return a.title === b.title && a.artist === b.artist && a.album === b.album && a.artworkUrl === b.artworkUrl
 }
 
 export interface EngineHandlers {
@@ -20,6 +37,8 @@ export interface EngineHandlers {
   onExternalPlayState: (playing: boolean) => void
   /** The track "to stop after" ended: playback was stopped instead of going on to the next one. */
   onStopAfterTrack?: () => void
+  /** The current track started or stopped waiting for data while it should be playing (a stall, when streaming). */
+  onBuffering?: (buffering: boolean) => void
 }
 
 /** How long before the fade window the next track starts buffering. */
@@ -45,11 +64,22 @@ const START_TOLERANCE_S = 1
  * - The fade itself runs natively (selfhost-native). React Native stops JS timers whenever the
  *   app is off screen, so a setInterval ramp never moved with the screen off: the new song sat
  *   silent until the old one ended, then came in at full volume part-way through.
+ * - The lock screen / Now Bar follows the current deck, and the engine moves it in the same step
+ *   as it switches decks (crossfade, gapless, a preloaded skip). It used to be moved by a React
+ *   effect after the queue advanced; whenever that ran late, or not at all (the same song twice in
+ *   a row, a one-song queue on repeat), the Now Bar stayed on the deck that had stopped: the old
+ *   song and time, and play/pause acting on a silent deck.
  */
 class DeckEngine {
   readonly decks: [AudioPlayer, AudioPlayer]
   private trackIds: [string | null, string | null] = [null, null]
+  /** What the Now Bar shows for the track on each deck. */
+  private infos: [NowPlayingInfo | null, NowPlayingInfo | null] = [null, null]
+  /** The deck and track the Now Bar was last given, so an unchanged one isn't sent again. */
+  private shown: { deck: DeckIndex; info: NowPlayingInfo } | null = null
   private finished: [boolean, boolean] = [false, false]
+  /** The deck played its track to the end and still sits there (finished above is overwritten by any later status). */
+  private atEnd: [boolean, boolean] = [false, false]
   private active: DeckIndex = 0
   private next: NextTrack | null = null
   /** timer is null while the ramp runs natively. */
@@ -68,11 +98,23 @@ class DeckEngine {
   /** A start position passed to load() that the player hasn't reported reaching yet (see reportedTime). */
   private pendingSeek: { seconds: number; retried: boolean } | null = null
   private handlers: EngineHandlers | null = null
+  /** What onBuffering last said, so it is only told about changes. */
+  private stalled = false
+  /**
+   * Another app has the sound for a moment (a call, a voice message): the music is paused and comes back by itself.
+   * The person did not pause, so nothing the decks report meanwhile counts as their choice.
+   */
+  private interrupted = false
 
   constructor() {
     // 250ms status updates: a smooth progress bar, and synced lyrics close enough to the beat.
     this.decks = [createAudioPlayer(null, { updateInterval: 250 }), createAudioPlayer(null, { updateInterval: 250 })]
     this.decks.forEach((deck, i) => deck.addListener('playbackStatusUpdate', (status) => this.onStatus(i as DeckIndex, status)))
+    try {
+      SelfHostNative?.addListener?.('onAudioFocus', ({ change }) => this.onFocusChange(change))
+    } catch {
+      // An older build: expo-audio handles the focus (see ensureAudioMode).
+    }
   }
 
   /** The deck playing the current track - the one the lock screen and Now Bar should follow. */
@@ -86,7 +128,95 @@ class DeckEngine {
 
   /** Takes the lock screen / Now Bar controls down, for when there is nothing left to play. */
   clearNowPlaying(): void {
+    this.shown = null
     for (const deck of this.decks) deck.clearLockScreenControls()
+    // Nothing left to play: the sound goes back to whoever had it before.
+    this.interrupted = false
+    try {
+      SelfHostNative?.abandonAudioFocus?.()
+    } catch {
+      // An older build: nothing to give back.
+    }
+  }
+
+  /**
+   * Asks for the audio focus before the music plays (selfhost-native holds it for the music as a whole). False when a
+   * call is on: the music waits and starts when it ends (onFocusChange 'resume'). A refusal, or an older build
+   * without it, still plays.
+   */
+  private takeFocus(): boolean {
+    let result: string | undefined
+    try {
+      result = SelfHostNative?.requestAudioFocus?.()
+    } catch {
+      result = undefined
+    }
+    this.interrupted = result === 'delayed'
+    return !this.interrupted
+  }
+
+  /** What another app did with the sound, as Android told selfhost-native. */
+  private onFocusChange(change: string): void {
+    if (change === 'interrupt') {
+      // A call, a voice message: the music pauses and waits. The person still wants it, so nothing else changes.
+      if (!this.wantPlaying) return
+      this.interrupted = true
+      this.finishFade()
+      this.decks[this.active].pause()
+    } else if (change === 'resume') {
+      if (!this.interrupted) return
+      this.interrupted = false
+      if (!this.wantPlaying) return
+      this.pendingPlay = true
+      this.rewindIfEnded()
+      this.decks[this.active].play()
+    } else if (change === 'lost') {
+      // Another app started its own playback: the music stops, as if the person had paused it.
+      this.interrupted = false
+      if (!this.wantPlaying) return
+      this.pause()
+      this.handlers?.onExternalPlayState(false)
+    }
+  }
+
+  /** New details for a track already loaded (a cover picked by hand, say): the Now Bar shows them if it is the current one. */
+  setNowPlaying(id: string, info: NowPlayingInfo): void {
+    for (const index of [0, 1] as const) {
+      if (this.trackIds[index] === id) this.infos[index] = info
+    }
+    this.showNowPlaying()
+  }
+
+  /**
+   * Puts the current deck and its track on the lock screen / Now Bar (the native side keeps one media session and
+   * hands it to this deck). Called whenever the current deck or its track changes.
+   */
+  private showNowPlaying(): void {
+    const info = this.infos[this.active]
+    if (!info) return
+    const shown = this.shown
+    if (shown && shown.deck === this.active && sameInfo(shown.info, info)) return
+    try {
+      this.decks[this.active].setActiveForLockScreen(
+        true,
+        { title: info.title, artist: info.artist, albumTitle: info.album, artworkUrl: info.artworkUrl },
+        LOCK_SCREEN_OPTIONS
+      )
+      this.shown = { deck: this.active, info }
+    } catch {
+      // Not there in this build: nothing to show it on.
+    }
+  }
+
+  /**
+   * Play or pause pressed outside the app: the Now Bar, the lock screen, a headset, a car. The native side already
+   * acted on the deck; this makes it the engine's intent too, so nothing "re-asserts" the old state (a pause pressed
+   * while a song was loading used to be undone when it finished loading), and tells the app.
+   */
+  remotePlayState(playing: boolean): void {
+    if (playing) this.play()
+    else this.pause()
+    this.handlers?.onExternalPlayState(playing)
   }
 
   /** The volume a deck should have: the volume setting times its track's loudness factor. */
@@ -97,10 +227,12 @@ class DeckEngine {
   /**
    * Makes `id` current: keeps it if a transition already started it, switches instantly if it was
    * preloaded, else loads it. `startAt` (seconds) resumes a track part-way through. `gain` is the track's
-   * loudness factor.
+   * loudness factor; `info` is what the Now Bar shows for it.
    */
-  load(id: string, source: string, play: boolean, startAt = 0, gain = 1): void {
+  load(id: string, source: string, play: boolean, startAt = 0, gain = 1, info?: NowPlayingInfo): void {
     if (this.trackIds[this.active] === id) {
+      if (info) this.infos[this.active] = info
+      this.showNowPlaying()
       if (play) this.play()
       return
     }
@@ -112,19 +244,23 @@ class DeckEngine {
       this.trackIds[this.active] = null
       this.active = otherIndex
       this.gains[otherIndex] = gain
+      if (info) this.infos[otherIndex] = info
       other.volume = this.level(otherIndex)
       if (startAt <= 0) this.rewindIfAhead(other)
     } else {
       const deck = this.decks[this.active]
       this.trackIds[this.active] = id
       this.gains[this.active] = gain
+      this.infos[this.active] = info ?? null
       deck.replace(source)
       deck.shouldCorrectPitch = true
       deck.setPlaybackRate(this.rate)
       deck.volume = this.level(this.active)
     }
     this.finished[this.active] = false
+    this.atEnd[this.active] = false
     this.pendingSeek = null
+    this.showNowPlaying()
     if (startAt > 0) {
       this.pendingSeek = { seconds: startAt, retried: false }
       this.decks[this.active].seekTo(startAt).catch(() => {})
@@ -138,8 +274,11 @@ class DeckEngine {
     this.next = next
     const otherIndex = (1 - this.active) as DeckIndex
     if (this.fade?.from === otherIndex) return
-    // Already preloaded: it only needs to know its loudness factor, which the setting may have changed.
-    if (next && this.trackIds[otherIndex] === next.id) this.gains[otherIndex] = next.gain ?? 1
+    // Already preloaded: it only needs to know its loudness factor, which the setting may have changed, and its details.
+    if (next && this.trackIds[otherIndex] === next.id) {
+      this.gains[otherIndex] = next.gain ?? 1
+      if (next.info) this.infos[otherIndex] = next.info
+    }
     if (this.trackIds[otherIndex] && this.trackIds[otherIndex] !== next?.id) {
       this.decks[otherIndex].pause()
       this.trackIds[otherIndex] = null
@@ -149,6 +288,11 @@ class DeckEngine {
   play(): void {
     this.wantPlaying = true
     this.pendingPlay = true
+    // During a call the music waits for it to end.
+    if (!this.takeFocus()) return
+    // A track that was played to its end (the end of the queue) starts again from the top: an ended player
+    // ignores play().
+    this.rewindIfEnded()
     this.decks[this.active].play()
   }
 
@@ -156,23 +300,40 @@ class DeckEngine {
     this.finishFade()
     this.wantPlaying = false
     this.pendingPlay = false
+    // Paused by choice: nothing starts again by itself when another app gives the sound back.
+    this.interrupted = false
     this.decks[this.active].pause()
+    // At the end of the queue the last track goes back to its start, paused, ready to be played again: an ended
+    // player shows the Now Bar a "stopped" state, which can take the card away.
+    this.rewindIfEnded()
+  }
+
+  private rewindIfEnded(): void {
+    if (!this.atEnd[this.active]) return
+    this.atEnd[this.active] = false
+    this.pendingSeek = null
+    this.decks[this.active].seekTo(0).catch(() => {})
   }
 
   seekTo(seconds: number): void {
     this.finishFade()
     this.pendingSeek = null
+    this.atEnd[this.active] = false
     this.decks[this.active].seekTo(seconds).catch(() => {})
   }
 
   restart(): void {
     this.pendingSeek = null
+    this.atEnd[this.active] = false
     const deck = this.decks[this.active]
     this.wantPlaying = true
     this.pendingPlay = true
+    const now = this.takeFocus()
     deck
       .seekTo(0)
-      .then(() => deck.play())
+      .then(() => {
+        if (now) deck.play()
+      })
       .catch(() => {})
   }
 
@@ -214,6 +375,8 @@ class DeckEngine {
     if (this.fade && Date.now() - this.fade.start >= this.fade.durationMs + FADE_GRACE_MS) this.finishFade()
     const justFinished = status.didJustFinish && !this.finished[index]
     this.finished[index] = status.didJustFinish
+    if (status.didJustFinish) this.atEnd[index] = true
+    else if (status.playing) this.atEnd[index] = false
     if (index !== this.active) {
       if (justFinished && this.fade?.from === index) this.finishFade()
       // Only the current deck and the one fading out may play. Anything else that starts up on its own
@@ -222,6 +385,11 @@ class DeckEngine {
       return
     }
     this.handlers?.onProgress(this.reportedTime(index, status), status.duration)
+    const stalled = this.wantPlaying && status.isBuffering && !status.didJustFinish
+    if (stalled !== this.stalled) {
+      this.stalled = stalled
+      this.handlers?.onBuffering?.(stalled)
+    }
 
     // End of track must be handled before the mirroring below: the native status forces playing:false
     // on this tick, and letting that reach the store reads as "the user paused" - which is what
@@ -231,7 +399,9 @@ class DeckEngine {
       return
     }
 
-    if (this.pendingPlay) {
+    if (this.interrupted) {
+      // Paused while another app has the sound: neither a choice of the person's nor a play to re-assert.
+    } else if (this.pendingPlay) {
       // Re-assert play() once the source is ready: the call made right after replace() can land
       // before loading finished and be silently dropped.
       if (status.playing) this.pendingPlay = false
@@ -289,7 +459,9 @@ class DeckEngine {
     if (!next || this.trackIds[otherIndex] === next.id) return
     const deck = this.decks[otherIndex]
     this.trackIds[otherIndex] = next.id
+    this.infos[otherIndex] = next.info ?? null
     this.finished[otherIndex] = false
+    this.atEnd[otherIndex] = false
     // Paused first (see the class comment): a deck that finished a track would start this one by itself.
     this.gains[otherIndex] = next.gain ?? 1
     deck.pause()
@@ -309,6 +481,7 @@ class DeckEngine {
     to.volume = 0
     this.active = toIndex
     this.finished[toIndex] = false
+    this.atEnd[toIndex] = false
     this.pendingSeek = null
     this.play()
     const native = this.startNativeFade(this.decks[fromIndex], to, durationMs, this.level(fromIndex), this.level(toIndex))
@@ -318,6 +491,7 @@ class DeckEngine {
       durationMs,
       timer: native ? null : setInterval(() => this.stepFade(), FADE_STEP_MS)
     }
+    this.showNowPlaying()
     this.handlers?.onAutoAdvance()
   }
 
@@ -377,11 +551,16 @@ class DeckEngine {
       this.rewindIfAhead(other)
       other.volume = this.level(otherIndex)
       this.finished[otherIndex] = false
+      this.atEnd[otherIndex] = false
       this.pendingSeek = null
       this.play()
+      this.showNowPlaying()
       this.handlers?.onAutoAdvance()
       return
     }
+    // Nothing took over. Paused, not just ended: it keeps "play when ready" on, and would start whatever is loaded
+    // into it next by itself, or the same track again after a seek.
+    this.decks[this.active].pause()
     this.handlers?.onTrackEnd()
   }
 }
@@ -392,14 +571,16 @@ export function seekTo(seconds: number): void {
   engine.seekTo(seconds)
 }
 
-/** Skip presses coming from outside the app: Now Bar, notification, headset, Android Auto. */
-export type RemoteCommand = 'next' | 'previous'
+/** Presses coming from outside the app: Now Bar, notification, headset, Android Auto. */
+export type RemoteCommand = 'next' | 'previous' | 'play' | 'pause'
+
+const REMOTE_COMMANDS: readonly string[] = ['next', 'previous', 'play', 'pause']
 
 /**
- * Subscribes to the lock screen skip events. This event is added by our patch to expo-audio
+ * Subscribes to the presses made outside the app. This event is added by our patch to expo-audio
  * (patches/expo-audio) - stock expo-audio strips the next/previous commands from its MediaSession
- * entirely - so it isn't in the library's public typings. It comes from whichever deck currently
- * owns the lock screen, so both are listened to.
+ * entirely, and only lets play/pause act on the player silently - so it isn't in the library's public
+ * typings. It comes from whichever deck currently owns the lock screen, so both are listened to.
  */
 export function onRemoteCommand(handler: (command: RemoteCommand) => void): () => void {
   const subscriptions = engine.decks.map((deck) => {
@@ -407,7 +588,7 @@ export function onRemoteCommand(handler: (command: RemoteCommand) => void): () =
       addListener(event: string, listener: (payload: { command: RemoteCommand }) => void): { remove(): void }
     }
     return emitter.addListener('remoteCommand', (payload) => {
-      if (payload?.command === 'next' || payload?.command === 'previous') handler(payload.command)
+      if (payload && REMOTE_COMMANDS.includes(payload.command)) handler(payload.command)
     })
   })
   return () => subscriptions.forEach((s) => s.remove())
@@ -415,13 +596,30 @@ export function onRemoteCommand(handler: (command: RemoteCommand) => void): () =
 
 let configured = false
 
+/** Whether the installed build holds the audio focus itself (selfhost-native's MusicFocus). */
+function nativeFocus(): boolean {
+  try {
+    return typeof SelfHostNative?.requestAudioFocus === 'function'
+  } catch {
+    return false
+  }
+}
+
 export async function ensureAudioMode(): Promise<void> {
   if (configured) return
   configured = true
   await setAudioModeAsync({
     playsInSilentMode: true,
     shouldPlayInBackground: true,
-    // Lock screen controls require 'doNotMix' - see expo-audio docs.
-    interruptionMode: 'doNotMix'
+    // 'mixWithOthers' switches expo-audio's own audio focus handling off on Android, where selfhost-native holds the
+    // focus for the music instead: expo-audio's paused every player on any other sound (a notification included) and
+    // gave the focus up at every rebuffer or change of song, which cut the music. (The lock screen controls don't
+    // depend on it on Android: they come from patches/expo-audio.) An older build without the native focus keeps
+    // expo-audio's.
+    interruptionMode: nativeFocus() ? 'mixWithOthers' : 'doNotMix'
   })
 }
+
+// Set as soon as the engine exists, before anything can play: expo-audio must not take the focus itself first, or
+// its request and the app's would take it from each other, and each loss pauses the music.
+void ensureAudioMode()

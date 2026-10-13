@@ -19,11 +19,13 @@ watch asks and what the PC's players are doing.
 
 | | |
 |---|---|
-| **Now Playing** | Cover, title, artist, a seek bar you can tap or drag, previous / play-pause / next, with a vibration on each press. Swipe up for shuffle, repeat, volume, the choice of player, the library and the settings. The crown changes the volume. Tap the cover to see it full screen. |
+| **Now Playing** | Cover, title, artist, a seek bar you can tap or drag, previous / play-pause / next, with a vibration on each press. The cover, blurred, fills the screen behind them, under a veil as dark as it needs to be for the text to read, and the controls take a colour of the cover (another colourful one when it has one: a yellow sun on a teal sky gives yellow buttons). Swipe up for shuffle, ♥ (adds the song to your Navidrome favourites, never removes it), repeat, volume, the choice of player, the library and the settings. The crown changes the volume. Tap the cover to see it full screen. |
 | **Always-on display** | Pure black, a small grey cover, the title and the elapsed time. Redrawn at most once a second; with burn-in protection the content moves a few pixels each minute. |
 | **Library** | Artists → albums → songs, all albums, playlists and search (typed or spoken). Everything is read from the watch's own copy first, so it works without a connection. Tap a song to play its album from there **on the phone**; press and hold for *play next* / *add to queue*. |
 | **Players** | The phone's own player, and the PC and the other devices the phone's remote-control link lists. The watch follows whichever is playing, or one you pin. |
+| **Opens when music starts** | When a player starts after at least three minutes of silence (not after a short pause, not at every song), the watch asks the phone to open its player, and the phone does (Android lets the phone open an app on the watch; it does not let the watch app open itself from the background). Needs this version on both the phone and the watch. Off in Réglages (on the watch) together with the chip. |
 | **Chip on the watch face** | When a song starts on a player (the phone tells the watch), an Ongoing Activity chip appears, one tap from the app, with previous / play-pause / next. It goes away by itself at the end of the song if nobody refreshes it. |
+| **Tile** | "En lecture", a swipe away from the watch face (add it from the tiles list): the song, its artist, and previous / play-pause / next for the same player as the app; the title opens the app. It is redrawn when the song or play/pause changes. |
 | **Offline** | The library (artists, albums, playlists, songs you opened) and the covers (160 px for lists, 320 px for Now Playing, 640 px only on the full-screen cover) are kept in a Room database; refreshed about every hour. |
 
 ## Setting up
@@ -171,13 +173,15 @@ ui/       Compose for Wear OS: Now Playing, ambient, library, search, players, s
   app was swiped away, and controlling a PC through the phone. Try those first.
 - **The phone app has to be running to control anything.** It is the phone that talks to the PC and plays the music. The
   watch cannot start it (a watch can ask the phone to open an app, but that is not built in).
-- **Opening itself when music starts is limited by Android, not by this app.** Since Android 10 a background app cannot
-  open its own screen; the offer is the chip on the watch face (Ongoing Activity), which the app posts when a player starts
-  (the phone pushes that, so it works with the watch app closed).
+- **Opening itself when music starts goes through the phone.** Since Android 10 a background app cannot open its own
+  screen, so the watch asks the phone (`/selfhost/link/open`) and the phone opens `selfhosthub-watch://player` on the watch
+  with the Wear OS companion (RemoteActivityHelper). This was built and tested on both sides separately, never on a real
+  watch and phone together; if it does not open, the chip on the watch face is still there.
 - **The watch does not play music** and does not use Bluetooth sockets of its own: the phone's data layer is how it
   reaches the phone. Raw Bluetooth would have meant implementing pairing and encryption by hand, for nothing the data
   layer does not already do.
-- The optional Wear OS **tile / complication** and Nearby Connections are not included.
+- No **complication** and no Nearby Connections. The tile was built and tested off the watch (its content and buttons), never
+  seen drawn by a real watch.
 
 ## Troubleshooting
 

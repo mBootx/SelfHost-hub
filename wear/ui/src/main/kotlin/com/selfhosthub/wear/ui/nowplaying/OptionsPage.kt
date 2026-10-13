@@ -11,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
@@ -38,9 +40,9 @@ import com.selfhosthub.wear.ui.R
 import com.selfhosthub.wear.ui.common.rememberHaptics
 import com.selfhosthub.wear.ui.theme.WatchColors
 
-/** The second page of Now Playing: shuffle and repeat, the volume, which player is controlled, and the way to the rest of the app. */
+/** The second page of Now Playing: shuffle, like and repeat, the volume, which player is controlled, and the way to the rest of the app. */
 @Composable
-internal fun OptionsPage(ui: NowPlayingUi, actions: NowPlayingActions) {
+internal fun OptionsPage(ui: NowPlayingUi, actions: NowPlayingActions, liked: Boolean = false) {
     val haptics = rememberHaptics()
     ScalingLazyColumn(
         state = rememberScalingLazyListState(),
@@ -55,6 +57,14 @@ internal fun OptionsPage(ui: NowPlayingUi, actions: NowPlayingActions) {
                 ToggleIconButton(Icons.Filled.Shuffle, stringResource(R.string.shuffle), active = ui.shuffle) {
                     haptics.tap()
                     actions.onShuffle()
+                }
+                ToggleIconButton(
+                    if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    stringResource(if (liked) R.string.liked else R.string.like),
+                    active = liked,
+                    enabled = ui.songId != null
+                ) {
+                    if (!liked) actions.onLike()
                 }
                 ToggleIconButton(
                     if (ui.repeat == RepeatMode.ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
@@ -112,14 +122,15 @@ internal fun OptionsPage(ui: NowPlayingUi, actions: NowPlayingActions) {
 }
 
 @Composable
-private fun ToggleIconButton(icon: ImageVector, description: String, active: Boolean, onClick: () -> Unit) {
+private fun ToggleIconButton(icon: ImageVector, description: String, active: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier.size(42.dp),
         colors = if (active) ButtonDefaults.primaryButtonColors() else ButtonDefaults.secondaryButtonColors(),
         shape = CircleShape
     ) {
-        Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp), tint = if (active) Color.Black else WatchColors.OnSurface)
+        Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp), tint = if (active) MaterialTheme.colors.onPrimary else WatchColors.OnSurface)
     }
 }
 

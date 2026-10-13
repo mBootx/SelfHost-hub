@@ -7,5 +7,6 @@ exports.storage = {
   async loadSecret(s, f) { return fake.secrets[`${s}_${f}`] ?? null },
   async clearSecret(s, f) { delete fake.secrets[`${s}_${f}`] },
   async savePref(k, v) { fake.prefs[k] = JSON.parse(JSON.stringify(v)) },
-  async loadPref(k) { return k in fake.prefs ? JSON.parse(JSON.stringify(fake.prefs[k])) : null }
+  async loadPref(k) { return k in fake.prefs ? JSON.parse(JSON.stringify(fake.prefs[k])) : null },
+  async removePref(k) { delete fake.prefs[k] }
 }

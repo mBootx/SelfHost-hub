@@ -52,6 +52,22 @@
             </intent-filter>
         </service>
 
+        <!-- The "En lecture" tile, a swipe away from the watch face: the song and its three buttons (NowPlayingTile.kt). -->
+        <service
+            android:name="com.selfhosthub.wear.service.tile.NowPlayingTileService"
+            android:description="@string/tile_description"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="@string/tile_label"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/tile_preview" />
+        </service>
+
         <!-- Android's package installer answers here when an update was handed to it. -->
         <receiver
             android:name="com.selfhosthub.wear.service.update.InstallResultReceiver"

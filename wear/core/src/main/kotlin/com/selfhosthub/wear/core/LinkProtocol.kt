@@ -26,6 +26,13 @@ object LinkProtocol {
     const val COMMAND_PATH = "/selfhost/link/command"
     const val CLOSED_PATH = "/selfhost/link/closed"
 
+    /**
+     * Watch to phone: "open me". Android does not let the watch app open its own screen from the background; the phone
+     * can, through the Wear OS companion (RemoteActivityHelper), with this address, which the watch app's activity answers.
+     */
+    const val OPEN_PATH = "/selfhost/link/open"
+    const val OPEN_URI = "selfhosthub-watch://player"
+
     /** What the watch calls the phone's own player. */
     const val PHONE_ID = "local"
 

@@ -2,7 +2,7 @@ import { create, StoreApi } from 'zustand'
 import * as Device from 'expo-device'
 import { describeError, logEvent } from '@/services/diagnostics'
 import { useNavidromeStore, RepeatMode } from './navidromeStore'
-import { seekTo } from '@/services/playbackEngine'
+import { engine, seekTo } from '@/services/playbackEngine'
 import { storage } from '@/services/storage'
 import {
   RemoteHubClient,
@@ -78,14 +78,16 @@ function generateDeviceId(): string {
 export function applyCommandLocally(action: string, payload: any): void {
   const s = useNavidromeStore.getState()
   switch (action) {
+    // Play and pause act on the player at once, as a press on the Now Bar does (the engine then tells the store): they
+    // no longer wait for the screen's effects to carry the store's change to the player.
     case 'toggle':
-      s.togglePlay()
+      setPlaying(!s.isPlaying)
       break
     case 'play':
-      if (!s.isPlaying) s.togglePlay()
+      setPlaying(true)
       break
     case 'pause':
-      if (s.isPlaying) s.togglePlay()
+      setPlaying(false)
       break
     case 'next':
       s.next()
@@ -113,6 +115,15 @@ export function applyCommandLocally(action: string, payload: any): void {
       if (payload?.mode === 'off' || payload?.mode === 'all' || payload?.mode === 'one') s.setRepeatMode(payload.mode as RepeatMode)
       break
   }
+}
+
+/** Plays or pauses this phone's player, for a watch or a PC; nothing to play, nothing happens. */
+function setPlaying(playing: boolean): void {
+  if (useNavidromeStore.getState().queue.length === 0) return
+  // Even when the store already says so: the player is put right if it ever drifted from the store.
+  engine.remotePlayState(playing)
+  // The engine tells the store through the player's handlers; without them (no player mounted) the store is set here.
+  if (useNavidromeStore.getState().isPlaying !== playing) useNavidromeStore.setState({ isPlaying: playing })
 }
 
 /** What this phone's own player is doing, in the shape the hub (and the watch, through watchLink) reads. */

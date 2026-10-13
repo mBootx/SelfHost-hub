@@ -39,6 +39,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!--
+              The player, opened by the phone when music starts (RemoteActivityHelper, see AutoOpener): the watch app may not
+              open its own screen from the background, the phone can open it with this address.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="selfhosthub-watch" android:host="player" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>

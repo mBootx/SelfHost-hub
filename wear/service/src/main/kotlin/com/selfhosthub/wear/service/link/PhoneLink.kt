@@ -55,6 +55,8 @@ class PhoneLink(
 
     private val lock = Any()
     private val playingSince = HashMap<String, Long>()
+    /** Whether a state was heard since the app started or the phone was last lost (see apply). */
+    private var baselined = false
 
     /** When the phone last said anything (a snapshot, or that its app is closed). */
     @Volatile private var lastHeardAt = Long.MIN_VALUE
@@ -121,9 +123,14 @@ class PhoneLink(
         }
     }
 
-    /** Controls a player by hand (null: follow the one that plays). */
+    /**
+     * Controls a player by hand (null: follow the one that plays). The choice holds until another player starts playing
+     * after it was made: then the music is followed and the choice dropped. It used to hold for as long as the player was
+     * listed, so a PC picked once kept the controls (and the screen) while the music played on the phone.
+     */
     fun selectTarget(id: String?) {
         prefs.manualTargetId = id
+        prefs.manualTargetAt = if (id != null) clock() else 0L
         _state.update { current -> retarget(current.copy(manualTargetId = id)) }
     }
 
@@ -224,14 +231,24 @@ class PhoneLink(
     private fun apply(snapshot: Snapshot) {
         val now = clock()
         val ids = snapshot.devices.map { it.deviceId }.toSet()
-        synchronized(lock) {
+        val startedAfterPin = synchronized(lock) {
             val before = _state.value.players
+            // The first state after the app started (or after the phone was lost) says what plays, not what just started.
+            val first = !baselined
+            baselined = true
             for ((id, player) in snapshot.states) {
                 if (id !in ids) continue
-                if (player.isPlaying && before[id]?.state?.isPlaying != true) playingSince[id] = now
+                if (player.isPlaying && before[id]?.state?.isPlaying != true) playingSince[id] = if (first) 0L else now
                 if (!player.isPlaying) playingSince.remove(id)
             }
             playingSince.keys.retainAll(ids)
+            val pinned = prefs.manualTargetId
+            pinned != null && playingSince.any { (id, since) -> id != pinned && since > prefs.manualTargetAt }
+        }
+        if (startedAfterPin) {
+            // Music started elsewhere since the player was picked by hand: follow it.
+            prefs.manualTargetId = null
+            prefs.manualTargetAt = 0L
         }
         _state.update { current ->
             val players = snapshot.states.filterKeys { it in ids }.mapValues { (_, player) -> PlayerSnapshot(player, now) }
@@ -241,7 +258,8 @@ class PhoneLink(
                     phoneName = snapshot.phoneName,
                     pc = snapshot.pc,
                     devices = snapshot.devices,
-                    players = players
+                    players = players,
+                    manualTargetId = if (startedAfterPin) null else current.manualTargetId
                 )
             )
         }
@@ -249,7 +267,10 @@ class PhoneLink(
 
     /** The phone cannot be reached: nothing known about the players is true any more. */
     private fun lose(status: LinkStatus) {
-        synchronized(lock) { playingSince.clear() }
+        synchronized(lock) {
+            playingSince.clear()
+            baselined = false
+        }
         _state.update { LinkUiState(status = status, manualTargetId = it.manualTargetId) }
     }
 

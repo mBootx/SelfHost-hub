@@ -3,6 +3,7 @@ import { View, Text, Switch, Pressable, StyleSheet } from 'react-native'
 import Slider from '@react-native-community/slider'
 import { SectionTitle } from '@/components/Screen'
 import { NORMALIZE_LABELS, NORMALIZE_MODES } from '@/services/loudness'
+import { SLOW_BITRATE } from '@/services/offlinePriority'
 import { CROSSFADE_MAX_S, EQ_PRESETS, useAudioSettingsStore } from '@/store/audioSettingsStore'
 import { colors, radius, spacing } from '@/constants/theme'
 
@@ -39,6 +40,10 @@ export default function PlaybackSection() {
   const setGapless = useAudioSettingsStore((s) => s.setGapless)
   const normalize = useAudioSettingsStore((s) => s.normalize)
   const setNormalize = useAudioSettingsStore((s) => s.setNormalize)
+  const offlineFirst = useAudioSettingsStore((s) => s.offlineFirst)
+  const setOfflineFirst = useAudioSettingsStore((s) => s.setOfflineFirst)
+  const reduceWhenSlow = useAudioSettingsStore((s) => s.reduceWhenSlow)
+  const setReduceWhenSlow = useAudioSettingsStore((s) => s.setReduceWhenSlow)
   const setEqEnabled = useAudioSettingsStore((s) => s.setEqEnabled)
   const applyEqPreset = useAudioSettingsStore((s) => s.applyEqPreset)
   const setEqBand = useAudioSettingsStore((s) => s.setEqBand)
@@ -75,6 +80,20 @@ export default function PlaybackSection() {
           hint="Précharge le titre suivant pour l'enchaîner sans silence quand le fondu est désactivé."
           value={gapless}
           onChange={setGapless}
+        />
+        <View style={styles.divider} />
+        <ToggleRow
+          title="Téléchargés d’abord quand le réseau faiblit"
+          hint="Quand la lecture se bloque ou que le serveur ne répond plus, les titres déjà sur le téléphone passent en tête de la file ; hors connexion, un titre qui ne peut pas être lu laisse la place au suivant téléchargé."
+          value={offlineFirst}
+          onChange={setOfflineFirst}
+        />
+        <View style={styles.divider} />
+        <ToggleRow
+          title="Qualité réduite sur un réseau lent"
+          hint={`Les titres suivants sont demandés au serveur en ${SLOW_BITRATE} kb/s tant que le réseau est lent (il faut que le serveur sache convertir, ce que fait Navidrome).`}
+          value={reduceWhenSlow}
+          onChange={setReduceWhenSlow}
         />
         <View style={styles.divider} />
         <Text style={styles.label}>Volume uniforme</Text>
