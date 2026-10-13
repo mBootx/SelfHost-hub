@@ -9,6 +9,31 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '2.7.0',
+    items: [
+      {
+        title: 'Récap de la semaine',
+        text: "Chaque lundi à partir de 10 h : les minutes écoutées, tes jours, ton top 5 des titres et des artistes de la semaine passée, aux couleurs de ton titre préféré. Réglages → Écoute → « Récap de la semaine » l'ouvre à tout moment. Seule l'écoute sur ce téléphone compte."
+      },
+      {
+        title: 'Now Bar et écran verrouillé réparés',
+        text: "La Now Bar n'apprenait ni les pauses, ni les reprises, ni le changement de titre : mauvais titre, mauvais temps, boutons sans effet, carte qui disparaît. Elle suit maintenant le lecteur à chaque instant, et Précédent / Suivant sont des boutons standard que la montre, le Bluetooth et la voiture comprennent."
+      },
+      {
+        title: 'Plus de coupures au son des notifications',
+        text: "Une notification baisse simplement la musique le temps du son, un appel ou un message vocal la met en pause et elle reprend ensuite. Avant, chaque son coupait la musique un instant."
+      },
+      {
+        title: 'Réseau lent : les téléchargés d’abord',
+        text: "Quand le Wi-Fi est trop lent ou coupé, les titres téléchargés de la file passent en premier et un flux plus léger est demandé ; les pochettes restent sur le téléphone et s'affichent hors ligne. Réglages → Lecture et Stockage."
+      },
+      {
+        title: 'Montre',
+        text: "La pochette derrière le lecteur, une tuile En lecture, un cœur pour aimer un titre, et le lecteur qui s'ouvre quand la musique démarre. La montre suit maintenant ce qui joue au lieu de rester sur un appareil choisi une fois, et ses boutons agissent tout de suite."
+      }
+    ]
+  },
+  {
     version: '2.6.0',
     items: [
       {
