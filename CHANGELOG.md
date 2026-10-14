@@ -1,5 +1,31 @@
 # Changelog
 
+## 3.0.0 — 2026-10-14
+
+A major update: playlists per account, drag to reorder, a redesigned look on the phone and the PC, a rebuilt volume control on the watch, working car-mode gestures, and a long list of fixes.
+
+### Added
+- **Playlists per account.** Navidrome shows every playlist to an administrator and the public ones to everyone else, so the apps now keep only the playlists of the signed-in account (phone, PC and watch), and new playlists are created private. The owner account gets a new screen (phone: Réglages or the Playlists header; PC: the Server page) to give each existing playlist to an account, make it editable (playlists that follow an M3U file are locked by Navidrome until then), make it public or private, rename and delete it.
+- **Drag to reorder.** Phone: drag the grip at the end of a queue row, or "Réorganiser" on a playlist, which saves the order on the server. PC: drag the rows of a playlist. Playlists that follow an M3U file cannot be reordered until the owner makes them editable.
+- **"Lire ensuite" lines songs up in the order added.** The first song added plays next, the following ones come after it, instead of the last one cutting in. The confirmation says where the song went. An album sent from the watch with "Lire ensuite" also keeps its order.
+- **Whole album to a playlist (Android)**, from the album page; **swipe the mini player** left or right for the next or previous song (Android).
+- **Downloads (Android):** the original file is downloaded, never converted, under its real extension; Réglages → Stockage shows the space used; a playlist can be kept on the phone ("Garder sur le téléphone"): songs added to it later download by themselves on Wi-Fi.
+- **Watch: a volume screen.** The two volume buttons are replaced by one "Volume" button that opens a ring: turn the crown or the bezel (on a Galaxy Watch a click is a 4% step, with a small vibration), or slide a finger round the ring; a button in the middle mutes.
+- **A new look.** Phone: one animated bottom sheet (drag down to close) for the song menu and the playlist picker, which now shows covers, track counts and a search box; a restyled text dialog, "Nouveautés" window and update card; a new Settings page with a header card, grouped rows and sections folded under one row each. PC: the same for the playlist picker, dialogs, context menu and Settings page. Everything follows the accent colour and background chosen in Réglages → Apparence.
+- **A new logo:** the play button of three linked nodes, without the roof.
+
+### Changed
+- **Car-mode gestures (Android) were reworked.** The pinch accepts a real pinch (the index bent over to meet the thumb), no longer only one on a stretched index; a wave needs an open hand, so hands on a steering wheel no longer skip songs; the volume is a movement, an open hand swept up or down for one step, instead of a hand resting high or low firing every half second.
+- The PC's seek bars seek once, when released, instead of at every pixel of a drag.
+
+### Fixed
+- **Starting with the server out of reach** showed an empty login form and never tried again (phone and PC). A saved login now shows "unreachable" with a Retry button, retries by itself when the network comes back and every 30 seconds, and keeps downloaded songs playable meanwhile.
+- **The library showed only the 20 newest albums**; it now lists them all (the PC loads more as you scroll).
+- Tapping a song in the queue reshuffled the queue; a queue move made while shuffled was lost when shuffle was turned off; the Favoris tab did not refresh; long choice menus ran off the screen.
+- Album, artist and playlist pages went blank on an error; downloads failed silently and left half-written files; the link to the PC did not reconnect after a drop and could wipe a newer connection; renaming the PC did not reach the phones; downloads that errored hung forever on the PC; a failed audio load on the PC left "playing" in silence.
+- **Watch:** a playlist containing the same song twice crashed the screen, and pressing and holding a song never worked.
+- Many texts: plurals, « » quotes, ellipses, "hors ligne", tu/vous, separators, French network errors.
+
 ## 2.7.0 — 2026-10-13
 
 ### Added

@@ -9,6 +9,27 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.0.0',
+    items: [
+      {
+        title: 'Playlists par compte',
+        text: "Chaque compte ne voit plus que ses playlists. Le compte propriétaire attribue chaque playlist existante à un compte et la rend modifiable depuis la page Serveur."
+      },
+      {
+        title: 'Glisser pour réorganiser',
+        text: "Faites glisser les lignes d'une playlist pour changer l'ordre, qui est enregistré sur le serveur. « Lire ensuite » aligne les titres dans l'ordre où vous les ajoutez."
+      },
+      {
+        title: 'Nouveau look',
+        text: "Choix de playlist, boîtes de dialogue, menu contextuel et page Réglages refaits, avec un nouveau logo. Tout suit la couleur choisie dans Réglages → Apparence."
+      },
+      {
+        title: 'Serveur injoignable, bibliothèque complète',
+        text: "Sans réponse du serveur, l'application propose de réessayer et se reconnecte toute seule ; les titres téléchargés restent lisibles. La liste des albums est complète et se charge au fil du défilement. La barre de lecture ne cherche plus qu'au relâchement."
+      }
+    ]
+  },
+  {
     version: '2.6.0',
     items: [
       {

@@ -9,6 +9,39 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.0.0',
+    items: [
+      {
+        title: 'Playlists par compte',
+        text: "Chaque compte ne voit plus que ses playlists, et celles que vous créez sont privées. Le compte propriétaire peut attribuer chaque playlist existante à un compte et la rendre modifiable : Réglages → Playlists des comptes."
+      },
+      {
+        title: 'Glisser pour réorganiser',
+        text: "Dans la file de lecture, saisissez la poignée ⋮⋮ au bout d'une ligne ; dans une playlist, touchez « Réorganiser » : l'ordre est enregistré sur le serveur. « Lire ensuite » aligne maintenant les titres dans l'ordre où vous les ajoutez."
+      },
+      {
+        title: 'Nouveau look',
+        text: "Menus et choix de playlist en feuille qui glisse (tirez vers le bas pour fermer), une page Réglages refaite avec ses sections repliables, et un nouveau logo. Tout suit la couleur choisie dans Réglages → Apparence."
+      },
+      {
+        title: 'Plus pratique',
+        text: "Ajoutez un album entier à une playlist, passez au titre suivant ou précédent en glissant le mini lecteur, gardez une playlist sur le téléphone (les nouveaux titres se téléchargent en Wi-Fi) et voyez la place prise par les titres téléchargés. Les téléchargements sont maintenant le fichier d'origine."
+      },
+      {
+        title: 'Mode voiture corrigé',
+        text: "Le pincement est enfin reconnu, les mains sur le volant ne font plus passer de titre, et le volume se règle d'un geste de la main ouverte vers le haut ou vers le bas, au lieu de se déclencher sans arrêt."
+      },
+      {
+        title: 'Serveur injoignable, bibliothèque complète',
+        text: "Sans réponse du serveur, l'application affiche « injoignable » avec un bouton Réessayer et se reconnecte toute seule, au lieu d'un formulaire vide. La bibliothèque liste tous les albums, plus seulement les 20 derniers."
+      },
+      {
+        title: 'Montre : un seul bouton Volume',
+        text: "Un anneau de volume que l'on règle avec la lunette ou la couronne (un cran, un pas) ou du doigt, et un bouton pour couper le son."
+      }
+    ]
+  },
+  {
     version: '2.7.0',
     items: [
       {
