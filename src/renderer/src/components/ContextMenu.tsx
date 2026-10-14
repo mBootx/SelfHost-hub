@@ -61,22 +61,22 @@ export default function ContextMenu({ x, y, items, onClose }: Props): JSX.Elemen
       <div
         ref={ref}
         style={{ left: pos.left, top: pos.top, opacity: pos.visible ? 1 : 0 }}
-        className="absolute min-w-[190px] rounded-lg border border-surface-border bg-surface-elevated py-1.5 shadow-2xl animate-fade-in"
+        className="absolute min-w-[210px] animate-fade-in rounded-xl border border-surface-border bg-surface-elevated/95 p-1.5 shadow-2xl shadow-black/60 backdrop-blur"
         onClick={(e) => e.stopPropagation()}
       >
         {items.map(({ label, icon: Icon, onClick, danger, separatorBefore }, i) => (
           <div key={i}>
-            {separatorBefore && <div className="my-1 border-t border-surface-border" />}
+            {separatorBefore && <div className="my-1.5 border-t border-surface-border" />}
             <button
               onClick={() => {
                 onClick()
                 onClose()
               }}
-              className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition-colors ${
-                danger ? 'text-red-400 hover:bg-red-500/10' : 'text-gray-200 hover:bg-surface-hover'
+              className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors ${
+                danger ? 'text-red-400 hover:bg-red-500/10' : 'text-gray-200 hover:bg-accent/10 hover:text-white'
               }`}
             >
-              <Icon className="h-4 w-4 shrink-0" />
+              <Icon className={`h-4 w-4 shrink-0 ${danger ? "" : "text-accent"}`} />
               {label}
             </button>
           </div>

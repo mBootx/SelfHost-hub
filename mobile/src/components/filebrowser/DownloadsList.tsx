@@ -65,7 +65,7 @@ export default function DownloadsList() {
   }
 
   function confirmRemove(file: DownloadedFile): void {
-    Alert.alert('Supprimer', `Supprimer "${file.filename}" de cet appareil ?`, [
+    Alert.alert('Supprimer', `Supprimer « ${file.filename} » de cet appareil ?`, [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Supprimer', style: 'destructive', onPress: () => remove(file.filename) }
     ])
@@ -98,7 +98,7 @@ export default function DownloadsList() {
         <EmptyState
           icon={Download}
           title="Aucun téléchargement"
-          hint="Les fichiers que vous téléchargez depuis le serveur restent ici, même hors-ligne."
+          hint="Les fichiers que vous téléchargez depuis le serveur restent ici, même hors ligne."
         />
       }
       renderItem={({ item }) => (

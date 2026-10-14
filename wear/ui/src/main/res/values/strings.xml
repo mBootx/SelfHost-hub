@@ -2,7 +2,8 @@
 <resources>
     <!-- Now playing -->
     <string name="nothing_playing">Rien en lecture</string>
-    <string name="nothing_playing_hint">Lancez de la musique sur le téléphone ou le PC</string>    <string name="play">Lecture</string>
+    <string name="nothing_playing_hint">Lancez de la musique sur le téléphone ou le PC</string>
+    <string name="play">Lecture</string>
     <string name="pause">Pause</string>
     <string name="next">Suivant</string>
     <string name="previous">Précédent</string>
@@ -12,6 +13,8 @@
     <string name="repeat_one">Répéter ce titre</string>
     <string name="volume">Volume</string>
     <string name="volume_percent">%1$d %%</string>
+    <string name="volume_mute">Couper le son</string>
+    <string name="volume_unmute">Remettre le son</string>
     <string name="seek_bar">Position dans le titre</string>
     <string name="playing_on">Sur %1$s</string>
     <string name="following_player">Suit la lecture</string>

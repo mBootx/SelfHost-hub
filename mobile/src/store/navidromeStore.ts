@@ -1,22 +1,52 @@
 import { create } from 'zustand'
 import { describeError, logEvent } from '@/services/diagnostics'
-import { NavidromeClient, NDAlbum, NDArtist, NDPlaylist, NDSong } from '@/services/navidrome'
+import { isUnreachable, NavidromeClient, NDAlbum, NDArtist, NDPlaylist, NDSong } from '@/services/navidrome'
 import { seekTo } from '@/services/playbackEngine'
 import { findRadioSongs, radioNeedsMore } from '@/services/radio'
 import { storage } from '@/services/storage'
 import { prefetchCoverArt } from '@/services/imagePrefetch'
+import { ownPlaylists } from '@/services/navidromeAdmin'
 import { ConnectionStatus } from '@/types'
 
 export type RepeatMode = 'off' | 'all' | 'one'
 
+/** The queue entries added with "play next": those still ahead of the song playing keep their order. */
+const upNext = new WeakSet<NDSong>()
+
+/** Where a song is in a list: the same entry if it is there, else the first with its id. */
+function indexIn(list: NDSong[], song: NDSong): number {
+  const same = list.indexOf(song)
+  return same >= 0 ? same : list.findIndex((s) => s.id === song.id)
+}
+
+/**
+ * A song moved in the shuffled queue moves in the order shuffle goes back to as well: it is put right after the song
+ * it now follows (first if it now leads). Otherwise turning shuffle off undid every move made meanwhile.
+ */
+export function moveInOrder(ordered: NDSong[], moved: NDSong, after: NDSong | null): NDSong[] {
+  const at = indexIn(ordered, moved)
+  if (at < 0) return ordered
+  const rest = ordered.filter((_, i) => i !== at)
+  const anchor = after ? indexIn(rest, after) : -1
+  rest.splice(anchor + 1, 0, moved)
+  return rest
+}
+
 /** A radio adds songs only one request at a time. */
 let extendingRadio = false
+/** The saved login being tried, if it is. */
+let restoring: Promise<void> | null = null
 
 interface NavidromeState {
   client: NavidromeClient | null
   status: ConnectionStatus
   error: string | null
   username: string | null
+  /**
+   * Whether a login is saved on the phone: null until that is known (the app has just started). With one saved, a
+   * server that can't be reached shows a "try again" screen instead of an empty login form.
+   */
+  savedSession: boolean | null
 
   artists: NDArtist[]
   recentAlbums: NDAlbum[]
@@ -49,13 +79,16 @@ interface NavidromeState {
   addSongsToPlaylist: (playlistId: string, songIds: string[]) => Promise<void>
 
   playQueue: (songs: NDSong[], startIndex: number) => void
+  /** Plays the song at this place in the queue, which stays as it is (its order, the radio). */
+  jumpTo: (index: number) => void
   /** Plays songs like `seed`, and keeps adding more. 'empty' when the server has nothing similar to offer. */
   startRadio: (seed: NDSong) => Promise<'started' | 'empty'>
   extendRadio: () => Promise<void>
   /** The track meant to be the last has ended: stays on the one after it, paused. */
   stopAtTrackEnd: () => void
   addToQueue: (songs: NDSong[]) => void
-  playNext: (song: NDSong) => void
+  /** Says how many songs added the same way will play before it (0: it plays next). */
+  playNext: (song: NDSong) => number
   removeFromQueueAt: (index: number) => void
   reorderQueue: (fromIndex: number, toIndex: number) => void
   clearQueue: () => void
@@ -77,6 +110,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
   status: 'disconnected',
   error: null,
   username: null,
+  savedSession: null,
 
   artists: [],
   recentAlbums: [],
@@ -112,11 +146,12 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     const client = new NavidromeClient({ url, username, password })
     try {
       await client.testConnection()
-      set({ client, status: 'connected', username })
+      set({ client, status: 'connected', username, error: null })
       logEvent('connection', 'Navidrome connecté')
       if (remember) {
         await storage.saveConnection('navidrome', { url, username })
         await storage.saveSecret('navidrome', 'password', password)
+        set({ savedSession: true })
       }
       await get().loadLibrary()
     } catch (err: any) {
@@ -130,11 +165,13 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     const { client } = get()
     if (!client) return
     try {
-      const [recentAlbums, artists, playlists] = await Promise.all([
+      const [recentAlbums, artists, allPlaylists] = await Promise.all([
         client.getAlbumList('newest', 20),
         client.getArtists(),
         client.getPlaylists()
       ])
+      // Each account has its own playlists: those of the others (public ones, or all of them for an admin) stay out.
+      const playlists = ownPlaylists(allPlaylists, get().username)
       set({ recentAlbums, artists, playlists, libraryLoaded: true })
       // Home and Library render these same lists at different thumbnail sizes
       // (a rail vs a grid), so both get warmed regardless of which screen the
@@ -166,8 +203,11 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     const { client } = get()
     if (!client) throw new Error('Non connecté')
     const playlist = await client.createPlaylist(name, songIds)
-    set((s) => ({ playlists: [...s.playlists, playlist] }))
-    return playlist
+    // A new playlist is the account's own: private, whatever the server would make it by default.
+    if (playlist.public !== false) await client.setPlaylistPublic(playlist.id, false).catch(() => {})
+    const mine = { ...playlist, public: false, owner: playlist.owner ?? get().username ?? undefined }
+    set((s) => ({ playlists: [...s.playlists, mine] }))
+    return mine
   },
 
   addSongsToPlaylist: async (playlistId, songIds) => {
@@ -179,16 +219,12 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     }))
   },
 
-  restoreSession: async () => {
-    const conn = await storage.loadConnection('navidrome')
-    if (!conn) return
-    const password = await storage.loadSecret('navidrome', 'password')
-    if (!password) return
-    try {
-      await get().connect(conn.url, conn.username, password, false)
-    } catch {
-      // credentials rejected or server unavailable, stay on login screen
-    }
+  restoreSession: () => {
+    // Asked from several places at once (the retry button, the network coming back, the app coming back): one try.
+    restoring ??= restoreSaved().finally(() => {
+      restoring = null
+    })
+    return restoring
   },
 
   logout: async () => {
@@ -197,7 +233,9 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     set({
       client: null,
       status: 'disconnected',
+      error: null,
       username: null,
+      savedSession: false,
       artists: [],
       recentAlbums: [],
       recentlyPlayed: [],
@@ -237,6 +275,15 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
       return
     }
     set({ queue: songs, orderedQueue: null, queueIndex: startIndex, isPlaying: true, currentTime: 0, radio: null })
+  },
+
+  jumpTo: (index) => {
+    const { queue, queueIndex } = get()
+    if (index < 0 || index >= queue.length) return
+    // The song already playing starts again: nothing else would reload it.
+    if (index === queueIndex) seekTo(0)
+    set({ queueIndex: index, currentTime: 0, isPlaying: true })
+    if (get().radio && radioNeedsMore(queue.length, index)) void get().extendRadio()
   },
 
   startRadio: async (seed) => {
@@ -285,16 +332,27 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     }))
   },
 
-  /** Slots a track straight after the one playing, without disturbing the rest. */
+  /**
+   * Slots a track after the one playing, without disturbing the rest. Songs added this way line up in the order they
+   * were added: the first plays next, each later one after it (it used to be the last one added that played next).
+   */
   playNext: (song) => {
+    let ahead = 0
     set((s) => {
+      // Its own copy: the songs added this way are told apart from the same song queued otherwise.
+      const entry = { ...song }
+      upNext.add(entry)
       if (s.queue.length === 0) {
-        return { queue: [song], orderedQueue: null, queueIndex: 0, isPlaying: true }
+        return { queue: [entry], orderedQueue: null, queueIndex: 0, isPlaying: true }
       }
+      let at = s.queueIndex + 1
+      while (at < s.queue.length && upNext.has(s.queue[at])) at++
+      ahead = at - (s.queueIndex + 1)
       const queue = [...s.queue]
-      queue.splice(s.queueIndex + 1, 0, song)
-      return { queue, orderedQueue: s.orderedQueue ? [...s.orderedQueue, song] : null }
+      queue.splice(at, 0, entry)
+      return { queue, orderedQueue: s.orderedQueue ? [...s.orderedQueue, entry] : null }
     })
+    return ahead
   },
 
   removeFromQueueAt: (index) => {
@@ -332,7 +390,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
       if (fromIndex === s.queueIndex) queueIndex = toIndex
       else if (fromIndex < s.queueIndex && toIndex >= s.queueIndex) queueIndex -= 1
       else if (fromIndex > s.queueIndex && toIndex <= s.queueIndex) queueIndex += 1
-      return { queue, queueIndex }
+      return { queue, queueIndex, orderedQueue: s.orderedQueue ? moveInOrder(s.orderedQueue, moved, queue[toIndex - 1] ?? null) : null }
     })
   },
 
@@ -439,3 +497,24 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     return queue[queueIndex] || null
   }
 }))
+
+/** Signs in with the login saved on the phone, if there is one. */
+async function restoreSaved(): Promise<void> {
+  const { setState: set, getState: get } = useNavidromeStore
+  const conn = await storage.loadConnection('navidrome').catch(() => null)
+  const password = conn ? await storage.loadSecret('navidrome', 'password').catch(() => null) : null
+  if (!conn || !password) {
+    set({ savedSession: false })
+    return
+  }
+  set({ savedSession: true })
+  try {
+    await get().connect(conn.url, conn.username, password, false)
+  } catch (err) {
+    // The server can't be reached (no network, the server asleep): a client is kept all the same, so the songs
+    // downloaded to the phone still play and the covers kept on it still show. The screens say the server is
+    // unreachable and try again. A rejected password leaves no client: the login form is shown.
+    if (!isUnreachable(err)) set({ client: null })
+    else if (!get().client) set({ client: new NavidromeClient({ url: conn.url, username: conn.username, password }), username: conn.username })
+  }
+}

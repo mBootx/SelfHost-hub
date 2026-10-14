@@ -6,7 +6,7 @@ const NODES = [
 
 /**
  * The app icon (branding/icon.svg) drawn in the current accent colour, so it follows the chosen
- * colour scheme: a roof over a play button made of three linked nodes.
+ * colour scheme: a play button made of three linked nodes.
  */
 export default function AppLogo({ className = '' }: { className?: string }): JSX.Element {
   return (
@@ -20,8 +20,14 @@ export default function AppLogo({ className = '' }: { className?: string }): JSX
         </mask>
       </defs>
       <rect width="512" height="512" rx="112" fill="currentColor" fillOpacity="0.14" />
-      <g mask="url(#app-logo-holes)" fill="currentColor" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M128 226 L256 116 L384 226" fill="none" strokeWidth="38" />
+      <g
+        mask="url(#app-logo-holes)"
+        transform="translate(256 256) scale(1.3) translate(-279 -314)"
+        fill="currentColor"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M212 238 L346 314 L212 390 Z" fillOpacity="0.14" strokeWidth="24" />
         {NODES.map(([x, y]) => (
           <circle key={`${x}-${y}`} cx={x} cy={y} r="31" stroke="none" />

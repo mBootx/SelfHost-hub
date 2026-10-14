@@ -1,5 +1,8 @@
 import { X } from 'lucide-react'
+import { useState } from 'react'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
+import { useToastStore } from '@renderer/store/toastStore'
+import ConfirmModal from '@renderer/components/ConfirmModal'
 import { QueueStatus } from '@renderer/services/downtify'
 import CoverImage from './CoverImage'
 
@@ -25,6 +28,9 @@ export default function DownloadQueue(): JSX.Element {
   const queue = useDowntifyStore((s) => s.queue)
   const cancelQueueItem = useDowntifyStore((s) => s.cancelQueueItem)
   const clearQueue = useDowntifyStore((s) => s.clearQueue)
+  const showToast = useToastStore((s) => s.show)
+  const [confirmClear, setConfirmClear] = useState(false)
+  const failed = (err: unknown): void => showToast(err instanceof Error && err.message ? err.message : 'Downtify ne répond pas')
 
   if (queue.length === 0) {
     return <p className="py-8 text-center text-sm text-gray-500">Aucun téléchargement en cours.</p>
@@ -33,7 +39,7 @@ export default function DownloadQueue(): JSX.Element {
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <button onClick={() => clearQueue()} className="text-xs text-gray-400 hover:text-red-400">
+        <button onClick={() => setConfirmClear(true)} className="text-xs text-gray-400 hover:text-red-400">
           Tout effacer
         </button>
       </div>
@@ -46,7 +52,7 @@ export default function DownloadQueue(): JSX.Element {
               <p className="truncate text-xs text-gray-400">{item.song.artists.join(', ')}</p>
             </div>
             <StatusBadge status={item.status} />
-            <button onClick={() => cancelQueueItem(item.song.song_id)} className="text-gray-400 hover:text-red-400">
+            <button onClick={() => cancelQueueItem(item.song.song_id).catch(failed)} title="Retirer" className="text-gray-400 hover:text-red-400">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -63,6 +69,17 @@ export default function DownloadQueue(): JSX.Element {
           )}
         </div>
       ))}
+      <ConfirmModal
+        open={confirmClear}
+        title="Vider la file ?"
+        description="Les téléchargements en attente sont annulés et l’historique est effacé."
+        confirmLabel="Vider"
+        onCancel={() => setConfirmClear(false)}
+        onConfirm={async () => {
+          setConfirmClear(false)
+          await clearQueue().catch(failed)
+        }}
+      />
     </div>
   )
 }

@@ -3,6 +3,8 @@ import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-nati
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 import { useDownloadStore } from '@/store/downloadStore'
 import LoginScreen from '@/components/filebrowser/LoginScreen'
+import ReconnectPanel from '@/components/ReconnectPanel'
+import { plural } from '@/services/plural'
 import ExplorerScreen from '@/components/filebrowser/ExplorerScreen'
 import DownloadsList from '@/components/filebrowser/DownloadsList'
 import { Screen } from '@/components/Screen'
@@ -12,10 +14,14 @@ type Pane = 'server' | 'downloads'
 
 export default function FilesTab() {
   const status = useFileBrowserStore((s) => s.status)
+  const error = useFileBrowserStore((s) => s.error)
+  const savedSession = useFileBrowserStore((s) => s.savedSession)
+  const restoreSession = useFileBrowserStore((s) => s.restoreSession)
   const downloadCount = useDownloadStore((s) => s.files.length)
   const [pane, setPane] = useState<Pane>('server')
+  const [switching, setSwitching] = useState(false)
 
-  if (status === 'connecting') {
+  if (status === 'connecting' || (status === 'disconnected' && savedSession === null)) {
     return (
       <Screen>
         <View style={styles.center}>
@@ -35,10 +41,14 @@ export default function FilesTab() {
             onPress={() => setPane('downloads')}
             style={({ pressed }) => [styles.offlineLink, pressed && styles.pressed]}
           >
-            <Text style={styles.offlineLinkText}>Voir mes {downloadCount} fichiers téléchargés</Text>
+            <Text style={styles.offlineLinkText}>Voir {plural(downloadCount, 'fichier téléchargé', 'fichiers téléchargés')}</Text>
           </Pressable>
         )}
-        <LoginScreen />
+        {status === 'error' && savedSession && !switching ? (
+          <ReconnectPanel service="FileBrowser" error={error} onRetry={restoreSession} onSwitch={() => setSwitching(true)} />
+        ) : (
+          <LoginScreen />
+        )}
       </Screen>
     )
   }

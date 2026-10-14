@@ -4,6 +4,7 @@ import { ChevronRight, User } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { NDArtist } from '@/services/navidrome'
 import CoverImage from '@/components/CoverImage'
+import { plural } from '@/services/plural'
 import { colors, radius, spacing } from '@/constants/theme'
 
 export default function ArtistRow({ artist }: { artist: NDArtist }) {
@@ -28,7 +29,7 @@ export default function ArtistRow({ artist }: { artist: NDArtist }) {
         <Text style={styles.name} numberOfLines={1}>
           {artist.name}
         </Text>
-        {!!artist.albumCount && <Text style={styles.meta}>{artist.albumCount} albums</Text>}
+        {!!artist.albumCount && <Text style={styles.meta}>{plural(artist.albumCount, 'album', 'albums')}</Text>}
       </View>
       <ChevronRight size={18} color={colors.textMuted} />
     </Pressable>

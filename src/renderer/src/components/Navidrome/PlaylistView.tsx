@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Play, ListMusic, HardDriveDownload, X, Trash2 } from 'lucide-react'
+import { Play, ListMusic, HardDriveDownload, X, Trash2, GripVertical } from 'lucide-react'
 import { NavidromeClient, NDPlaylist, NDSong } from '@renderer/services/navidrome'
 import { prefetchCoverArt } from '@renderer/services/imagePrefetch'
+import { plural } from '@renderer/services/plural'
+import LoadFailed from './LoadFailed'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useOfflineStore } from '@renderer/store/offlineStore'
 import { useToastStore } from '@renderer/store/toastStore'
@@ -46,17 +48,44 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
   const [removingIndex, setRemovingIndex] = useState<number | null>(null)
   const [sortMode, setSortMode] = useState<SortMode>('default')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // Dragging a song to another place (in the playlist's own order only): where it comes from, where it would land.
+  const [dragFrom, setDragFrom] = useState<number | null>(null)
+  const [dragOver, setDragOver] = useState<number | null>(null)
+  const [savingOrder, setSavingOrder] = useState(false)
+  const canReorder = sortMode === 'default' && removingIndex === null && !savingOrder
+
+  /** A song dropped at another place: shown at once, then the whole order is saved; put back if the server refuses. */
+  async function handleMove(from: number, to: number): Promise<void> {
+    if (from === to) return
+    const before = songs
+    const next = [...songs]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    setSongs(next)
+    setSavingOrder(true)
+    try {
+      await client.replacePlaylistSongs(playlistId, next.map((s) => s.id))
+    } catch (err) {
+      setSongs(before)
+      showToast(`Ordre non enregistré : ${err instanceof Error && err.message ? err.message : 'erreur inconnue'}`)
+    } finally {
+      setSavingOrder(false)
+    }
+  }
 
   async function handleDeletePlaylist(): Promise<void> {
     try {
       await deletePlaylist(playlistId)
-      showToast(`Playlist "${playlist?.name}" supprimée`)
+      showToast(`Playlist « ${playlist?.name} » supprimée`)
       onDeleted()
     } catch (err: any) {
       showToast(err?.message || 'Impossible de supprimer la playlist')
       setConfirmingDelete(false)
     }
   }
+
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   // Sorting only changes what's displayed - removal still has to address the
   // song by its real position in the server's playlist, so each row keeps its
@@ -72,17 +101,25 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    client.getPlaylist(playlistId).then((res) => {
-      if (cancelled) return
-      setPlaylist(res.playlist)
-      setSongs(res.songs)
-      setLoading(false)
-      prefetchCoverArt(client, res.songs.map((s) => s.coverArt), 80)
-    })
+    setError(null)
+    client
+      .getPlaylist(playlistId)
+      .then((res) => {
+        if (cancelled) return
+        setPlaylist(res.playlist)
+        setSongs(res.songs)
+        setLoading(false)
+        prefetchCoverArt(client, res.songs.map((s) => s.coverArt), 80)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : 'Playlist introuvable')
+        setLoading(false)
+      })
     return () => {
       cancelled = true
     }
-  }, [playlistId])
+  }, [playlistId, attempt])
 
   async function handleRemove(index: number): Promise<void> {
     setRemovingIndex(index)
@@ -97,7 +134,8 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
     }
   }
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Chargement...</div>
+  if (loading) return <div className="p-6 text-sm text-gray-400">Chargement…</div>
+  if (error) return <LoadFailed what="Playlist indisponible" error={error} onRetry={() => setAttempt((n) => n + 1)} />
 
   return (
     <div className="animate-fade-in p-6">
@@ -112,7 +150,7 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
         <div>
           <p className="text-xs uppercase tracking-wide text-gray-400">Playlist</p>
           <h1 className="text-3xl font-bold">{playlist?.name}</h1>
-          <p className="mt-1 text-sm text-gray-400">{songs.length} titres</p>
+          <p className="mt-1 text-sm text-gray-400">{plural(songs.length, 'titre', 'titres')}</p>
           <div className="mt-4 flex items-center gap-3">
             <button
               onClick={() => playQueue(songs, 0)}
@@ -122,10 +160,10 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
             </button>
             <button
               onClick={() => downloadTracks(songs, client)}
-              title="Télécharger la playlist pour écoute hors-ligne"
+              title="Télécharger la playlist pour écoute hors ligne"
               className="flex items-center gap-2 rounded-full border border-surface-border px-4 py-2 text-sm text-gray-300 transition-colors hover:border-accent hover:text-accent"
             >
-              <HardDriveDownload className="h-4 w-4" /> Hors-ligne
+              <HardDriveDownload className="h-4 w-4" /> Hors ligne
             </button>
             <button
               onClick={() => setConfirmingDelete(true)}
@@ -154,10 +192,43 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
           {displaySongs.map(({ song, originalIndex }, i) => (
             <tr
               key={`${song.id}-${originalIndex}`}
+              draggable={canReorder}
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                setDragFrom(originalIndex)
+              }}
+              onDragOver={(e) => {
+                if (dragFrom === null) return
+                e.preventDefault()
+                setDragOver(originalIndex)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (dragFrom !== null) void handleMove(dragFrom, originalIndex)
+                setDragFrom(null)
+                setDragOver(null)
+              }}
+              onDragEnd={() => {
+                setDragFrom(null)
+                setDragOver(null)
+              }}
               onDoubleClick={() => playQueue(displaySongs.map((d) => d.song), i)}
               onContextMenu={(e) => trackMenu.onContextMenu(e, song)}
-              className="group cursor-default rounded transition-colors hover:bg-surface-hover"
+              className={`group cursor-default rounded transition-colors hover:bg-surface-hover ${
+                dragOver === originalIndex && dragFrom !== null && dragFrom !== originalIndex
+                  ? dragFrom < originalIndex
+                    ? 'border-b-2 border-accent'
+                    : 'border-t-2 border-accent'
+                  : ''
+              } ${dragFrom === originalIndex ? 'opacity-50' : ''}`}
             >
+              <td className="w-6 py-1.5 pl-1">
+                {canReorder && (
+                  <span title="Glisser pour déplacer">
+                    <GripVertical className="h-4 w-4 cursor-grab text-gray-600 opacity-0 transition-opacity group-hover:opacity-100" />
+                  </span>
+                )}
+              </td>
               <td className="w-12 py-1.5 pl-2">
                 <TrackThumbnail
                   coverUrl={song.coverArt ? client.coverArtUrl(song.coverArt, 80) : null}
@@ -193,7 +264,7 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
       <ConfirmModal
         open={confirmingDelete}
         title="Supprimer la playlist ?"
-        description={`"${playlist?.name}" sera définitivement supprimée.`}
+        description={`« ${playlist?.name} » sera définitivement supprimée.`}
         onCancel={() => setConfirmingDelete(false)}
         onConfirm={handleDeletePlaylist}
       />

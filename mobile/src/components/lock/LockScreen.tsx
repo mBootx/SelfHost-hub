@@ -111,7 +111,7 @@ export default function LockScreen() {
     const attempts = useAppLockStore.getState().failedAttempts
     const left = ATTEMPTS_PER_PAUSE - (attempts % ATTEMPTS_PER_PAUSE)
     const wrong = isPin ? 'Code incorrect' : 'Schéma incorrect'
-    setMessage(left < ATTEMPTS_PER_PAUSE && left <= 2 ? `${wrong} - encore ${left} essai${left > 1 ? 's' : ''} avant une pause` : wrong)
+    setMessage(left < ATTEMPTS_PER_PAUSE && left <= 2 ? `${wrong} · encore ${left} essai${left > 1 ? 's' : ''} avant une pause` : wrong)
   }
 
   async function submitRecovery(): Promise<void> {

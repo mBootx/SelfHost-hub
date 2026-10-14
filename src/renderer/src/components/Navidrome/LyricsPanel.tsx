@@ -63,7 +63,7 @@ export default function LyricsPanel({ lines, plain, loading, searching, onSeek, 
   }, [index])
 
   if (loading) {
-    return <p className="text-sm text-gray-500">Recherche des paroles...</p>
+    return <p className="text-sm text-gray-500">Recherche des paroles…</p>
   }
 
   if (!lines && !plain) {
@@ -76,7 +76,7 @@ export default function LyricsPanel({ lines, plain, loading, searching, onSeek, 
           className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           <Sparkles className="h-3.5 w-3.5" />
-          {searching ? 'Recherche...' : 'Recherche auto'}
+          {searching ? 'Recherche…' : 'Recherche auto'}
         </button>
       </div>
     )

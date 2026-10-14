@@ -79,7 +79,7 @@ export default function Sidebar(): JSX.Element {
                     : 'text-gray-400 hover:bg-surface-hover hover:text-white hover:translate-x-0.5'
                 }`
               }
-              title={showIndicator ? `${label} - lecture en cours : ${currentSong?.title}` : label}
+              title={showIndicator ? `${label} · lecture en cours : ${currentSong?.title}` : label}
             >
               <span className="relative shrink-0">
                 <Icon className="h-5 w-5 transition-transform duration-150 group-hover:scale-110" />

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { NavidromeClient, NDSong } from '@renderer/services/navidrome'
+import { fileExtension, NavidromeClient, NDSong, playableOriginal } from '@renderer/services/navidrome'
 import { storage } from '@renderer/services/storage'
 
 export interface OfflineTrack {
@@ -68,8 +68,11 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
       errors: { ...s.errors, [song.id]: undefined as unknown as string }
     }))
     try {
-      const url = client.streamUrl(song.id)
-      const res = await window.api.offline.download({ id: song.id, url, extension: 'mp3' })
+      // The file as it is on the server, under its own extension, when the player can read it (it used to be fetched
+      // as a stream, which the server may convert, and always named .mp3).
+      const original = playableOriginal(song.suffix)
+      const url = original ? client.originalUrl(song.id) : client.streamUrl(song.id)
+      const res = await window.api.offline.download({ id: song.id, url, extension: original ? fileExtension(song.suffix) : 'mp3' })
       if (!res.ok) throw new Error(res.error || 'Téléchargement impossible')
       const track: OfflineTrack = {
         id: song.id,

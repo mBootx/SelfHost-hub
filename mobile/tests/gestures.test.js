@@ -64,6 +64,51 @@ function pinchPoints(opts) {
   return p
 }
 
+/**
+ * The open hand with its thumb and index tips brought together `reach` index-knuckle-distances from the wrist: the
+ * higher, the more the index stays stretched (a pinch on a pen); the lower, the more it bends over (the OK sign).
+ */
+function pinchReaching(reach, opts) {
+  const p = hand('openRightUp', opts)
+  const at = (i) => [p[i * 3], p[i * 3 + 1]]
+  const set = (i, [x, y]) => {
+    p[i * 3] = x
+    p[i * 3 + 1] = y
+  }
+  const wrist = at(0)
+  const knuckle = at(5)
+  const length = Math.hypot(knuckle[0] - wrist[0], knuckle[1] - wrist[1])
+  const unit = [(knuckle[0] - wrist[0]) / length, (knuckle[1] - wrist[1]) / length]
+  const meet = [wrist[0] + unit[0] * length * reach, wrist[1] + unit[1] * length * reach]
+  const lerp = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]
+  const thumbBase = at(2)
+  set(4, [meet[0] - 0.004, meet[1]])
+  set(3, lerp(thumbBase, at(4), 0.55))
+  set(8, [meet[0] + 0.004, meet[1]])
+  set(7, lerp(knuckle, meet, 0.7))
+  set(6, lerp(knuckle, meet, 0.35))
+  return p
+}
+
+/** The real fist, its index lifted to `reach` and the thumb following its tip: a grip with the index not quite closed. */
+function gripWithIndex(reach, opts) {
+  const p = hand('fist', opts)
+  const at = (i) => [p[i * 3], p[i * 3 + 1]]
+  const set = (i, [x, y]) => {
+    p[i * 3] = x
+    p[i * 3 + 1] = y
+  }
+  const wrist = at(0)
+  const knuckle = at(5)
+  const tip = at(8)
+  const was = Math.hypot(tip[0] - wrist[0], tip[1] - wrist[1])
+  const want = Math.hypot(knuckle[0] - wrist[0], knuckle[1] - wrist[1]) * reach
+  const scale = want / was
+  for (const i of [6, 7, 8]) set(i, [wrist[0] + (at(i)[0] - wrist[0]) * scale, wrist[1] + (at(i)[1] - wrist[1]) * scale])
+  set(4, [at(8)[0] - 0.004, at(8)[1]])
+  return p
+}
+
 function withNoise(points, amount, seed) {
   let s = seed
   const random = () => {
@@ -99,6 +144,12 @@ function play(rec, frames, { start = 0, score = 0.95, width = 640, height = 640 
 
 const repeatFor = (ms, hands) => Array.from({ length: Math.round(ms / STEP) }, () => hands)
 const names = (events) => events.map((e) => e.gesture)
+
+/** The open hand's wrist moving from y0 to y1 over `ms`, at x: a hand raised (y falls) or lowered. */
+function rise(y0, y1, ms, { x = 0.5, name = 'openRightUp', scale = 0.4 } = {}) {
+  const n = Math.max(2, Math.round(ms / STEP))
+  return Array.from({ length: n }, (_, i) => [hand(name, { x, y: y0 + ((y1 - y0) * i) / (n - 1), scale })])
+}
 
 /** The open hand's wrist moving from x0 to x1 over `ms`, at height y. */
 function sweep(x0, x1, ms, { y = 0.75, name = 'openRightUp', scale = 0.5 } = {}) {
@@ -223,6 +274,28 @@ test('fingers that only loosen a little are still the same pinch', () => {
   assert.deepStrictEqual(names(play(rec, frames)), ['PINCH'])
 })
 
+test('a pinch with the index bent over to meet the thumb (the OK sign) counts, not only one on a stretched index', () => {
+  // Measured on real hands: the tips meet about one hand size from the wrist, where the index knuckle is at about 0.95.
+  for (const reach of [1.0, 1.05, 1.15, 1.3, 1.5]) {
+    assert.strictEqual(g.handShape(pinchReaching(reach, SPOT), 1).pose, 'pinch', 'index reach ' + reach)
+    const events = play(recognizer(), [...repeatFor(300, [OPEN()]), ...repeatFor(600, [pinchReaching(reach, SPOT)])])
+    assert.deepStrictEqual(names(events), ['PINCH'], 'index reach ' + reach)
+  }
+})
+
+test('a closed hand is no pinch, however close the thumb is to the index', () => {
+  assert.notStrictEqual(g.handShape(hand('fist'), 1).pose, 'pinch')
+  // The index a little open but the others folded (a grip on a wheel): still none.
+  for (const reach of [0.9, 1.0, 1.05]) {
+    const grip = gripWithIndex(reach)
+    const gap = g.handShape(grip, 1).pinchGap
+    assert.ok(gap < g.DEFAULT_THRESHOLDS.pinchDistance, 'the thumb is on the index: ' + gap)
+    assert.notStrictEqual(g.handShape(grip, 1).pose, 'pinch', 'index reach ' + reach)
+  }
+  // Pinching with the other fingers curled is a pinch once the index really reaches out.
+  assert.strictEqual(g.handShape(gripWithIndex(1.25), 1).pose, 'pinch')
+})
+
 test('a fist never plays or pauses', () => {
   const rec = recognizer()
   assert.deepStrictEqual(names(play(rec, repeatFor(3000, [hand('fist')]))), [])
@@ -316,6 +389,12 @@ test('a wave that carries the hand out of the picture still counts', () => {
   assert.deepStrictEqual(names(play(recognizer(), frames)), ['WAVE_RIGHT'])
 })
 
+test('a fist or a grip crossing the picture (hands on the wheel, steering) is not a wave', () => {
+  assert.deepStrictEqual(names(play(recognizer(), sweep(0.2, 0.8, 350, { name: 'fist' }))), [])
+  assert.deepStrictEqual(names(play(recognizer(), sweep(0.8, 0.2, 350, { name: 'pointingUp' }))), [])
+  assert.deepStrictEqual(names(play(recognizer(), sweep(0.2, 0.8, 350, { name: 'thumbUp' }))), [])
+})
+
 test('a slow drift across the picture is not a wave', () => {
   assert.deepStrictEqual(names(play(recognizer(), sweep(0.2, 0.8, 2500))), [])
 })
@@ -329,66 +408,74 @@ test('a hand that only just came into the picture is not a wave (seen in too few
   assert.deepStrictEqual(names(play(recognizer(), frames)), [])
 })
 
-test('a hand raised across the picture is not a wave', () => {
+test('a hand moved diagonally, as far across as up, is neither a wave nor a volume change', () => {
   const n = Math.round(350 / STEP)
-  const diagonal = Array.from({ length: n }, (_, i) => [hand('openRightUp', { x: 0.3 + (0.35 * i) / (n - 1), y: 0.9 - (0.6 * i) / (n - 1), scale: 0.4 })])
+  const diagonal = Array.from({ length: n }, (_, i) => [hand('openRightUp', { x: 0.3 + (0.35 * i) / (n - 1), y: 0.9 - (0.4 * i) / (n - 1), scale: 0.4 })])
   assert.deepStrictEqual(names(play(recognizer(), [...repeatFor(300, [hand('openRightUp', { x: 0.3, y: 0.9, scale: 0.4 })]), ...diagonal])), [])
 })
 
 // --- Volume ---
 
-test('an open hand held still high turns the volume up, then again every half second until it goes', () => {
-  const rec = recognizer()
-  const up = [hand('openRightUp', { x: 0.5, y: 0.35, scale: 0.4 })]
-  const events = play(rec, [...repeatFor(2000, up), ...repeatFor(1000, [])])
-  assert.ok(events.length >= 3 && events.length <= 4, events.length + ' steps')
-  assert.ok(events.every((e) => e.gesture === 'PALM_UP'))
+test('an open hand swept up turns the volume up, swept down turns it down, once each', () => {
+  assert.deepStrictEqual(names(play(recognizer(), [...repeatFor(300, [hand('openRightUp', { x: 0.5, y: 0.85, scale: 0.4 })]), ...rise(0.85, 0.4, 400)])), ['PALM_UP'])
+  assert.deepStrictEqual(names(play(recognizer(), [...repeatFor(300, [hand('openRightUp', { x: 0.5, y: 0.2, scale: 0.4 })]), ...rise(0.2, 0.7, 400)])), ['PALM_DOWN'])
+  const events = play(recognizer(), [...repeatFor(300, [hand('openRightUp', { x: 0.5, y: 0.85, scale: 0.4 })]), ...rise(0.85, 0.3, 450), ...repeatFor(800, [hand('openRightUp', { x: 0.5, y: 0.3, scale: 0.4 })])])
+  assert.deepStrictEqual(names(events), ['PALM_UP'])
   assert.strictEqual(events[0].repeat, false)
-  assert.ok(events.slice(1).every((e) => e.repeat))
-  assert.ok(events[0].t >= 600 && events[0].t <= 800, 'first step at ' + events[0].t)
 })
 
-test('held low it turns the volume down; in the middle it does nothing', () => {
-  const low = play(recognizer(), repeatFor(1200, [hand('openRightUp', { x: 0.5, y: 0.95, scale: 0.4 })]))
-  assert.ok(low.length >= 1 && low.every((e) => e.gesture === 'PALM_DOWN'), JSON.stringify(names(low)))
-  // The wrist at 0.62 puts the middle of the palm about half-way down the picture.
-  const middle = play(recognizer(), repeatFor(2000, [OPEN()]))
-  assert.deepStrictEqual(names(middle), [])
+test('an open hand resting high or low in the picture, as long as it likes, does nothing', () => {
+  for (const y of [0.1, 0.3, 0.5, 0.8, 0.95]) {
+    assert.deepStrictEqual(names(play(recognizer(), repeatFor(6000, [hand('openRightUp', { x: 0.5, y, scale: 0.4 })]))), [], 'at height ' + y)
+  }
 })
 
-test('an open hand waiting a little low, then waving, only skips (the middle of the picture is wide)', () => {
+test('bringing the hand back after a volume change is not a change the other way; another sweep is another step', () => {
+  const frames = [
+    ...repeatFor(300, [hand('openRightUp', { x: 0.5, y: 0.85, scale: 0.4 })]),
+    ...rise(0.85, 0.35, 400),
+    ...repeatFor(150, [hand('openRightUp', { x: 0.5, y: 0.35, scale: 0.4 })]),
+    ...rise(0.35, 0.85, 500),
+    ...repeatFor(100, [hand('openRightUp', { x: 0.5, y: 0.85, scale: 0.4 })]),
+    ...rise(0.85, 0.35, 400)
+  ]
+  assert.deepStrictEqual(names(play(recognizer(), frames)), ['PALM_UP', 'PALM_UP'])
+})
+
+test('a slow rise, a short one, or a fist raised, is not a volume change', () => {
+  assert.deepStrictEqual(names(play(recognizer(), rise(0.9, 0.2, 3000))), [])
+  assert.deepStrictEqual(names(play(recognizer(), [...repeatFor(300, [hand('openRightUp', { x: 0.5, y: 0.6, scale: 0.4 })]), ...rise(0.6, 0.5, 200)])), [])
+  assert.deepStrictEqual(names(play(recognizer(), [...repeatFor(300, [hand('fist', { x: 0.5, y: 0.85, scale: 0.4 })]), ...rise(0.85, 0.3, 400, { name: 'fist' })])), [])
+})
+
+test('an open hand waiting low, then waving, only skips', () => {
   const waiting = hand('openRightUp', { x: 0.25, y: 0.72, scale: 0.4 })
-  assert.ok(g.handShape(waiting, 1).palmY > 0.6, 'the palm is past the 60 % line: ' + g.handShape(waiting, 1).palmY)
   const frames = [...repeatFor(1500, [waiting]), ...sweep(0.25, 0.75, 350, { y: 0.72, scale: 0.4 })]
   assert.deepStrictEqual(names(play(recognizer(), frames)), ['WAVE_RIGHT'])
 })
 
-test('a moving open hand does not change the volume', () => {
-  const n = Math.round(2000 / STEP)
-  const drifting = Array.from({ length: n }, (_, i) => [hand('openRightUp', { x: 0.3 + 0.15 * Math.sin(i / 3), y: 0.35, scale: 0.4 })])
-  assert.deepStrictEqual(names(play(recognizer(), drifting)), [])
+test('a wave is sideways and a volume sweep is upright: neither is taken for the other', () => {
+  assert.deepStrictEqual(names(play(recognizer(), [...repeatFor(300, [hand('openRightUp', { x: 0.25, y: 0.6, scale: 0.4 })]), ...sweep(0.25, 0.8, 350, { y: 0.6, scale: 0.4 })])), ['WAVE_RIGHT'])
+  assert.deepStrictEqual(names(play(recognizer(), [...repeatFor(300, [hand('openRightUp', { x: 0.5, y: 0.85, scale: 0.4 })]), ...rise(0.85, 0.35, 350)])), ['PALM_UP'])
 })
 
-test('a little jitter in a hand held still is smoothed away', () => {
-  const steady = hand('openRightUp', { x: 0.5, y: 0.35, scale: 0.4 })
-  const n = Math.round(1500 / STEP)
-  const jittery = Array.from({ length: n }, (_, i) => [withNoise(steady, 0.012, i + 1)])
-  assert.ok(names(play(recognizer(), jittery)).includes('PALM_UP'))
-  const pinch = pinchPoints({ x: 0.5, y: 0.7, scale: 0.4 })
-  const shaky = Array.from({ length: n }, (_, i) => [withNoise(pinch, 0.006, i + 7)])
-  assert.deepStrictEqual(names(play(recognizer(), shaky)), ['PINCH'])
-})
-
-test('an open hand held up on a bumpy road, shaking as a whole, still turns the volume up', () => {
+test('a hand shaking as a whole on a bumpy road, open and held high, changes nothing', () => {
   const steady = hand('openRightUp', { x: 0.5, y: 0.3, scale: 0.4 })
-  const n = Math.round(2000 / STEP)
+  const n = Math.round(3000 / STEP)
   let s = 11
   const random = () => {
     s = (s * 16807) % 2147483647
     return s / 2147483647 - 0.5
   }
   const bumpy = Array.from({ length: n }, () => [shifted(steady, random() * 0.07, random() * 0.07)])
-  assert.ok(names(play(recognizer(), bumpy)).includes('PALM_UP'))
+  assert.deepStrictEqual(names(play(recognizer(), bumpy)), [])
+})
+
+test('a little jitter in a pinch held still is smoothed away', () => {
+  const n = Math.round(1500 / STEP)
+  const pinch = pinchPoints({ x: 0.5, y: 0.7, scale: 0.4 })
+  const shaky = Array.from({ length: n }, (_, i) => [withNoise(pinch, 0.006, i + 7)])
+  assert.deepStrictEqual(names(play(recognizer(), shaky)), ['PINCH'])
 })
 
 // --- Doubtful hands, two hands ---

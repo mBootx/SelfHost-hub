@@ -1,5 +1,7 @@
-import { Modal, View, Text, Pressable, StyleSheet } from 'react-native'
-import { colors, radius, spacing } from '@/constants/theme'
+import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { ChevronRight } from 'lucide-react-native'
+import BottomSheet from '@/components/BottomSheet'
+import { colors, radius, spacing, tint } from '@/constants/theme'
 
 export interface ActionSheetItem {
   label: string
@@ -11,49 +13,50 @@ export interface ActionSheetItem {
 interface Props {
   visible: boolean
   title?: string
+  subtitle?: string
+  /** Something left of the title: a cover, usually. */
+  leading?: React.ReactNode
   items: ActionSheetItem[]
   onClose: () => void
 }
 
-export default function ActionSheet({ visible, title, items, onClose }: Props) {
+/** A menu in a bottom sheet: each action has an icon tile in the accent colour (red for the dangerous one). */
+export default function ActionSheet({ visible, title, subtitle, leading, items, onClose }: Props) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={styles.sheet} onStartShouldSetResponder={() => true}>
-          {title && (
-            <Text style={styles.title} numberOfLines={1}>
-              {title}
-            </Text>
-          )}
-          {items.map((item, i) => (
+    <BottomSheet visible={visible} onClose={onClose} title={title} subtitle={subtitle} leading={leading}>
+      <View style={styles.list}>
+        {items.map((item, i) => {
+          const tone = item.danger ? colors.danger : colors.accent
+          return (
             <Pressable
               key={i}
-              style={styles.row}
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               onPress={() => {
                 onClose()
                 item.onPress()
               }}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
             >
-              <item.icon size={18} color={item.danger ? colors.danger : colors.text} />
-              <Text style={[styles.rowText, item.danger && { color: colors.danger }]}>{item.label}</Text>
+              <View style={[styles.tile, { backgroundColor: tint(tone, 0.14) }]}>
+                <item.icon size={18} color={tone} />
+              </View>
+              <Text style={[styles.rowText, item.danger && { color: colors.danger }]} numberOfLines={1}>
+                {item.label}
+              </Text>
+              <ChevronRight size={16} color={colors.textMuted} />
             </Pressable>
-          ))}
-        </View>
-      </Pressable>
-    </Modal>
+          )
+        })}
+      </View>
+    </BottomSheet>
   )
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.elevated,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingVertical: spacing.md,
-    paddingBottom: spacing.xl
-  },
-  title: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  rowText: { color: colors.text, fontSize: 15 }
+  list: { paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, borderRadius: radius.md },
+  pressed: { backgroundColor: colors.hover },
+  tile: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  rowText: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' }
 })

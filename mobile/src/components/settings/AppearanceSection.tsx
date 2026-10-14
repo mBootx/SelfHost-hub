@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { View, Text, Pressable, TextInput, StyleSheet, Alert } from 'react-native'
 import { reloadAppAsync } from 'expo'
 import { Check } from 'lucide-react-native'
-import { SectionTitle } from '@/components/Screen'
 import {
   ACCENT_PRESETS,
   BACKGROUNDS,
@@ -42,9 +41,6 @@ export default function AppearanceSection() {
 
   return (
     <>
-      <View style={styles.sectionGap}>
-        <SectionTitle>Apparence</SectionTitle>
-      </View>
       <View style={styles.card}>
         <Text style={styles.label}>Couleur d'accent</Text>
         <View style={styles.swatches}>

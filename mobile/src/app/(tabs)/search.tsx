@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
+import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { Search, X, CloudDownload } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
@@ -27,30 +27,26 @@ function SearchContent() {
   const currentSongId = useNavidromeStore((s) => s.queue[s.queueIndex]?.id)
   const isPlaying = useNavidromeStore((s) => s.isPlaying)
   const downtify = useDowntifyStore((s) => s.client)
+  const loadLibrary = useNavidromeStore((s) => s.loadLibrary)
 
   const inputRef = useRef<TextInput>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Results>(EMPTY)
   const [downloadable, setDownloadable] = useState<DowntifySong[]>([])
   const [searching, setSearching] = useState(false)
+  // Why the library could not be searched (the server out of reach): not the same as finding nothing.
+  const [localError, setLocalError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Bumped on every keystroke; a response whose ticket is stale gets dropped so
   // a slow early request can't overwrite the results of a later one.
   const ticket = useRef(0)
 
-  useEffect(() => {
-    const term = query.trim()
-    if (!client || term.length < MIN_QUERY) {
-      ticket.current++
-      setResults(EMPTY)
-      setDownloadable([])
-      setSearching(false)
-      return
-    }
-
-    const mine = ++ticket.current
-    setSearching(true)
-    const timer = setTimeout(async () => {
+  /** Searches the library and Downtify for `term` and shows what comes back, unless a newer search has started since. */
+  const runSearch = useCallback(
+    async (term: string): Promise<void> => {
+      if (!client) return
+      const mine = ++ticket.current
       // Local library and Downtify are searched together; allSettled so a
       // sleeping Downtify box never costs us the Navidrome results.
       const [local, remote] = await Promise.allSettled([
@@ -60,17 +56,43 @@ function SearchContent() {
       if (ticket.current !== mine) return
       const localResults = local.status === 'fulfilled' ? local.value : EMPTY
       setResults(localResults)
+      setLocalError(local.status === 'rejected' ? (local.reason instanceof Error ? local.reason.message : 'Serveur injoignable') : null)
       setDownloadable(remote.status === 'fulfilled' ? remote.value : [])
       setSearching(false)
-      if (client) {
-        prefetchCoverArt(client, localResults.albums.map((a) => a.coverArt), 300)
-        prefetchCoverArt(client, localResults.artists.map((a) => a.coverArt), 100)
-        prefetchCoverArt(client, localResults.songs.map((s) => s.coverArt || s.albumId), 100)
-      }
-    }, DEBOUNCE_MS)
+      prefetchCoverArt(client, localResults.albums.map((a) => a.coverArt), 300)
+      prefetchCoverArt(client, localResults.artists.map((a) => a.coverArt), 100)
+      prefetchCoverArt(client, localResults.songs.map((s) => s.coverArt || s.albumId), 100)
+    },
+    [client, downtify]
+  )
 
+  useEffect(() => {
+    // Any keystroke makes an answer still on its way out of date.
+    ticket.current++
+    const term = query.trim()
+    if (!client || term.length < MIN_QUERY) {
+      setResults(EMPTY)
+      setDownloadable([])
+      setLocalError(null)
+      setSearching(false)
+      return
+    }
+    setSearching(true)
+    const timer = setTimeout(() => void runSearch(term), DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [query, client, downtify])
+  }, [query, client, runSearch])
+
+  // Pulled down: the same search again, with what is on the server now (a scan, a finished Downtify download), and
+  // the library lists read again. The results stay on screen meanwhile.
+  async function handleRefresh(): Promise<void> {
+    setRefreshing(true)
+    try {
+      const term = query.trim()
+      await Promise.all([loadLibrary(), term.length >= MIN_QUERY ? runSearch(term) : Promise.resolve()])
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   // A search tab should be ready to type in the moment it opens.
   useFocusEffect(
@@ -93,7 +115,7 @@ function SearchContent() {
           style={styles.input}
           value={query}
           onChangeText={setQuery}
-          placeholder="Artistes, albums, titres..."
+          placeholder="Artistes, albums, titres…"
           placeholderTextColor={colors.textMuted}
           autoCapitalize="none"
           autoCorrect={false}
@@ -112,6 +134,9 @@ function SearchContent() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={colors.accent} colors={[colors.accent]} />
+        }
       >
         {!searched && (
           <EmptyState
@@ -125,9 +150,15 @@ function SearchContent() {
           />
         )}
 
-        {searched && searching && <ActivityIndicator color={colors.accent} style={styles.loader} />}
+        {searched && searching && !refreshing && <ActivityIndicator color={colors.accent} style={styles.loader} />}
 
-        {searched && !searching && !hasAny && <EmptyState icon={X} title={`Aucun résultat pour "${query.trim()}"`} />}
+        {searched && !searching && !hasAny && (
+          localError ? (
+            <EmptyState icon={X} title="Recherche impossible" hint={localError} />
+          ) : (
+            <EmptyState icon={X} title={`Aucun résultat pour « ${query.trim()} »`} />
+          )
+        )}
 
         {!searching && results.artists.length > 0 && (
           <View style={styles.section}>

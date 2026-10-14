@@ -4,6 +4,7 @@ import { ListMusic } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { NDPlaylist } from '@/services/navidrome'
 import CoverImage from '@/components/CoverImage'
+import { plural } from '@/services/plural'
 import { colors, radius, spacing } from '@/constants/theme'
 
 interface Props {
@@ -23,7 +24,7 @@ export default function PlaylistTile({ playlist, variant = 'grid', onLongPress }
       onLongPress={onLongPress}
       delayLongPress={300}
       accessibilityRole="button"
-      accessibilityLabel={`${playlist.name}, ${playlist.songCount} titres`}
+      accessibilityLabel={`${playlist.name}, ${plural(playlist.songCount, 'titre', 'titres')}`}
     >
       <CoverImage
         uri={playlist.coverArt && client ? client.coverArtUrl(playlist.coverArt, 300) : null}
@@ -34,7 +35,7 @@ export default function PlaylistTile({ playlist, variant = 'grid', onLongPress }
       <Text style={styles.title} numberOfLines={1}>
         {playlist.name}
       </Text>
-      <Text style={styles.meta}>{playlist.songCount} titres</Text>
+      <Text style={styles.meta}>{plural(playlist.songCount, 'titre', 'titres')}</Text>
     </Pressable>
   )
 }

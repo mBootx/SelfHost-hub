@@ -93,7 +93,7 @@ export const useUploadStore = create<UploadState>((set) => {
               finished: { seq: s.finished.seq + 1, destPath: destDir }
             }))
           } catch (err: any) {
-            update(id, { status: 'error', error: err?.message || 'Échec du téléversement', speedBps: 0 })
+            update(id, { status: 'error', error: err?.message || "Échec de l'envoi", speedBps: 0 })
           }
           resolve()
         })

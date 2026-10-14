@@ -8,10 +8,10 @@ type IconComponent = React.ComponentType<{ size?: number; color?: string; stroke
 /** Each gesture: what it does, how it is made (for the hints), its icon, and its name with an arrow (the small print). */
 export const GESTURE_INFO: Record<GestureName, { action: string; how: string; icon: IconComponent; tag: string }> = {
   PINCH: { action: 'Lecture / pause', how: 'Pincer pouce et index', icon: Pause, tag: 'PINCH' },
-  WAVE_RIGHT: { action: 'Suivant', how: 'Main vers la droite', icon: SkipForward, tag: 'WAVE_RIGHT ➜' },
-  WAVE_LEFT: { action: 'Précédent', how: 'Main vers la gauche', icon: SkipBack, tag: '⬅ WAVE_LEFT' },
-  PALM_UP: { action: 'Volume +', how: 'Main ouverte en haut', icon: Volume2, tag: 'PALM_UP ⬆' },
-  PALM_DOWN: { action: 'Volume −', how: 'Main ouverte en bas', icon: Volume1, tag: 'PALM_DOWN ⬇' },
+  WAVE_RIGHT: { action: 'Suivant', how: 'Main ouverte vers la droite', icon: SkipForward, tag: 'WAVE_RIGHT ➜' },
+  WAVE_LEFT: { action: 'Précédent', how: 'Main ouverte vers la gauche', icon: SkipBack, tag: '⬅ WAVE_LEFT' },
+  PALM_UP: { action: 'Volume +', how: 'Main ouverte qui monte', icon: Volume2, tag: 'PALM_UP ⬆' },
+  PALM_DOWN: { action: 'Volume −', how: 'Main ouverte qui descend', icon: Volume1, tag: 'PALM_DOWN ⬇' },
   THUMB_UP: { action: "J'aime", how: 'Pouce levé', icon: Heart, tag: 'THUMB_UP' }
 }
 

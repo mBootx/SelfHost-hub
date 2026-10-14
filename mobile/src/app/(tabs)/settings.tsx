@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Music, FolderOpen, Download, HardDriveDownload, ChevronRight, Check, Cast, RefreshCw, Sparkles, Server, Activity } from 'lucide-react-native'
+import { Music, FolderOpen, Download, HardDriveDownload, Check, Cast, RefreshCw, Sparkles, Server, Activity, ListMusic, Palette, SlidersHorizontal, Car, Watch, ImageUp, Lock } from 'lucide-react-native'
 import { installedVersion } from '@/services/appUpdate'
 import { useIsOwner } from '@/hooks/useIsOwner'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
@@ -17,69 +17,27 @@ import { useUpdateStore } from '@/store/updateStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 import { useDowntifyStore } from '@/store/downtifyStore'
-import { useOfflineStore } from '@/store/offlineStore'
+import { offlineBytes, useOfflineStore } from '@/store/offlineStore'
 import { useRemoteStore } from '@/store/remoteStore'
 import { DowntifySettings } from '@/services/downtify'
-import { Screen, ScreenHeader, SectionTitle } from '@/components/Screen'
-import { colors, layout, radius, spacing } from '@/constants/theme'
+import { plural } from '@/services/plural'
+import { Screen, ScreenHeader } from '@/components/Screen'
+import { GroupLabel, RowButton, SettingsCard, SettingsGroup, SettingsHero, SettingsRow } from '@/components/settings/SettingsKit'
+import { ACCENT_PRESETS, BACKGROUNDS, appearance, colors, layout, radius, spacing } from '@/constants/theme'
 
-type IconComponent = React.ComponentType<{ size?: number; color?: string }>
+/** A size in Mo or Go, as the storage rows show it. */
+function formatMegabytes(bytes: number): string {
+  const mb = bytes / (1024 * 1024)
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1).replace('.', ',')} Go`
+  return mb >= 10 ? `${Math.round(mb)} Mo` : `${mb.toFixed(1).replace('.', ',')} Mo`
+}
 
-function ServiceRow({
-  icon: Icon,
-  iconColor,
-  accent,
-  name,
-  connected,
-  subtitle,
-  onLogout,
-  onConnect
-}: {
-  icon: IconComponent
-  iconColor: string
-  accent: string
-  name: string
-  connected: boolean
-  subtitle: string
-  onLogout: () => void
-  /** Only the services without a tab of their own need an entry point here. */
-  onConnect?: () => void
-}) {
-  return (
-    <View style={styles.row}>
-      <View style={[styles.iconWrap, { backgroundColor: accent }]}>
-        <Icon size={20} color={iconColor} />
-      </View>
-      <View style={styles.rowInfo}>
-        <Text style={styles.rowTitle}>{name}</Text>
-        <View style={styles.statusRow}>
-          <View style={[styles.dot, { backgroundColor: connected ? colors.accent : colors.textMuted }]} />
-          <Text style={styles.rowSubtitle} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        </View>
-      </View>
-      {connected ? (
-        <Pressable
-          style={({ pressed }) => [styles.pillButton, pressed && styles.pressed]}
-          onPress={onLogout}
-          accessibilityRole="button"
-          accessibilityLabel={`Se déconnecter de ${name}`}
-        >
-          <Text style={styles.pillText}>Déconnexion</Text>
-        </Pressable>
-      ) : onConnect ? (
-        <Pressable
-          style={({ pressed }) => [styles.pillButton, styles.pillPrimary, pressed && styles.pressed]}
-          onPress={onConnect}
-          accessibilityRole="button"
-          accessibilityLabel={`Se connecter à ${name}`}
-        >
-          <Text style={[styles.pillText, { color: '#000' }]}>Connecter</Text>
-        </Pressable>
-      ) : null}
-    </View>
-  )
+/** Signing out forgets the password saved on the phone: a stray tap on the button must not do that. */
+function confirmLogout(name: string, logout: () => void): void {
+  Alert.alert(`Se déconnecter de ${name} ?`, 'Le mot de passe enregistré sur ce téléphone sera effacé : il faudra le saisir de nouveau.', [
+    { text: 'Annuler', style: 'cancel' },
+    { text: 'Se déconnecter', style: 'destructive', onPress: logout }
+  ])
 }
 
 export default function SettingsTab() {
@@ -99,11 +57,15 @@ export default function SettingsTab() {
   const offlineTracks = useOfflineStore((s) => s.tracks)
   const removeOffline = useOfflineStore((s) => s.removeOffline)
   const offlineIds = Object.keys(offlineTracks)
+  const keptCount = useOfflineStore((s) => Object.keys(s.keptPlaylists).length)
+  // The room the downloaded songs take: measured again when the list changes.
+  const offlineSize = useMemo(() => offlineBytes(offlineTracks), [offlineTracks])
 
   const remoteEnabled = useRemoteStore((s) => s.enabled)
   const remoteStatus = useRemoteStore((s) => s.status)
 
   const [dtSettings, setDtSettings] = useState<DowntifySettings | null>(null)
+  const [dtSettingsError, setDtSettingsError] = useState<string | null>(null)
   const [savingSettings, setSavingSettings] = useState(false)
 
   const updatePhase = useUpdateStore((s) => s.phase)
@@ -119,11 +81,21 @@ export default function SettingsTab() {
   }
 
   useEffect(() => {
-    if (!downtifyClient) {
-      setDtSettings(null)
-      return
+    setDtSettings(null)
+    setDtSettingsError(null)
+    if (!downtifyClient) return
+    let cancelled = false
+    downtifyClient
+      .getSettings()
+      .then((settings) => {
+        if (!cancelled) setDtSettings(settings)
+      })
+      .catch((err) => {
+        if (!cancelled) setDtSettingsError(err instanceof Error && err.message ? err.message : 'Downtify ne répond pas')
+      })
+    return () => {
+      cancelled = true
     }
-    downtifyClient.getSettings().then(setDtSettings).catch(() => {})
   }, [downtifyClient])
 
   async function saveDowntifySettings(): Promise<void> {
@@ -140,7 +112,10 @@ export default function SettingsTab() {
   }
 
   function confirmClearOffline(): void {
-    Alert.alert('Vider le cache hors-ligne', `Supprimer les ${offlineIds.length} titres téléchargés sur cet appareil ?`, [
+    Alert.alert(
+      'Vider les titres hors ligne ?',
+      offlineIds.length > 1 ? `Les ${offlineIds.length} titres téléchargés seront supprimés de ce téléphone.` : 'Le titre téléchargé sera supprimé de ce téléphone.',
+      [
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Supprimer',
@@ -149,144 +124,94 @@ export default function SettingsTab() {
           offlineIds.forEach((id) => removeOffline(id))
         }
       }
-    ])
+      ]
+    )
   }
 
   const activeDownloads = downtifyQueue.filter((q) => q.status === 'downloading' || q.status === 'queued').length
+  const accentName = ACCENT_PRESETS.find((p) => p.hex.toLowerCase() === appearance.accent.toLowerCase())?.label ?? 'Perso'
 
   return (
     <Screen>
       <ScreenHeader title="Réglages" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <SectionTitle>Services</SectionTitle>
-        <ServiceRow
-          icon={Music}
-          iconColor="#000"
-          accent={colors.accent}
-          name="Navidrome"
-          connected={navidromeStatus === 'connected'}
-          subtitle={navidromeStatus === 'connected' ? `Connecté en tant que ${navidromeUsername}` : 'Non connecté'}
-          onLogout={navidromeLogout}
+        <SettingsHero
+          version={installedVersion()}
+          chips={[
+            { label: 'Navidrome', on: navidromeStatus === 'connected' },
+            { label: 'FileBrowser', on: fileBrowserStatus === 'connected' },
+            { label: 'Downtify', on: downtifyStatus === 'connected' },
+            { label: 'PC', on: remoteEnabled && remoteStatus === 'connected' }
+          ]}
+          notice={availableUpdate ? { text: `Mettre à jour vers la version ${availableUpdate.version}`, onPress: handleCheckUpdate } : undefined}
         />
-        <ServiceRow
-          icon={FolderOpen}
-          iconColor="#fff"
-          accent={colors.filebrowser}
-          name="FileBrowser"
-          connected={fileBrowserStatus === 'connected'}
-          subtitle={fileBrowserStatus === 'connected' ? 'Connecté' : 'Non connecté'}
-          onLogout={fileBrowserLogout}
-        />
-        <ServiceRow
-          icon={Download}
-          iconColor="#fff"
-          accent={colors.downtify}
-          name="Downtify"
-          connected={downtifyStatus === 'connected'}
-          subtitle={downtifyStatus === 'connected' ? 'Résultats intégrés à la recherche' : 'Non connecté'}
-          onLogout={downtifyLogout}
-          onConnect={() => router.push('/downtify/connect')}
-        />
-        {/* The server dashboard: only for the account that runs the server. */}
-        {isOwner && (
-          <Pressable
-            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-            onPress={() => router.push('/server')}
-            accessibilityRole="button"
-            accessibilityLabel="Serveur"
-          >
-            <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
-              <Server size={20} color={colors.textSecondary} />
-            </View>
-            <View style={styles.rowInfo}>
-              <Text style={styles.rowTitle}>Serveur</Text>
-              <Text style={styles.rowMeta}>État des services, stockage, scan, réveil à distance</Text>
-            </View>
-            <ChevronRight size={18} color={colors.textMuted} />
-          </Pressable>
-        )}
 
-        <View style={styles.sectionSpacer}>
-          <SectionTitle>Contrôle à distance</SectionTitle>
-        </View>
-        <Pressable
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-          onPress={() => router.push('/devices')}
-          accessibilityRole="button"
-          accessibilityLabel="Contrôle à distance"
-        >
-          <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
-            <Cast size={20} color={colors.textSecondary} />
-          </View>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowTitle}>Appareils</Text>
-            <Text style={styles.rowMeta}>
-              {!remoteEnabled
-                ? 'Désactivé'
-                : remoteStatus === 'connected'
-                  ? 'Connecté au PC'
-                  : remoteStatus === 'connecting'
-                    ? 'Recherche en cours...'
-                    : 'Activé - non connecté'}
-            </Text>
-          </View>
-          <ChevronRight size={18} color={colors.textMuted} />
-        </Pressable>
+        <GroupLabel>Services</GroupLabel>
+        <SettingsCard>
+          <SettingsRow
+            icon={Music}
+            title="Navidrome"
+            meta={navidromeStatus === 'connected' ? `Connecté en tant que ${navidromeUsername}` : 'Non connecté'}
+            right={navidromeStatus === 'connected' ? <RowButton label="Déconnexion" onPress={() => confirmLogout('Navidrome', navidromeLogout)} accessibilityLabel="Se déconnecter de Navidrome" /> : undefined}
+          />
+          <SettingsRow
+            icon={FolderOpen}
+            tone={colors.filebrowser}
+            title="FileBrowser"
+            meta={fileBrowserStatus === 'connected' ? 'Connecté' : 'Non connecté'}
+            right={fileBrowserStatus === 'connected' ? <RowButton label="Déconnexion" onPress={() => confirmLogout('FileBrowser', fileBrowserLogout)} accessibilityLabel="Se déconnecter de FileBrowser" /> : undefined}
+          />
+          <SettingsRow
+            icon={Download}
+            tone={colors.downtify}
+            title="Downtify"
+            meta={downtifyStatus === 'connected' ? 'Résultats intégrés à la recherche' : 'Non connecté'}
+            right={
+              downtifyStatus === 'connected' ? (
+                <RowButton label="Déconnexion" onPress={downtifyLogout} accessibilityLabel="Se déconnecter de Downtify" />
+              ) : (
+                <RowButton label="Connecter" primary onPress={() => router.push('/downtify/connect')} accessibilityLabel="Se connecter à Downtify" />
+              )
+            }
+          />
+          <SettingsRow
+            icon={Cast}
+            title="Appareils"
+            meta={
+              !remoteEnabled ? 'Contrôle à distance désactivé' : remoteStatus === 'connected' ? 'Contrôle à distance : connecté au PC' : remoteStatus === 'connecting' ? 'Recherche en cours…' : 'Activé, non connecté'
+            }
+            onPress={() => router.push('/devices')}
+            accessibilityLabel="Contrôle à distance"
+          />
+          {/* The server dashboard and the playlists of the accounts: only for the account that runs the server. */}
+          {isOwner && <SettingsRow icon={Server} title="Serveur" meta="État des services, stockage, scan, réveil à distance" onPress={() => router.push('/server')} />}
+          {isOwner && navidromeStatus === 'connected' && (
+            <SettingsRow icon={ListMusic} title="Playlists des comptes" meta="Attribuer chaque playlist à son compte, la rendre modifiable" onPress={() => router.push('/playlists-admin')} />
+          )}
+        </SettingsCard>
 
         {downtifyStatus === 'connected' && (
           <>
-            <View style={styles.sectionSpacer}>
-              <SectionTitle>Téléchargements</SectionTitle>
-            </View>
-
-            <Pressable
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-              onPress={() => router.push('/downtify/queue')}
-              accessibilityRole="button"
-              accessibilityLabel="Voir la file de téléchargement"
-            >
-              <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
-                <Download size={20} color={colors.textSecondary} />
-              </View>
-              <View style={styles.rowInfo}>
-                <Text style={styles.rowTitle}>File de téléchargement</Text>
-                <Text style={styles.rowMeta}>
-                  {activeDownloads > 0
-                    ? `${activeDownloads} en cours`
-                    : downtifyQueue.length > 0
-                      ? `${downtifyQueue.length} dans l'historique`
-                      : 'Aucun téléchargement'}
-                </Text>
-              </View>
-              <ChevronRight size={18} color={colors.textMuted} />
-            </Pressable>
-
+            <GroupLabel>Téléchargements</GroupLabel>
+            <SettingsCard>
+              <SettingsRow
+                icon={Download}
+                tone={colors.downtify}
+                title="File de téléchargement"
+                meta={activeDownloads > 0 ? `${activeDownloads} en cours` : downtifyQueue.length > 0 ? `${downtifyQueue.length} dans l'historique` : 'Aucun téléchargement'}
+                onPress={() => router.push('/downtify/queue')}
+                accessibilityLabel="Voir la file de téléchargement"
+              />
+            </SettingsCard>
+            <View style={styles.gap} />
             {dtSettings ? (
               <View style={styles.card}>
                 <Text style={styles.fieldLabel}>Format</Text>
-                <TextInput
-                  style={styles.input}
-                  value={dtSettings.format}
-                  onChangeText={(v) => setDtSettings({ ...dtSettings, format: v })}
-                  autoCapitalize="none"
-                  accessibilityLabel="Format"
-                />
-                <Text style={styles.fieldLabel}>Qualité (kbps)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={dtSettings.bitrate}
-                  onChangeText={(v) => setDtSettings({ ...dtSettings, bitrate: v })}
-                  autoCapitalize="none"
-                  accessibilityLabel="Qualité en kbps"
-                />
+                <TextInput style={styles.input} value={dtSettings.format} onChangeText={(v) => setDtSettings({ ...dtSettings, format: v })} autoCapitalize="none" accessibilityLabel="Format" selectionColor={colors.accent} />
+                <Text style={styles.fieldLabel}>Qualité (kb/s)</Text>
+                <TextInput style={styles.input} value={dtSettings.bitrate} onChangeText={(v) => setDtSettings({ ...dtSettings, bitrate: v })} autoCapitalize="none" accessibilityLabel="Qualité en kb/s" selectionColor={colors.accent} />
                 <Text style={styles.fieldLabel}>Format du nom de fichier</Text>
-                <TextInput
-                  style={styles.input}
-                  value={dtSettings.output}
-                  onChangeText={(v) => setDtSettings({ ...dtSettings, output: v })}
-                  autoCapitalize="none"
-                  accessibilityLabel="Format du nom de fichier"
-                />
+                <TextInput style={styles.input} value={dtSettings.output} onChangeText={(v) => setDtSettings({ ...dtSettings, output: v })} autoCapitalize="none" accessibilityLabel="Format du nom de fichier" selectionColor={colors.accent} />
                 <Pressable
                   style={({ pressed }) => [styles.saveButton, (savingSettings || pressed) && styles.pressed]}
                   onPress={saveDowntifySettings}
@@ -295,14 +220,18 @@ export default function SettingsTab() {
                   accessibilityLabel="Enregistrer les options"
                 >
                   {savingSettings ? (
-                    <ActivityIndicator color="#000" />
+                    <ActivityIndicator color={colors.onAccent} />
                   ) : (
                     <>
-                      <Check size={16} color="#000" />
+                      <Check size={16} color={colors.onAccent} />
                       <Text style={styles.saveButtonText}>Enregistrer</Text>
                     </>
                   )}
                 </Pressable>
+              </View>
+            ) : dtSettingsError ? (
+              <View style={styles.card}>
+                <Text style={styles.rowMeta}>Options de Downtify indisponibles : {dtSettingsError}</Text>
               </View>
             ) : (
               <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.lg }} />
@@ -310,98 +239,64 @@ export default function SettingsTab() {
           </>
         )}
 
+        <GroupLabel>Écoute</GroupLabel>
         <WrappedSection />
-        <AppearanceSection />
-        <PlaybackSection />
-        <CarModeSection />
-        <CameraBackupSection />
-        <AppLockSection />
-        <WatchSection />
 
-        <View style={styles.sectionSpacer}>
-          <SectionTitle>Stockage</SectionTitle>
-        </View>
-        <View style={styles.row}>
-          <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
-            <HardDriveDownload size={20} color={colors.textSecondary} />
-          </View>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowTitle}>Titres hors-ligne</Text>
-            <Text style={styles.rowMeta}>
-              {offlineIds.length === 0 ? 'Aucun titre téléchargé' : `${offlineIds.length} titres sur cet appareil`}
-            </Text>
-          </View>
-          {offlineIds.length > 0 && (
-            <Pressable
-              style={({ pressed }) => [styles.pillButton, pressed && styles.pressed]}
-              onPress={confirmClearOffline}
-              accessibilityRole="button"
-              accessibilityLabel="Vider le cache hors-ligne"
-            >
-              <Text style={[styles.pillText, { color: colors.danger }]}>Vider</Text>
-            </Pressable>
-          )}
-        </View>
+        <GroupLabel>Personnaliser</GroupLabel>
+        <SettingsGroup icon={Palette} title="Apparence" summary={`${accentName} · ${BACKGROUNDS[appearance.background].label}`}>
+          <AppearanceSection />
+        </SettingsGroup>
+        <SettingsGroup icon={SlidersHorizontal} title="Lecture et égaliseur" summary="Fondu enchaîné, volume constant, égaliseur">
+          <PlaybackSection />
+        </SettingsGroup>
+        <SettingsGroup icon={Car} title="Mode voiture" summary="Gestes de la main, gros boutons">
+          <CarModeSection />
+        </SettingsGroup>
 
+        <GroupLabel>Appareils et sécurité</GroupLabel>
+        <SettingsGroup icon={Watch} title="Montre" summary="Envoyer la bibliothèque à la montre">
+          <WatchSection />
+        </SettingsGroup>
+        <SettingsGroup icon={ImageUp} title="Sauvegarde des photos" summary="Envoi automatique vers FileBrowser">
+          <CameraBackupSection />
+        </SettingsGroup>
+        <SettingsGroup icon={Lock} title="Verrouillage" summary="Code, schéma ou empreinte à l'ouverture">
+          <AppLockSection />
+        </SettingsGroup>
+
+        <GroupLabel>Stockage</GroupLabel>
+        <SettingsCard>
+          <SettingsRow
+            icon={HardDriveDownload}
+            title="Titres hors ligne"
+            meta={
+              (offlineIds.length === 0 ? 'Aucun titre téléchargé' : `${plural(offlineIds.length, 'titre', 'titres')} · ${formatMegabytes(offlineSize)} sur ce téléphone`) +
+              (keptCount > 0 ? ` · ${plural(keptCount, 'playlist gardée', 'playlists gardées')}` : '')
+            }
+            right={offlineIds.length > 0 ? <RowButton label="Vider" danger onPress={confirmClearOffline} accessibilityLabel="Vider les titres hors ligne" /> : undefined}
+          />
+        </SettingsCard>
+        <View style={styles.gap} />
         <CoverStorageRow />
 
-        <View style={styles.sectionSpacer}>
-          <SectionTitle>Application</SectionTitle>
-        </View>
-        <View style={styles.row}>
-          <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
-            <RefreshCw size={20} color={colors.textSecondary} />
-          </View>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowTitle}>SelfHost Hub v{installedVersion()}</Text>
-            <Text style={styles.rowMeta}>
-              {updatePhase === 'checking'
-                ? 'Recherche...'
-                : availableUpdate
-                  ? `Version ${availableUpdate.version} disponible.`
-                  : updateMessage}
-            </Text>
-          </View>
-          <Pressable
-            style={({ pressed }) => [styles.pillButton, pressed && styles.pressed]}
-            onPress={handleCheckUpdate}
-            disabled={updatePhase === 'checking' || updatePhase === 'downloading' || updatePhase === 'installing'}
-            accessibilityRole="button"
-            accessibilityLabel="Rechercher des mises à jour"
-          >
-            <Text style={styles.pillText}>Rechercher</Text>
-          </Pressable>
-        </View>
-        <Pressable
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-          onPress={showWhatsNew}
-          accessibilityRole="button"
-          accessibilityLabel="Nouveautés"
-        >
-          <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
-            <Sparkles size={20} color={colors.textSecondary} />
-          </View>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowTitle}>Nouveautés</Text>
-            <Text style={styles.rowMeta}>Ce qui a changé dans les dernières versions.</Text>
-          </View>
-          <ChevronRight size={18} color={colors.textMuted} />
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-          onPress={() => router.push('/diagnostics')}
-          accessibilityRole="button"
-          accessibilityLabel="Diagnostic"
-        >
-          <View style={[styles.iconWrap, { backgroundColor: colors.hover }]}>
-            <Activity size={20} color={colors.textSecondary} />
-          </View>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowTitle}>Diagnostic</Text>
-            <Text style={styles.rowMeta}>État des serveurs et de la sauvegarde, journal des erreurs, rapport à copier.</Text>
-          </View>
-          <ChevronRight size={18} color={colors.textMuted} />
-        </Pressable>
+        <GroupLabel>Application</GroupLabel>
+        <SettingsCard>
+          <SettingsRow
+            icon={RefreshCw}
+            title={`SelfHost Hub v${installedVersion()}`}
+            meta={updatePhase === 'checking' ? 'Recherche…' : availableUpdate ? `Version ${availableUpdate.version} disponible.` : updateMessage}
+            right={
+              <RowButton
+                label="Rechercher"
+                onPress={handleCheckUpdate}
+                disabled={updatePhase === 'checking' || updatePhase === 'downloading' || updatePhase === 'installing'}
+                accessibilityLabel="Rechercher des mises à jour"
+              />
+            }
+          />
+          <SettingsRow icon={Sparkles} title="Nouveautés" meta="Ce qui a changé dans les dernières versions." onPress={showWhatsNew} />
+          <SettingsRow icon={Activity} title="Diagnostic" meta="État des serveurs et de la sauvegarde, journal des erreurs, rapport à copier." onPress={() => router.push('/diagnostics')} />
+        </SettingsCard>
       </ScrollView>
     </Screen>
   )
@@ -409,42 +304,18 @@ export default function SettingsTab() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.lg, paddingBottom: layout.contentBottom },
-  sectionSpacer: { marginTop: spacing.lg },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.elevated,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm
-  },
-  iconWrap: { width: 40, height: 40, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  rowInfo: { flex: 1, minWidth: 0 },
-  rowTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 3 },
-  dot: { width: 7, height: 7, borderRadius: radius.full },
-  rowSubtitle: { flex: 1, color: colors.textSecondary, fontSize: 12 },
-  rowMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
-  pillButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border
-  },
-  pillPrimary: { backgroundColor: colors.accent, borderColor: colors.accent },
-  pillText: { color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  gap: { height: spacing.sm },
   pressed: { opacity: 0.6 },
-  card: { backgroundColor: colors.elevated, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
-  fieldLabel: { color: colors.textSecondary, fontSize: 12, marginBottom: spacing.xs },
+  rowMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
+  card: { backgroundColor: colors.elevated, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.sm },
+  fieldLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: spacing.xs },
   input: {
     backgroundColor: colors.raised,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm + 2,
     color: colors.text,
     fontSize: 14,
     marginBottom: spacing.md
@@ -458,5 +329,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     paddingVertical: spacing.md
   },
-  saveButtonText: { color: '#000', fontWeight: '700', fontSize: 14 }
+  saveButtonText: { color: colors.onAccent, fontWeight: '800', fontSize: 14 }
 })

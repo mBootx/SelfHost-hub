@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import ReanimatedSwipeable, { SwipeableMethods, SwipeDirection } from 'react-native-gesture-handler/ReanimatedSwipeable'
 import Animated, { Extrapolation, SharedValue, interpolate, useAnimatedStyle } from 'react-native-reanimated'
-import { ListStart, Play, Trash2, X } from 'lucide-react-native'
+import { ListStart, Play, X } from 'lucide-react-native'
 import { NavidromeClient, NDSong } from '@/services/navidrome'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useTrackSheetStore } from '@/store/trackSheetStore'
@@ -19,7 +19,7 @@ interface Props {
   isPlaying: boolean
   onPress: () => void
   showArtist?: boolean
-  /** Only passed by a playlist's own track list - renders a trailing remove button. */
+  /** Only passed by a playlist's own track list - renders a trailing remove button (there is no swipe for it). */
   onRemove?: () => void
 }
 
@@ -49,23 +49,6 @@ function PlayNextAction({ translation }: { translation: SharedValue<number> }) {
   )
 }
 
-/** Mirror of PlayNextAction for the left swipe; translation runs negative on this side. */
-function RemoveAction({ translation }: { translation: SharedValue<number> }) {
-  const iconStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(-translation.value, [0, 24, SWIPE_THRESHOLD], [0, 0.5, 1], Extrapolation.CLAMP),
-    transform: [{ scale: interpolate(-translation.value, [0, SWIPE_THRESHOLD], [0.6, 1], Extrapolation.CLAMP) }]
-  }))
-
-  return (
-    <View style={[styles.action, styles.actionDanger]}>
-      <Animated.View style={[styles.actionContent, iconStyle]}>
-        <Trash2 size={20} color="#000" />
-        <Text style={styles.actionText}>Retirer</Text>
-      </Animated.View>
-    </View>
-  )
-}
-
 export default function TrackRow({ song, client, isCurrent, isPlaying, onPress, showArtist, onRemove }: Props) {
   const openSheet = useTrackSheetStore((s) => s.open)
   const playNext = useNavidromeStore((s) => s.playNext)
@@ -76,8 +59,8 @@ export default function TrackRow({ song, client, isCurrent, isPlaying, onPress, 
   // Slots the song straight after the current track - whatever was next plays
   // after it - without replacing the queue or leaving the screen you're on.
   function queueNext(): void {
-    playNext(song)
-    showToast(`"${song.title}" sera lu ensuite`)
+    const ahead = playNext(song)
+    showToast(ahead === 0 ? `« ${song.title} » sera lu ensuite` : `« ${song.title} » sera lu après ${ahead === 1 ? 'le titre déjà ajouté' : `les ${ahead} titres déjà ajoutés`}`)
   }
 
   return (
@@ -85,15 +68,14 @@ export default function TrackRow({ song, client, isCurrent, isPlaying, onPress, 
       ref={swipeRef}
       friction={1.5}
       leftThreshold={SWIPE_THRESHOLD}
-      rightThreshold={SWIPE_THRESHOLD}
       overshootLeft={false}
       overshootRight={false}
       containerStyle={styles.swipeContainer}
+      // Only one swipe: to the right, "play next". Removing from a playlist is the cross at the end of the row, so a
+      // song is never taken out by a swipe meant to scroll or to queue it.
       renderLeftActions={(_progress, translation) => <PlayNextAction translation={translation} />}
-      renderRightActions={onRemove ? (_progress, translation) => <RemoveAction translation={translation} /> : undefined}
       onSwipeableWillOpen={(direction) => {
         if (direction === SwipeDirection.RIGHT) queueNext()
-        else onRemove?.()
       }}
       onSwipeableOpen={() => swipeRef.current?.close()}
     >
@@ -104,11 +86,7 @@ export default function TrackRow({ song, client, isCurrent, isPlaying, onPress, 
         delayLongPress={300}
         accessibilityRole="button"
         accessibilityLabel={`${song.title}, ${song.artist}`}
-        accessibilityHint={
-          onRemove
-            ? 'Glisser vers la droite pour lire ensuite, vers la gauche pour retirer de la playlist'
-            : 'Glisser vers la droite pour lire ensuite, appui long pour les options'
-        }
+        accessibilityHint="Glisser vers la droite pour lire ensuite, appui long pour les options"
         accessibilityActions={
           onRemove
             ? [
@@ -163,7 +141,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
-  actionDanger: { backgroundColor: colors.danger },
   actionContent: { alignItems: 'center', gap: 2 },
   actionText: { color: '#000', fontSize: 11, fontWeight: '700' },
   row: {

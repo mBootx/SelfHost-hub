@@ -84,7 +84,7 @@ export default function NowPlayingScreen() {
   const setRepeatMode = useNavidromeStore((s) => s.setRepeatMode)
   // Not subscribing to currentTime/duration here: SeekBar and the lyrics own that, so this screen stays still.
   const setProgress = useNavidromeStore((s) => s.setProgress)
-  const playQueue = useNavidromeStore((s) => s.playQueue)
+  const jumpTo = useNavidromeStore((s) => s.jumpTo)
   const startRadio = useNavidromeStore((s) => s.startRadio)
   const playbackRate = useNavidromeStore((s) => s.playbackRate)
   const setPlaybackRate = useNavidromeStore((s) => s.setPlaybackRate)
@@ -331,7 +331,7 @@ export default function NowPlayingScreen() {
           ) : song.album ? (
             <>
               <Text style={styles.topLabel} numberOfLines={1}>
-                {"LECTURE DEPUIS L'ALBUM"}
+                ALBUM
               </Text>
               <Text style={styles.topTitle} numberOfLines={1}>
                 {song.album}
@@ -360,7 +360,7 @@ export default function NowPlayingScreen() {
           queueIndex={queueIndex}
           accent={look.accent}
           bottomInset={insets.bottom}
-          onPlay={(i) => playQueue(queue, i)}
+          onPlay={jumpTo}
           onRemove={removeFromQueueAt}
           onMove={reorderQueue}
           onClear={() => {

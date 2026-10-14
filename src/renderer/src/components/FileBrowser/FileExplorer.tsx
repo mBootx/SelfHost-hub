@@ -88,7 +88,20 @@ function PreviewModal({ item, onClose }: { item: FBItem; onClose: () => void }):
   const pdf = isPdf(item)
 
   useEffect(() => {
-    if (type.includes('text')) client.getTextPreview(item.path).then(setText)
+    if (!type.includes('text')) return
+    let cancelled = false
+    client
+      .getTextPreview(item.path)
+      .then((content) => {
+        if (!cancelled) setText(content)
+      })
+      // A failed read said so instead of "Chargement…" for ever.
+      .catch((err) => {
+        if (!cancelled) setText(`Aperçu impossible : ${err instanceof Error && err.message ? err.message : 'erreur inconnue'}`)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [item.path])
 
   return (
@@ -141,7 +154,7 @@ function PreviewModal({ item, onClose }: { item: FBItem; onClose: () => void }):
           )}
           {type.includes('text') && (
             <pre className="h-[70vh] w-full max-w-3xl overflow-auto whitespace-pre-wrap rounded bg-surface-raised p-4 text-xs text-gray-300">
-              {text ?? 'Chargement...'}
+              {text ?? 'Chargement…'}
             </pre>
           )}
           {!type.includes('image') && !type.includes('video') && !type.includes('audio') && !pdf && !type.includes('text') && (
@@ -271,7 +284,7 @@ export default function FileExplorer(): JSX.Element {
       try {
         await client.rename(draggedItemPath, newPath)
         await refresh()
-        showToast(`Déplacé vers "${folder.name}"`)
+        showToast(`Déplacé vers « ${folder.name} »`)
       } catch (err: any) {
         showToast(err?.message || 'Impossible de déplacer cet élément')
       }
@@ -299,7 +312,7 @@ export default function FileExplorer(): JSX.Element {
     try {
       await client.createFolder(`${currentPath}/${name}`)
       await refresh()
-      showToast(`Dossier "${name}" créé`)
+      showToast(`Dossier « ${name} » créé`)
     } catch (err: any) {
       showToast(err?.message || 'Impossible de créer le dossier')
     } finally {
@@ -321,7 +334,7 @@ export default function FileExplorer(): JSX.Element {
     try {
       await client.rename(item.path, `${parent}/${name}`)
       await refresh()
-      showToast(`Renommé en "${name}"`)
+      showToast(`Renommé en « ${name} »`)
     } catch (err: any) {
       showToast(err?.message || 'Impossible de renommer')
     } finally {
@@ -334,7 +347,7 @@ export default function FileExplorer(): JSX.Element {
     try {
       await client.remove(item.path)
       await refresh()
-      showToast(`"${item.name}" supprimé`)
+      showToast(`« ${item.name} » supprimé`)
     } catch (err: any) {
       showToast(err?.message || 'Impossible de supprimer')
     } finally {
@@ -355,7 +368,7 @@ export default function FileExplorer(): JSX.Element {
     if (!item) {
       return [
         { label: 'Nouveau dossier', icon: FolderPlus, onClick: () => setPrompt({ mode: 'newFolder' }) },
-        { label: 'Uploader des fichiers', icon: Upload, onClick: handlePickUpload },
+        { label: 'Téléverser des fichiers', icon: Upload, onClick: handlePickUpload },
         { label: 'Actualiser', icon: RefreshCw, onClick: () => refresh(), separatorBefore: true }
       ]
     }
@@ -474,7 +487,7 @@ export default function FileExplorer(): JSX.Element {
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Rechercher dans ce dossier..."
+              placeholder="Rechercher dans ce dossier…"
               className="w-full bg-transparent text-sm outline-none placeholder:text-gray-500"
             />
           </div>
@@ -496,7 +509,7 @@ export default function FileExplorer(): JSX.Element {
             disabled={uploading}
             className="flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-black hover:bg-accent-hover disabled:opacity-60"
           >
-            <Upload className="h-3.5 w-3.5" /> {uploading ? 'Envoi...' : 'Uploader'}
+            <Upload className="h-3.5 w-3.5" /> {uploading ? 'Envoi…' : 'Téléverser'}
           </button>
           <div className="ml-2 flex rounded-full border border-surface-border p-0.5">
             <button
@@ -518,14 +531,14 @@ export default function FileExplorer(): JSX.Element {
       <div className="relative min-h-0 flex-1 overflow-y-auto px-6 pb-6">
         {dragOver && (
           <div className="pointer-events-none absolute inset-4 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-accent bg-accent/10 text-sm font-medium text-accent">
-            Déposez les fichiers pour les uploader dans {currentPath === '/' ? 'la racine' : basename(currentPath)}
+            Déposez les fichiers pour les téléverser dans {currentPath === '/' ? 'la racine' : basename(currentPath)}
           </div>
         )}
 
         {loading && (
           <div className="flex flex-col items-center gap-3 py-16 text-gray-500">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-surface-hover border-t-accent" />
-            <p className="text-sm">Chargement...</p>
+            <p className="text-sm">Chargement…</p>
           </div>
         )}
 
@@ -639,7 +652,7 @@ export default function FileExplorer(): JSX.Element {
       <ConfirmModal
         open={!!deleteTarget}
         title="Supprimer ?"
-        description={deleteTarget ? `"${deleteTarget.name}" sera définitivement supprimé.` : ''}
+        description={deleteTarget ? `« ${deleteTarget.name} » sera définitivement supprimé.` : ''}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => (deleteTarget ? handleDeleteItem(deleteTarget) : undefined)}
       />

@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import ModalShell from '@renderer/components/ModalShell'
 
 interface Props {
   open: boolean
   title: string
   initialValue?: string
+  placeholder?: string
   confirmLabel?: string
   onCancel: () => void
   onConfirm: (value: string) => void | Promise<void>
@@ -19,6 +20,7 @@ export default function PromptModal({
   open,
   title,
   initialValue = '',
+  placeholder,
   confirmLabel = 'Valider',
   onCancel,
   onConfirm
@@ -48,33 +50,30 @@ export default function PromptModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onCancel}>
-      <form
-        onSubmit={handleSubmit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm animate-slide-up space-y-3 rounded-xl bg-surface-elevated p-5 shadow-2xl"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">{title}</h2>
-          <button type="button" onClick={onCancel} className="rounded p-1 text-gray-400 hover:text-white" aria-label="Fermer">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <ModalShell title={title} onClose={onCancel} width="max-w-sm">
+      <form onSubmit={handleSubmit} className="space-y-4 px-5 pb-5 pt-2">
         <input
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onFocus={(e) => e.currentTarget.select()}
-          className="w-full rounded-md border border-surface-border bg-surface-raised px-3 py-2 text-sm outline-none focus:border-accent"
+          placeholder={placeholder}
+          aria-label={title}
+          className="w-full rounded-xl border-2 border-surface-border bg-surface-raised px-4 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-gray-500 focus:border-accent"
         />
-        <button
-          type="submit"
-          disabled={loading || !value.trim()}
-          className="w-full rounded-full bg-accent py-2 text-sm font-semibold text-black transition-colors hover:bg-accent-hover disabled:opacity-60"
-        >
-          {loading ? 'Patientez...' : confirmLabel}
-        </button>
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" onClick={onCancel} className="rounded-full px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:text-white">
+            Annuler
+          </button>
+          <button
+            type="submit"
+            disabled={loading || !value.trim()}
+            className="rounded-full bg-accent px-5 py-2 text-sm font-bold text-black transition-colors hover:bg-accent-hover disabled:bg-surface-hover disabled:text-gray-500"
+          >
+            {loading ? 'Patientez…' : confirmLabel}
+          </button>
+        </div>
       </form>
-    </div>
+    </ModalShell>
   )
 }

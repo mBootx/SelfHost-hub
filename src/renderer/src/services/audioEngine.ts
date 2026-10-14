@@ -20,6 +20,8 @@ export interface EngineHandlers {
   onTrackEnd: () => void
   /** The preloaded next track took over (crossfade or gapless): the queue should advance. */
   onAutoAdvance: () => void
+  /** The current track could not be played (the server unreachable, the file gone). */
+  onError?: (trackId: string) => void
 }
 
 /** How long before the fade window the next track starts buffering. */
@@ -98,6 +100,12 @@ export class AudioEngine {
     })
     el.addEventListener('timeupdate', () => this.onTimeUpdate(index))
     el.addEventListener('ended', () => this.onEnded(index))
+    // Before, a track that could not load left the player "playing" in silence, with nothing said. A deck being
+    // emptied (no src) is not an error; a failed preload is not either: the track loads again when its turn comes.
+    el.addEventListener('error', () => {
+      if (index !== this.active || deck.trackId === null || !el.getAttribute('src')) return
+      this.handlers?.onError?.(deck.trackId)
+    })
     return deck
   }
 
@@ -147,7 +155,15 @@ export class AudioEngine {
 
   play(): void {
     void this.ctx.resume()
-    this.decks[this.active].el.play().catch(() => {})
+    const el = this.decks[this.active].el
+    // A track that failed to load (the server was out of reach) is tried again when play is pressed: an element
+    // in error just refuses to play, it never retries by itself.
+    if (el.error && el.getAttribute('src')) {
+      const at = el.currentTime
+      el.load()
+      if (at > 0) el.currentTime = at
+    }
+    el.play().catch(() => {})
   }
 
   pause(): void {

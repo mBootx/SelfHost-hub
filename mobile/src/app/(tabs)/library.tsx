@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { View, Text, Pressable, FlatList, RefreshControl, StyleSheet, Alert } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Disc3, ListMusic, Users, Plus, FolderOpen, Trash2, Tags, ChevronRight } from 'lucide-react-native'
+import { Disc3, ListMusic, Users, Plus, FolderOpen, Trash2, Tags, ChevronRight, UserCog } from 'lucide-react-native'
+import { useIsOwner } from '@/hooks/useIsOwner'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useToastStore } from '@/store/toastStore'
-import { NDGenre, NDPlaylist } from '@/services/navidrome'
+import { NDAlbum, NDGenre, NDPlaylist } from '@/services/navidrome'
+import { prefetchCoverArt } from '@/services/imagePrefetch'
+import { plural } from '@/services/plural'
 import ActionSheet from '@/components/ActionSheet'
 import NavidromeGate from '@/components/navidrome/NavidromeGate'
 import AlbumTile from '@/components/navidrome/AlbumTile'
@@ -45,6 +48,7 @@ function LibraryContent() {
   const createPlaylist = useNavidromeStore((s) => s.createPlaylist)
   const deletePlaylist = useNavidromeStore((s) => s.deletePlaylist)
   const showToast = useToastStore((s) => s.show)
+  const isOwner = useIsOwner()
 
   const [subTab, setSubTab] = useState<SubTab>('albums')
   const [refreshing, setRefreshing] = useState(false)
@@ -53,6 +57,28 @@ function LibraryContent() {
   const [menuPlaylist, setMenuPlaylist] = useState<NDPlaylist | null>(null)
   const [genres, setGenres] = useState<NDGenre[] | null>(null)
   const [genreError, setGenreError] = useState<string | null>(null)
+  // The whole library's albums, newest first. Until they are in, the newest ones already loaded for Home stand in.
+  const [albums, setAlbums] = useState<NDAlbum[] | null>(null)
+  const [albumError, setAlbumError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (subTab !== 'albums' || albums !== null || !client) return
+    let cancelled = false
+    client
+      .getAllAlbums()
+      .then((found) => {
+        if (cancelled) return
+        setAlbums(found)
+        setAlbumError(null)
+        prefetchCoverArt(client, found.slice(0, 40).map((a) => a.coverArt), 300)
+      })
+      .catch((err) => {
+        if (!cancelled) setAlbumError(err instanceof Error ? err.message : 'Impossible de charger les albums')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [subTab, albums, client])
 
   // The genres are only asked for the first time the tab is opened.
   useEffect(() => {
@@ -67,7 +93,7 @@ function LibraryContent() {
   }, [subTab, genres, client])
 
   function confirmDeletePlaylist(playlist: NDPlaylist): void {
-    Alert.alert('Supprimer la playlist', `"${playlist.name}" sera définitivement supprimée.`, [
+    Alert.alert('Supprimer la playlist ?', `« ${playlist.name} » sera définitivement supprimée.`, [
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Supprimer',
@@ -75,7 +101,7 @@ function LibraryContent() {
         onPress: async () => {
           try {
             await deletePlaylist(playlist.id)
-            showToast(`Playlist "${playlist.name}" supprimée`)
+            showToast(`Playlist « ${playlist.name} » supprimée`)
           } catch (err: any) {
             showToast(err?.message || 'Impossible de supprimer la playlist')
           }
@@ -88,6 +114,14 @@ function LibraryContent() {
     setRefreshing(true)
     await loadLibrary()
     if (client && subTab === 'genres') setGenres(await client.getGenres().catch(() => genres))
+    if (client && subTab === 'albums') {
+      try {
+        setAlbums(await client.getAllAlbums())
+        setAlbumError(null)
+      } catch (err) {
+        setAlbumError(err instanceof Error ? err.message : 'Impossible de charger les albums')
+      }
+    }
     setRefreshing(false)
   }
 
@@ -96,7 +130,7 @@ function LibraryContent() {
     try {
       const playlist = await createPlaylist(name)
       setShowNewPlaylist(false)
-      showToast(`Playlist "${playlist.name}" créée`)
+      showToast(`Playlist « ${playlist.name} » créée`)
       router.push({ pathname: '/playlist/[id]', params: { id: playlist.id } })
     } catch {
       showToast('Impossible de créer la playlist')
@@ -115,15 +149,28 @@ function LibraryContent() {
         title="Bibliothèque"
         action={
           subTab === 'playlists' ? (
-            <Pressable
-              onPress={() => setShowNewPlaylist(true)}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="Nouvelle playlist"
-              style={styles.newPlaylistButton}
-            >
-              <Plus size={20} color={colors.accent} />
-            </Pressable>
+            <View style={styles.headerActions}>
+              {isOwner && (
+                <Pressable
+                  onPress={() => router.push('/playlists-admin')}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Playlists de tous les comptes"
+                  style={styles.newPlaylistButton}
+                >
+                  <UserCog size={18} color={colors.textSecondary} />
+                </Pressable>
+              )}
+              <Pressable
+                onPress={() => setShowNewPlaylist(true)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Nouvelle playlist"
+                style={styles.newPlaylistButton}
+              >
+                <Plus size={20} color={colors.accent} />
+              </Pressable>
+            </View>
           ) : undefined
         }
       />
@@ -191,7 +238,7 @@ function LibraryContent() {
                   {item.name}
                 </Text>
                 <Text style={styles.genreMeta}>
-                  {item.albumCount} album{item.albumCount > 1 ? 's' : ''} · {item.songCount} titre{item.songCount > 1 ? 's' : ''}
+                  {plural(item.albumCount, 'album', 'albums')} · {plural(item.songCount, 'titre', 'titres')}
                 </Text>
               </View>
               <ChevronRight size={18} color={colors.textMuted} />
@@ -216,14 +263,20 @@ function LibraryContent() {
         <FlatList
           key="albums"
           contentContainerStyle={styles.list}
-          data={recentAlbums}
+          data={albums ?? recentAlbums}
           keyExtractor={(a) => a.id}
           numColumns={2}
           columnWrapperStyle={styles.column}
           refreshControl={refreshControl}
           showsVerticalScrollIndicator={false}
           {...LIST_PERF}
-          ListEmptyComponent={<EmptyState icon={Disc3} title="Aucun album" hint="Tirez vers le bas pour recharger." />}
+          ListEmptyComponent={
+            albumError ? (
+              <EmptyState icon={Disc3} title="Albums indisponibles" hint={`${albumError}. Tirez vers le bas pour réessayer.`} />
+            ) : (
+              <EmptyState icon={Disc3} title={albums === null ? 'Chargement…' : 'Aucun album'} hint={albums === null ? undefined : 'Tirez vers le bas pour recharger.'} />
+            )
+          }
           renderItem={({ item }) => <AlbumTile album={item} />}
         />
       )}
@@ -231,7 +284,7 @@ function LibraryContent() {
       <PromptModal
         visible={showNewPlaylist}
         title="Nouvelle playlist"
-        confirmLabel={creatingPlaylist ? 'Création...' : 'Créer'}
+        confirmLabel={creatingPlaylist ? 'Création…' : 'Créer'}
         onCancel={() => setShowNewPlaylist(false)}
         onConfirm={handleCreatePlaylist}
       />
@@ -266,6 +319,7 @@ export default function LibraryTab() {
 }
 
 const styles = StyleSheet.create({
+  headerActions: { flexDirection: 'row', gap: spacing.sm },
   newPlaylistButton: {
     width: 32,
     height: 32,

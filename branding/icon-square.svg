@@ -5,12 +5,12 @@
       <stop offset="0" stop-color="#1b2721"/>
       <stop offset="1" stop-color="#090c0b"/>
     </linearGradient>
-    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="256" cy="287" r="235">
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="256" cy="256" r="235">
       <stop offset="0" stop-color="#1DB954" stop-opacity="0.26"/>
       <stop offset="1" stop-color="#1DB954" stop-opacity="0"/>
     </radialGradient>
-    <!-- One gradient across the whole emblem, so the roof and the nodes share the same light. -->
-    <linearGradient id="green" gradientUnits="userSpaceOnUse" x1="150" y1="100" x2="370" y2="420">
+    <!-- One gradient across the whole emblem, so the triangle and the nodes share the same light. -->
+    <linearGradient id="green" gradientUnits="userSpaceOnUse" x1="181" y1="207" x2="377" y2="421">
       <stop offset="0" stop-color="#4ADE80"/>
       <stop offset="0.55" stop-color="#1DB954"/>
       <stop offset="1" stop-color="#15803D"/>
@@ -25,9 +25,7 @@
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
   <rect width="512" height="512" fill="url(#glow)"/>
-  <g mask="url(#holes)">
-    <!-- Roof: self-hosted, at home -->
-    <path d="M128 226 L256 116 L384 226" fill="none" stroke="url(#green)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+  <g mask="url(#holes)" transform="translate(256 256) scale(1.3) translate(-279 -314)">
     <!-- Play button drawn as a hub: three linked nodes for music, files and downloads -->
     <path d="M212 238 L346 314 L212 390 Z" fill="url(#green)" fill-opacity="0.14" stroke="url(#green)" stroke-width="24" stroke-linejoin="round"/>
     <circle cx="212" cy="238" r="31" fill="url(#green)"/>

@@ -21,6 +21,8 @@ import { startShareIntake } from '@/services/shareIntake'
 import { initSleepTimer } from '@/services/sleepTimer'
 import { startWatchLink } from '@/services/watchLink'
 import { startOfflineMode } from '@/services/offlineMode'
+import { retryDownServices, startReconnect } from '@/services/reconnect'
+import { startKeptPlaylists } from '@/services/keptPlaylists'
 import { loadCoverStore, setCoverPinning } from '@/services/coverStore'
 import { startWidget } from '@/services/widget'
 import { useUpdateStore } from '@/store/updateStore'
@@ -104,6 +106,10 @@ export default function RootLayout() {
     startWidget()
     startWatchLink()
     startOfflineMode()
+    // A saved login whose server was out of reach is tried again when the network comes back, and now and then.
+    startReconnect()
+    // Playlists kept on the phone fetch the songs added to them since, on Wi-Fi.
+    startKeptPlaylists()
     // The covers of downloaded songs stay on the phone whatever the size of the store.
     setCoverPinning((coverId) => Object.values(useOfflineStore.getState().tracks).some((t) => t.coverArt === coverId))
     loadCoverStore()
@@ -130,6 +136,8 @@ export default function RootLayout() {
           revalidateFileBrowser()
           checkForUpdate()
         }
+        // The link to the PC drops when the phone sleeps or changes network: it is looked for again on the way back.
+        retryDownServices(true)
       }
     })
     return () => sub.remove()
@@ -145,6 +153,7 @@ export default function RootLayout() {
         <Stack.Screen name="artist/[id]" options={detailHeader} />
         <Stack.Screen name="genre/[name]" options={detailHeader} />
         <Stack.Screen name="playlist/[id]" options={detailHeader} />
+        <Stack.Screen name="playlists-admin" options={detailHeader} />
         <Stack.Screen name="downtify/queue" options={detailHeader} />
         <Stack.Screen name="downtify/connect" options={detailHeader} />
         <Stack.Screen name="devices/index" options={detailHeader} />

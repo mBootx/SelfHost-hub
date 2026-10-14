@@ -47,6 +47,7 @@ import com.selfhosthub.wear.ui.nowplaying.NowPlayingActions
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingContent
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingUi
 import com.selfhosthub.wear.ui.nowplaying.OptionsPage
+import com.selfhosthub.wear.ui.nowplaying.VolumeContent
 import com.selfhosthub.wear.ui.nowplaying.toNowPlaying
 import com.selfhosthub.wear.ui.settings.SettingsActions
 import com.selfhosthub.wear.ui.settings.SettingsContent
@@ -148,6 +149,17 @@ class ScreenshotTest {
     @Test fun nowPlayingVolume() = shot("now-playing-volume") { NowPlayingContent(player("Tessellate", "alt-J"), null, noActions, 62) }
 
     @Test fun options() = shot("options") { OptionsPage(player("Breezeblocks", "alt-J"), noActions) }
+
+    @Test fun volume() = shot("volume") { VolumeContent(0.62, "Sur PC du salon", false, true, {}, {}, {}) }
+
+    @Test fun volumeCover() = shot("volume-cover") {
+        val cover = coverBitmap(0xFF1F8A9E.toInt(), 0xFFF2D16B.toInt())
+        VolumeContent(0.3, "Sur Galaxy S25 Ultra", false, true, {}, {}, {}, look = coverLookOf(cover))
+    }
+
+    @Test fun volumeMuted() = shot("volume-muted") { VolumeContent(0.0, "Sur PC du salon", false, true, {}, {}, {}) }
+
+    @Test fun volumeNoPhone() = shot("volume-no-phone") { VolumeContent(1.0, "Pas de téléphone", true, false, {}, {}, {}) }
 
     @Test fun nowPlayingNothing() = shot("now-playing-nothing") { NowPlayingContent(NowPlayingUi(status = LinkStatus.CONNECTED), null, noActions, null) }
 

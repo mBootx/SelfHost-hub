@@ -90,12 +90,20 @@ export function readableAccent(hex: string): string {
   return rgbToHex(lifted)
 }
 
+/** A colour at a given opacity (0 to 1), as the rgba() the tinted tiles, chips and washes are made of: they follow the accent. */
+export function tint(hex: string, alpha: number): string {
+  const [r, g, b] = hexToRgb(hex)
+  return `rgba(${r},${g},${b},${Math.min(1, Math.max(0, alpha))})`
+}
+
 const accent = readableAccent(appearance.accent)
 const surfaces = BACKGROUNDS[appearance.background]
 
 export const colors = {
   accent,
   accentHover: rgbToHex(mix(hexToRgb(accent), [255, 255, 255], 0.12)),
+  /** Text and icons on the accent (readableAccent keeps black readable on it). */
+  onAccent: '#000000',
   base: surfaces.base,
   raised: surfaces.raised,
   elevated: surfaces.elevated,

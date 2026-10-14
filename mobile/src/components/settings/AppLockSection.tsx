@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { View, Text, Switch, Pressable, StyleSheet } from 'react-native'
-import { SectionTitle } from '@/components/Screen'
 import LockSetupModal, { LockSetupStep } from '@/components/lock/LockSetupModal'
 import { authenticateWithFingerprint, fingerprintAvailable, LockMethod } from '@/services/appLock'
 import { LOCK_DELAYS, useAppLockStore } from '@/store/appLockStore'
@@ -73,9 +72,6 @@ export default function AppLockSection() {
 
   return (
     <>
-      <View style={styles.sectionGap}>
-        <SectionTitle>Verrouillage</SectionTitle>
-      </View>
       <View style={styles.card}>
         <Text style={styles.label}>Verrouiller l&apos;application</Text>
         <Text style={styles.hint}>Demande un code ou un schéma à l&apos;ouverture. La musique continue pendant ce temps.</Text>

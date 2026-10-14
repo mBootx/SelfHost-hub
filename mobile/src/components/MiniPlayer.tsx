@@ -1,11 +1,15 @@
+import { useMemo } from 'react'
 import { useRouter } from 'expo-router'
 import { Pressable, View, Text, StyleSheet } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { Play, Pause, SkipForward, Cast } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useArtworkStore } from '@/store/artworkStore'
 import { useRemoteStore, LOCAL_DEVICE_ID } from '@/store/remoteStore'
 import CoverImage from '@/components/CoverImage'
 import { colors, radius, spacing } from '@/constants/theme'
+import { swipeSkip } from '@/services/dragMath'
 
 /**
  * Split out so the playhead - which ticks four times a second - only re-renders
@@ -45,6 +49,7 @@ export default function MiniPlayer() {
   const localIsPlaying = useNavidromeStore((s) => s.isPlaying)
   const togglePlay = useNavidromeStore((s) => s.togglePlay)
   const next = useNavidromeStore((s) => s.next)
+  const prev = useNavidromeStore((s) => s.prev)
 
   const localSong = queue[queueIndex] || null
   // Local playback, unless a remote device is the active output - see
@@ -56,6 +61,43 @@ export default function MiniPlayer() {
     const key = song?.albumId || song?.id
     return key ? s.overrides[key] : undefined
   })
+
+  // Swiped left: the next song; right: the one before. The card follows the finger, then springs back.
+  const offset = useSharedValue(0)
+  const skip = (direction: 'next' | 'prev'): void => {
+    if (direction === 'next') {
+      if (isRemote) sendCommand('next')
+      else next()
+    } else if (isRemote) {
+      sendCommand('prev')
+    } else {
+      prev()
+    }
+  }
+  const swipe = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-14, 14])
+        .failOffsetY([-12, 12])
+        .onUpdate((e) => {
+          offset.value = e.translationX * 0.6
+        })
+        .onEnd((e) => {
+          const direction = swipeSkip(e.translationX, e.velocityX)
+          if (direction) {
+            offset.value = withTiming(direction === 'next' ? -40 : 40, { duration: 90 }, () => {
+              offset.value = withSpring(0, { damping: 18, stiffness: 220 })
+            })
+            runOnJS(skip)(direction)
+          } else {
+            offset.value = withSpring(0, { damping: 18, stiffness: 220 })
+          }
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isRemote, next, prev, sendCommand]
+  )
+  const slide = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }))
+
   if (!song || !client) return null
 
   const coverId = song.coverArt || song.albumId
@@ -70,12 +112,20 @@ export default function MiniPlayer() {
   }
 
   return (
+    <GestureDetector gesture={swipe}>
+    <Animated.View style={slide}>
     <Pressable
       style={styles.card}
       onPress={() => router.push('/now-playing')}
       android_ripple={{ color: colors.hover }}
       accessibilityRole="button"
-      accessibilityLabel={`Lecture en cours: ${song.title}, ${song.artist}`}
+      accessibilityLabel={`Lecture en cours : ${song.title}, ${song.artist}`}
+      accessibilityHint="Glisser vers la gauche pour le titre suivant, vers la droite pour le précédent"
+      accessibilityActions={[
+        { name: 'next', label: 'Titre suivant' },
+        { name: 'previous', label: 'Titre précédent' }
+      ]}
+      onAccessibilityAction={(e) => skip(e.nativeEvent.actionName === 'next' ? 'next' : 'prev')}
     >
       <CoverImage
         uri={coverId ? client.coverArtUrl(coverId, 100) : override || null}
@@ -109,6 +159,8 @@ export default function MiniPlayer() {
 
       <MiniPlayerProgress />
     </Pressable>
+    </Animated.View>
+    </GestureDetector>
   )
 }
 

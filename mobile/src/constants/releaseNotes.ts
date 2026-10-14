@@ -13,7 +13,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     items: [
       {
         title: 'Récap de la semaine',
-        text: "Chaque lundi à partir de 10 h : les minutes écoutées, tes jours, ton top 5 des titres et des artistes de la semaine passée, aux couleurs de ton titre préféré. Réglages → Écoute → « Récap de la semaine » l'ouvre à tout moment. Seule l'écoute sur ce téléphone compte."
+        text: "Chaque lundi à partir de 10 h : les minutes écoutées, vos jours, votre top 5 des titres et des artistes de la semaine passée, aux couleurs de votre titre préféré. Réglages → Écoute → « Récap de la semaine » l'ouvre à tout moment. Seule l'écoute sur ce téléphone compte."
       },
       {
         title: 'Now Bar et écran verrouillé réparés',

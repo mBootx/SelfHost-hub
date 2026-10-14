@@ -1,4 +1,5 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
+import { storage } from '@renderer/services/storage'
 import { FolderOpen } from 'lucide-react'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 
@@ -10,6 +11,24 @@ export default function FileBrowserLoginPage(): JSX.Element {
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // The server and account saved on this computer, if any: only the password is left to type (after it was refused, say).
+  useEffect(() => {
+    let cancelled = false
+    storage
+      .loadConnection('filebrowser')
+      .then((saved) => {
+        if (cancelled || !saved) return
+        setUrl((current) => (current === 'http://localhost:8080' ? saved.url : current))
+        setUsername((current) => current || saved.username)
+      })
+      .catch(() => {})
+    const failure = useFileBrowserStore.getState()
+    if (failure.status === 'error' && failure.error) setError(failure.error)
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function handleSubmit(e: FormEvent): Promise<void> {
     e.preventDefault()
@@ -82,7 +101,7 @@ export default function FileBrowserLoginPage(): JSX.Element {
           disabled={loading}
           className="w-full rounded-full bg-blue-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-400 disabled:opacity-60"
         >
-          {loading ? 'Connexion...' : 'Se connecter'}
+          {loading ? 'Connexion…' : 'Se connecter'}
         </button>
       </form>
     </div>

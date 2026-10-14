@@ -1,8 +1,9 @@
 import { Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX } from 'lucide-react'
-import { CSSProperties } from 'react'
+import { CSSProperties, useRef } from 'react'
 import { formatClock } from '@renderer/services/bigPicture'
 import { usePlayhead } from '@renderer/hooks/usePlayhead'
 import { PlaybackView } from '@renderer/hooks/usePlaybackView'
+import { useScrub } from '@renderer/hooks/useScrub'
 
 /** Buttons here never keep the focus: Space and the arrow keys stay the player's own shortcuts. */
 const noFocus = {
@@ -15,7 +16,9 @@ const letGo = (e: React.SyntheticEvent<HTMLInputElement>): void => e.currentTarg
 
 /** The song's progress, as a slider with the times either side. Follows the playhead itself. */
 export function SeekBar({ view }: { view: PlaybackView }): JSX.Element {
-  const { time, duration } = usePlayhead(12)
+  const { time: playhead, duration } = usePlayhead(12)
+  const scrub = useScrub(playhead, (seconds) => view.seek(seconds))
+  const time = scrub.value
   const percent = duration > 0 ? Math.min(100, (time / duration) * 100) : 0
   return (
     <div className="flex w-full items-center gap-4 text-[clamp(0.8rem,1vw,1.1rem)] tabular-nums text-white/70">
@@ -26,7 +29,8 @@ export function SeekBar({ view }: { view: PlaybackView }): JSX.Element {
         max={duration || 0}
         step={0.5}
         value={Math.min(time, duration || 0)}
-        onChange={(e) => view.seek(Number(e.target.value))}
+        onPointerDown={scrub.onPointerDown}
+        onChange={scrub.onChange}
         onPointerUp={letGo}
         disabled={!view.song}
         aria-label="Position dans le titre"
@@ -101,13 +105,23 @@ export function Transport({ view }: { view: PlaybackView }): JSX.Element {
 
 export function VolumeControl({ view }: { view: PlaybackView }): JSX.Element {
   const Icon = view.volume === 0 ? VolumeX : view.volume < 0.5 ? Volume1 : Volume2
+  // Unmuting goes back to the volume there was, not to a fixed one.
+  const beforeMute = useRef(0.8)
+  function toggleMute(): void {
+    if (view.volume > 0) {
+      beforeMute.current = view.volume
+      view.setVolume(0)
+    } else {
+      view.setVolume(beforeMute.current > 0 ? beforeMute.current : 0.8)
+    }
+  }
   return (
     <div className="flex items-center gap-3">
       <button
         {...noFocus}
-        onClick={() => view.setVolume(view.volume > 0 ? 0 : 0.8)}
+        onClick={toggleMute}
         title={view.volume > 0 ? 'Muet' : 'Rétablir le son'}
-        aria-label="Muet"
+        aria-label={view.volume > 0 ? 'Muet' : 'Rétablir le son'}
         className="text-white/70 transition-colors hover:text-white"
       >
         <Icon className="h-[clamp(1.2rem,1.5vw,1.7rem)] w-[clamp(1.2rem,1.5vw,1.7rem)]" />

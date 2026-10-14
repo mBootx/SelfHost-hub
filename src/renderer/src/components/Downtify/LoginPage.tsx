@@ -61,7 +61,7 @@ export default function DowntifyLoginPage(): JSX.Element {
           disabled={loading}
           className="w-full rounded-full bg-orange-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-400 disabled:opacity-60"
         >
-          {loading ? 'Connexion...' : 'Se connecter'}
+          {loading ? 'Connexion…' : 'Se connecter'}
         </button>
       </form>
     </div>

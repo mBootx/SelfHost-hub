@@ -22,7 +22,7 @@ export default function NewPlaylistPrompt({ onClose, onCreated }: Props): JSX.El
     setError(null)
     try {
       const playlist = await createPlaylist(name.trim())
-      showToast(`Playlist "${playlist.name}" créée`)
+      showToast(`Playlist « ${playlist.name} » créée`)
       onCreated?.(playlist.id)
       onClose()
     } catch (err: any) {
@@ -58,7 +58,7 @@ export default function NewPlaylistPrompt({ onClose, onCreated }: Props): JSX.El
           disabled={loading || !name.trim()}
           className="w-full rounded-full bg-accent py-2 text-sm font-semibold text-black transition-colors hover:bg-accent-hover disabled:opacity-60"
         >
-          {loading ? 'Création...' : 'Créer'}
+          {loading ? 'Création…' : 'Créer'}
         </button>
       </form>
     </div>

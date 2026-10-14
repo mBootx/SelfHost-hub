@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Alert, AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Watch } from 'lucide-react-native'
-import { SectionTitle } from '@/components/Screen'
 import { ago } from '@/services/diagnosticsReport'
 import { RELEASES_PAGE_URL } from '@/services/updateAsset'
 import { useWatchLinkStatus } from '@/services/watchLink'
@@ -118,9 +117,6 @@ export default function WatchSection() {
 
   return (
     <>
-      <View style={styles.sectionGap}>
-        <SectionTitle>Montre</SectionTitle>
-      </View>
       <View style={styles.card}>
         <View style={styles.header}>
           <View style={styles.iconWrap}>

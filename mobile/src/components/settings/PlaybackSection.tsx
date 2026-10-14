@@ -52,9 +52,6 @@ export default function PlaybackSection() {
 
   return (
     <>
-      <View style={styles.sectionGap}>
-        <SectionTitle>Lecture</SectionTitle>
-      </View>
       <View style={styles.card}>
         <View style={styles.labelRow}>
           <Text style={styles.label}>Fondu enchaîné</Text>

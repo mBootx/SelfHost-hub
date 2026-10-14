@@ -16,7 +16,20 @@ export default function PreviewModal({ item, client, onClose }: Props) {
   const [text, setText] = useState<string | null>(null)
 
   useEffect(() => {
-    if (type.includes('text')) client.getTextPreview(item.path).then(setText)
+    if (!type.includes('text')) return
+    let cancelled = false
+    client
+      .getTextPreview(item.path)
+      .then((content) => {
+        if (!cancelled) setText(content)
+      })
+      // A failed read said so instead of spinning for ever.
+      .catch((err) => {
+        if (!cancelled) setText(`Aperçu impossible : ${err instanceof Error && err.message ? err.message : 'erreur inconnue'}`)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [item.path])
 
   return (

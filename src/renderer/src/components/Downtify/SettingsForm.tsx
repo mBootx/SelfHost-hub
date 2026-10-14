@@ -17,24 +17,40 @@ export default function DowntifySettingsForm(): JSX.Element | null {
   const [settings, setSettings] = useState<DowntifySettings | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!client) {
-      setSettings(null)
-      return
+    setSettings(null)
+    setLoadError(null)
+    if (!client) return
+    let cancelled = false
+    client
+      .getSettings()
+      .then((loaded) => {
+        if (!cancelled) setSettings(loaded)
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err instanceof Error && err.message ? err.message : 'Downtify ne répond pas')
+      })
+    return () => {
+      cancelled = true
     }
-    client.getSettings().then(setSettings).catch(() => {})
   }, [client])
 
-  if (!settings) return null
+  if (loadError) return <p className="text-sm text-gray-400">Options indisponibles : {loadError}</p>
+  if (!settings) return <p className="text-sm text-gray-400">Chargement…</p>
 
   async function saveSettings(): Promise<void> {
     if (!client || !settings) return
     setSaving(true)
+    setSaveError(null)
     try {
       await client.updateSettings(settings)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      setSaveError(err instanceof Error && err.message ? err.message : 'Enregistrement impossible')
     } finally {
       setSaving(false)
     }
@@ -169,9 +185,10 @@ export default function DowntifySettingsForm(): JSX.Element | null {
           disabled={saving}
           className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-black hover:bg-accent-hover disabled:opacity-60"
         >
-          {saving ? 'Enregistrement...' : 'Enregistrer'}
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
         </button>
         {saved && <span className="text-xs text-accent">Enregistré</span>}
+        {saveError && <span className="text-xs text-red-400">{saveError}</span>}
       </div>
     </div>
   )

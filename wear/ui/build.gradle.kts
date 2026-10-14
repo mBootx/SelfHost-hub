@@ -73,3 +73,9 @@ dependencies {
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+
+// The screens are tested in the debug build only: Compose's test activity is declared by ui-test-manifest, a debug
+// dependency, so in the release build every screen test failed with "Unable to resolve activity".
+tasks.withType<Test>().configureEach {
+    if (name == "testReleaseUnitTest") enabled = false
+}

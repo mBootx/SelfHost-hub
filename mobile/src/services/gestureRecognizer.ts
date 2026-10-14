@@ -8,9 +8,9 @@
  * upright and mirrored: x grows towards the driver's right, y downwards.
  *
  * - PINCH (thumb and index tips together, held 200 ms): play / pause. Once per pinch: the fingers must open again.
- * - WAVE_RIGHT / WAVE_LEFT (the wrist crosses part of the picture within half a second): next / previous track.
- * - PALM_UP / PALM_DOWN (an open hand, fingers up, held still high or low in the picture): volume up / down, again
- *   every half second while it stays there.
+ * - WAVE_RIGHT / WAVE_LEFT (an OPEN hand crosses part of the picture within half a second): next / previous track.
+ * - PALM_UP / PALM_DOWN (an OPEN hand sweeps up or down the picture within half a second): volume up / down, one step
+ *   a sweep. A movement, not a place: a hand resting high or low in the picture (on the wheel, waiting) is nothing.
  * - THUMB_UP (thumb up, other fingers folded, held 400 ms): like the song. Once per gesture.
  *
  * Distances that describe the hand's shape are counted in hand sizes (wrist to the middle finger's knuckle), so a hand
@@ -75,7 +75,7 @@ export interface GestureEvent {
   gesture: GestureName
   /** 0 to 1: how sure the landmarker was of the hand, and for a wave how steadily it was seen. */
   confidence: number
-  /** A volume step repeated while the open hand stays where it is. */
+  /** Always false now (the volume no longer repeats while a hand is held: it takes a sweep a step); kept for the callers. */
   repeat: boolean
 }
 
@@ -114,17 +114,10 @@ const THUMB_RELEASE_MS = 300
 const WAVE_WINDOW_MS = 500
 /** A wave that went one way locks the other way out for this long: bringing the hand back is not a wave back. */
 const OPPOSITE_WAVE_LOCK_MS = 1200
-const PALM_HOLD_MS = 600
-const PALM_REPEAT_MS = 550
-/** The open hand counts as still while its wrist stays within this share of the picture over the last 300 ms. */
-const PALM_STILL = 0.06
-const STILL_WINDOW_MS = 300
-/**
- * The open hand's middle above this height is "up", below DOWN_BAND "down"; in between it does nothing. The middle is
- * wide: a hand waiting there before a wave must not change the volume.
- */
-const UP_BAND = 0.35
-const DOWN_BAND = 0.65
+/** Of the frames of a wave or a sweep, this share must show an open hand: hands gripping a wheel, turning it, are not waving. */
+const OPEN_SHARE = 0.6
+/** A sweep up or down needs this share of the distance a wave needs (the picture is shorter than it is wide, and arms rise less than they cross). */
+const VERTICAL_SHARE = 0.8
 /** After a gesture nothing else fires for this long (the hand is still finishing the first one). */
 const COOLDOWN_MS = 600
 
@@ -146,6 +139,15 @@ const FINGERS: [number, number][] = [
 const EXTENDED = 1.5
 /** ...and one whose tip comes back under this is folded. */
 const FOLDED = 1.15
+/**
+ * What tells a pinch from a fist, which also brings the thumb's tip against the index (a real fist measured 0.85 for the
+ * index; a pinch, whose index bends over to meet the thumb, 1.0 to 1.4: the tips meet about one hand size from the
+ * wrist, and the knuckle is at about 0.95). An index under this is curled into a fist...
+ */
+const PINCH_MIN_REACH = 0.97
+/** ...and so is one under this when the three other fingers are all folded too (a grip on a wheel). */
+const GRIP_REACH = 1.1
+const OTHERS_FOLDED = 1.0
 
 type Point = [number, number]
 
@@ -161,8 +163,8 @@ function distance(a: Point, b: Point): number {
 interface Shape {
   pose: HandPose
   pinchGap: number
-  /** The open hand's middle (between the wrist and the knuckles), 0 to 1 down the picture. */
-  palmY: number
+  /** At least three fingers stretched out, whichever way the hand points: what a wave or a sweep is made with. */
+  open: boolean
 }
 
 /** What a hand is doing, from its (smoothed) points. Exported for the tests: the real hands MediaPipe measured. */
@@ -174,10 +176,13 @@ export function handShape(points: number[], aspect: number, pinchDistance = DEFA
   const extended = reach.filter((r) => r > EXTENDED).length
   const folded = reach.filter((r) => r < FOLDED).length
   const pinchGap = distance(p(THUMB_TIP), p(INDEX_TIP)) / size
-  const palmY = (points[WRIST * 3 + 1] + points[INDEX_MCP * 3 + 1] + points[17 * 3 + 1]) / 3
+  const open = extended >= 3
 
-  // A fist also brings the thumb's tip against the index: in a pinch the index reaches out to meet it.
-  if (pinchGap < pinchDistance && reach[0] > FOLDED) return { pose: 'pinch', pinchGap, palmY }
+  // A fist also brings the thumb's tip against the index: in a pinch the index reaches out to meet it, or bends over to.
+  const indexReach = reach[0]
+  const othersFolded = reach.slice(1).every((r) => r < OTHERS_FOLDED)
+  const fist = indexReach < PINCH_MIN_REACH || (othersFolded && indexReach < GRIP_REACH)
+  if (pinchGap < pinchDistance && !fist) return { pose: 'pinch', pinchGap, open }
 
   const thumbTip = p(THUMB_TIP)
   const thumbBase = p(THUMB_MCP)
@@ -185,13 +190,13 @@ export function handShape(points: number[], aspect: number, pinchDistance = DEFA
   const thumbUpward = (thumbBase[1] - thumbTip[1]) / thumbLength
   const thumbOut = distance(thumbTip, p(INDEX_MCP)) / size
   const thumbAboveFingers = FINGERS.every(([, tip]) => p(tip)[1] > thumbTip[1])
-  if (folded === 4 && thumbOut > 0.6 && thumbUpward > 0.7 && thumbAboveFingers) return { pose: 'thumbUp', pinchGap, palmY }
+  if (folded === 4 && thumbOut > 0.6 && thumbUpward > 0.7 && thumbAboveFingers) return { pose: 'thumbUp', pinchGap, open }
 
   // Fingers up: the middle finger's tip well above the wrist.
   const fingersUp = (wrist[1] - p(12)[1]) / size > 1.2
-  if (extended === 4 && fingersUp) return { pose: 'openPalm', pinchGap, palmY }
+  if (extended === 4 && fingersUp) return { pose: 'openPalm', pinchGap, open }
 
-  return { pose: 'other', pinchGap, palmY }
+  return { pose: 'other', pinchGap, open }
 }
 
 interface Sample {
@@ -200,9 +205,8 @@ interface Sample {
   /** The wrist as seen in this frame: a wave is judged on it, smoothing would only make it late. */
   x: number
   y: number
-  /** The wrist averaged over the last frames: stillness is judged on it. */
-  sx: number
-  sy: number
+  /** The hand had at least three fingers stretched out. */
+  open: boolean
 }
 
 export interface GestureRecognizer {
@@ -234,18 +238,14 @@ export function createGestureRecognizer(initial: RecognizerOptions): GestureReco
   let thumbSince: number | null = null
   let thumbOffSince: number | null = null
   let thumbArmed = true
-  let palmSince: number | null = null
-  let palmBand: 'up' | 'down' | null = null
-  let palmFiredAt: number | null = null
+  let upLockedUntil = -Infinity
+  let downLockedUntil = -Infinity
 
   function forgetPoses(): void {
     pinchSince = null
     releaseSince = null
     thumbSince = null
     thumbOffSince = null
-    palmSince = null
-    palmBand = null
-    palmFiredAt = null
   }
 
   function reset(): void {
@@ -258,6 +258,8 @@ export function createGestureRecognizer(initial: RecognizerOptions): GestureReco
     blockedUntil = -Infinity
     rightLockedUntil = -Infinity
     leftLockedUntil = -Infinity
+    upLockedUntil = -Infinity
+    downLockedUntil = -Infinity
     pinchArmed = true
     thumbArmed = true
     forgetPoses()
@@ -287,7 +289,7 @@ export function createGestureRecognizer(initial: RecognizerOptions): GestureReco
     const hand = choose(frame, aspect)
 
     if (!hand) {
-      history.push({ t, present: false, x: 0, y: 0, sx: 0, sy: 0 })
+      history.push({ t, present: false, x: 0, y: 0, open: false })
       trimHistory(t)
       if (t - lastSeenAt > LOST_AFTER_MS) {
         // Gone: the next hand starts afresh, and may pinch or give a thumb again.
@@ -319,7 +321,7 @@ export function createGestureRecognizer(initial: RecognizerOptions): GestureReco
     const shape = handShape(smoothed, aspect, pinchDistance)
     const x = smoothed[WRIST * 3]
     const y = smoothed[WRIST * 3 + 1]
-    history.push({ t, present: true, x: hand.points[WRIST * 3], y: hand.points[WRIST * 3 + 1], sx: x, sy: y })
+    history.push({ t, present: true, x: hand.points[WRIST * 3], y: hand.points[WRIST * 3 + 1], open: shape.open })
     trimHistory(t)
     current = { present: true, pose: shape.pose, pinchGap: shape.pinchGap, x, y, score }
 
@@ -343,36 +345,22 @@ export function createGestureRecognizer(initial: RecognizerOptions): GestureReco
       if (thumbOffSince === null) thumbOffSince = t
       if (t - thumbOffSince >= THUMB_RELEASE_MS) thumbArmed = true
     }
-    const band = shape.palmY < UP_BAND ? 'up' : shape.palmY > DOWN_BAND ? 'down' : null
-    if (shape.pose === 'openPalm' && band && isStill(t)) {
-      if (palmBand !== band) {
-        palmBand = band
-        palmSince = t
-        palmFiredAt = null
-      }
-    } else {
-      palmSince = null
-      palmBand = null
-      palmFiredAt = null
-    }
-
-    // The volume keeps stepping while the open hand stays put, cooldown or not: it is the same gesture going on.
-    if (palmSince !== null && palmBand && palmFiredAt !== null && t - palmFiredAt >= PALM_REPEAT_MS) {
-      palmFiredAt = t
-      return fire(palmBand === 'up' ? 'PALM_UP' : 'PALM_DOWN', t, score, true)
-    }
     if (t < blockedUntil) return null
 
-    // A wave: the wrist crossed far enough within the window, seen in enough of its frames.
-    const wave = waveIn(t, swipeMinDistance, swipeConfidenceThreshold)
-    if (wave) {
-      const locked = wave.direction === 'right' ? t < rightLockedUntil : t < leftLockedUntil
-      if (!locked) {
-        if (wave.direction === 'right') leftLockedUntil = t + OPPOSITE_WAVE_LOCK_MS
-        else rightLockedUntil = t + OPPOSITE_WAVE_LOCK_MS
+    // A wave or a sweep: the wrist crossed far enough within the window, seen in enough of its frames, the hand open.
+    const sweep = sweepIn(aspect, swipeMinDistance, swipeConfidenceThreshold)
+    if (sweep) {
+      const locks = { right: rightLockedUntil, left: leftLockedUntil, up: upLockedUntil, down: downLockedUntil }
+      if (t >= locks[sweep.direction]) {
+        // Bringing the hand back is not a movement the other way.
+        if (sweep.direction === 'right') leftLockedUntil = t + OPPOSITE_WAVE_LOCK_MS
+        else if (sweep.direction === 'left') rightLockedUntil = t + OPPOSITE_WAVE_LOCK_MS
+        else if (sweep.direction === 'up') downLockedUntil = t + OPPOSITE_WAVE_LOCK_MS
+        else upLockedUntil = t + OPPOSITE_WAVE_LOCK_MS
         history = [history[history.length - 1]]
         forgetPoses()
-        return fire(wave.direction === 'right' ? 'WAVE_RIGHT' : 'WAVE_LEFT', t, Math.min(score, wave.seen))
+        const gesture: GestureName = { right: 'WAVE_RIGHT', left: 'WAVE_LEFT', up: 'PALM_UP', down: 'PALM_DOWN' }[sweep.direction] as GestureName
+        return fire(gesture, t, Math.min(score, sweep.seen))
       }
     }
 
@@ -384,10 +372,6 @@ export function createGestureRecognizer(initial: RecognizerOptions): GestureReco
       thumbArmed = false
       return fire('THUMB_UP', t, score)
     }
-    if (palmSince !== null && palmBand && palmFiredAt === null && t - palmSince >= PALM_HOLD_MS) {
-      palmFiredAt = t
-      return fire(palmBand === 'up' ? 'PALM_UP' : 'PALM_DOWN', t, score)
-    }
     return null
   }
 
@@ -395,34 +379,32 @@ export function createGestureRecognizer(initial: RecognizerOptions): GestureReco
     while (history.length > 0 && history[0].t < t - WAVE_WINDOW_MS) history.shift()
   }
 
-  function isStill(t: number): boolean {
-    const span = history.filter((s) => s.present && s.t >= t - STILL_WINDOW_MS)
-    if (span.length === 0) return false
-    const xs = span.map((s) => s.sx)
-    const ys = span.map((s) => s.sy)
-    return Math.max(...xs) - Math.min(...xs) < PALM_STILL && Math.max(...ys) - Math.min(...ys) < PALM_STILL
-  }
-
-  function waveIn(t: number, minDistance: number, minSeen: number): { direction: 'left' | 'right'; seen: number } | null {
+  function sweepIn(aspect: number, minDistance: number, minSeen: number): { direction: 'left' | 'right' | 'up' | 'down'; seen: number } | null {
     if (history.length < 3) return null
-    const seen = history.filter((s) => s.present).length / history.length
+    const present = history.filter((s) => s.present)
+    const seen = present.length / history.length
     if (seen < minSeen) return null
+    // Hands gripping or turning a wheel, a fist, a pointing finger: only an open hand waves.
+    if (present.filter((s) => s.open).length / present.length < OPEN_SHARE) return null
     const now = history[history.length - 1]
     if (!now.present) return null
-    let lowest: Sample | null = null
-    let highest: Sample | null = null
-    for (const s of history) {
-      if (!s.present) continue
-      if (!lowest || s.x < lowest.x) lowest = s
-      if (!highest || s.x > highest.x) highest = s
+    let left: Sample | null = null
+    let right: Sample | null = null
+    let top: Sample | null = null
+    let bottom: Sample | null = null
+    for (const s of present) {
+      if (!left || s.x < left.x) left = s
+      if (!right || s.x > right.x) right = s
+      if (!top || s.y < top.y) top = s
+      if (!bottom || s.y > bottom.y) bottom = s
     }
     // Mostly sideways: a hand raised or lowered across the picture is not a wave.
-    if (lowest && now.x - lowest.x >= minDistance && Math.abs(now.y - lowest.y) < (now.x - lowest.x) * 0.7) {
-      return { direction: 'right', seen }
-    }
-    if (highest && highest.x - now.x >= minDistance && Math.abs(now.y - highest.y) < (highest.x - now.x) * 0.7) {
-      return { direction: 'left', seen }
-    }
+    if (left && now.x - left.x >= minDistance && Math.abs(now.y - left.y) < (now.x - left.x) * 0.7) return { direction: 'right', seen }
+    if (right && right.x - now.x >= minDistance && Math.abs(now.y - right.y) < (right.x - now.x) * 0.7) return { direction: 'left', seen }
+    // And mostly up or down for the volume (x counted in picture heights, as the hand's shape is).
+    const rise = minDistance * VERTICAL_SHARE
+    if (bottom && bottom.y - now.y >= rise && Math.abs(now.x - bottom.x) * aspect < (bottom.y - now.y) * 0.7) return { direction: 'up', seen }
+    if (top && now.y - top.y >= rise && Math.abs(now.x - top.x) * aspect < (now.y - top.y) * 0.7) return { direction: 'down', seen }
     return null
   }
 

@@ -2,7 +2,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Download, X } from 'lucide-react-native'
 import { useUpdateStore } from '@/store/updateStore'
-import { colors, radius, spacing } from '@/constants/theme'
+import { colors, radius, spacing, tint } from '@/constants/theme'
 
 /** Floats at the top, clear of the mini player and toasts stacked at the bottom. */
 export default function UpdatePrompt() {
@@ -23,7 +23,9 @@ export default function UpdatePrompt() {
   return (
     <View style={[styles.card, { top: insets.top + spacing.sm }]}>
       <View style={styles.row}>
-        <Download size={16} color={colors.accent} />
+        <View style={styles.tile}>
+          <Download size={16} color={colors.accent} />
+        </View>
         <Text style={styles.title} numberOfLines={1}>
           Mise à jour {update.version} disponible
         </Text>
@@ -38,18 +40,18 @@ export default function UpdatePrompt() {
           <View style={styles.track}>
             <View style={[styles.fill, { width: `${progress}%` }]} />
           </View>
-          <Text style={styles.meta}>Téléchargement... {progress}%</Text>
+          <Text style={styles.meta}>Téléchargement… {progress}%</Text>
         </>
       ) : phase === 'installing' ? (
-        <Text style={styles.meta}>Ouverture de l'installateur...</Text>
+        <Text style={styles.meta}>Ouverture de l'installateur…</Text>
       ) : (
         <>
           <Text style={phase === 'error' ? styles.error : styles.meta} numberOfLines={2}>
             {phase === 'error'
               ? error
               : readyToInstall
-                ? "Déjà téléchargée - Android vous demandera de confirmer l'installation."
-                : `${sizeMb} Mo - Android vous demandera de confirmer l'installation.`}
+                ? "Déjà téléchargée. Android vous demandera de confirmer l'installation."
+                : `${sizeMb} Mo. Android vous demandera de confirmer l'installation.`}
           </Text>
           <Pressable style={({ pressed }) => [styles.button, pressed && styles.pressed]} onPress={install}>
             <Text style={styles.buttonText}>{phase === 'error' ? 'Réessayer' : readyToInstall ? 'Installer' : 'Mettre à jour'}</Text>
@@ -66,9 +68,9 @@ const styles = StyleSheet.create({
     left: spacing.md,
     right: spacing.md,
     backgroundColor: colors.elevated,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: tint(colors.accent, 0.35),
     padding: spacing.md,
     elevation: 12,
     shadowColor: '#000',
@@ -76,7 +78,8 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 }
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  tile: { width: 30, height: 30, borderRadius: 10, backgroundColor: tint(colors.accent, 0.16), alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, color: colors.text, fontSize: 14, fontWeight: '700' },
   meta: { color: colors.textSecondary, fontSize: 12, marginTop: spacing.xs },
   error: { color: colors.danger, fontSize: 12, marginTop: spacing.xs },
@@ -91,5 +94,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm
   },
   pressed: { opacity: 0.7 },
-  buttonText: { color: '#000', fontWeight: '700', fontSize: 13 }
+  buttonText: { color: colors.onAccent, fontWeight: '800', fontSize: 13 }
 })

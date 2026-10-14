@@ -143,10 +143,15 @@ export async function startHub(opts: {
   port?: number
 }): Promise<{ ok: true; address: string | null; port: number } | { ok: false; error: string }> {
   win = opts.window
+  const renamed = localDeviceName !== opts.deviceName
   localDeviceName = opts.deviceName
   const port = opts.port ?? REMOTE_CONTROL_PORT
 
-  if (wss) return { ok: true, address: localLanAddress(), port: boundPort ?? port }
+  if (wss) {
+    // Renamed while running: the phones show the PC by its name in their lists, so they are told.
+    if (renamed) notifyDeviceListChanged()
+    return { ok: true, address: localLanAddress(), port: boundPort ?? port }
+  }
   currentPairing(opts.store) // made and saved now if this is the first run
   limiter = new AttemptLimiter()
 

@@ -117,7 +117,7 @@ export default function BackupAlbums() {
                     {album.title}
                   </Text>
                   <Text style={styles.rowMeta} numberOfLines={1}>
-                    {gone ? 'introuvable sur le téléphone' : counts[album.id] !== undefined ? `${counts[album.id].toLocaleString('fr-FR')} éléments` : '…'}
+                    {gone ? 'introuvable sur le téléphone' : counts[album.id] !== undefined ? `${counts[album.id].toLocaleString('fr-FR')} ${counts[album.id] > 1 ? 'éléments' : 'élément'}` : '…'}
                     {on ? ` · dossier ${folderOf(album.title)}` : ''}
                   </Text>
                 </View>

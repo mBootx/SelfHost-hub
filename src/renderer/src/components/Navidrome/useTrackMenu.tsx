@@ -40,8 +40,8 @@ export function useTrackMenu(): {
                 label: 'Lire ensuite',
                 icon: ListStart,
                 onClick: () => {
-                  playNext(state.song)
-                  showToast(`"${state.song.title}" sera lu ensuite`)
+                  const ahead = playNext(state.song)
+                  showToast(ahead === 0 ? `« ${state.song.title} » sera lu ensuite` : `« ${state.song.title} » sera lu après ${ahead === 1 ? 'le titre déjà ajouté' : `les ${ahead} titres déjà ajoutés`}`)
                 }
               },
               {
@@ -58,9 +58,13 @@ export function useTrackMenu(): {
                 icon: Heart,
                 onClick: async () => {
                   if (!client) return
-                  if (state.song.starred) await client.unstar(state.song.id)
-                  else await client.star(state.song.id)
-                  showToast(state.song.starred ? 'Retiré des favoris' : 'Ajouté aux favoris')
+                  try {
+                    if (state.song.starred) await client.unstar(state.song.id)
+                    else await client.star(state.song.id)
+                    showToast(state.song.starred ? 'Retiré des favoris' : 'Ajouté aux favoris')
+                  } catch {
+                    showToast('Impossible de modifier les favoris')
+                  }
                 }
               }
             ]}

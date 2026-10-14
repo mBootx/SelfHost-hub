@@ -72,7 +72,8 @@ class NowPlayingActions(
     val onRepeat: () -> Unit,
     /** The crown moved by this many pixels of scrolling. */
     val onCrown: (Float) -> Unit,
-    val onVolumeStep: (Int) -> Unit,
+    /** Opens the volume screen. */
+    val onVolume: () -> Unit,
     val onLibrary: () -> Unit,
     val onDevices: () -> Unit,
     val onSettings: () -> Unit,

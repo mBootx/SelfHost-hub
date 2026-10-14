@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { NavidromeClient, NDAlbum, NDArtist } from '@renderer/services/navidrome'
 import { prefetchCoverArt } from '@renderer/services/imagePrefetch'
+import { plural } from '@renderer/services/plural'
+import LoadFailed from './LoadFailed'
 
 interface Props {
   client: NavidromeClient
@@ -13,22 +15,34 @@ export default function ArtistView({ client, artistId, onSelectAlbum }: Props): 
   const [albums, setAlbums] = useState<NDAlbum[]>([])
   const [loading, setLoading] = useState(true)
 
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    client.getArtist(artistId).then((res) => {
-      if (cancelled) return
-      setArtist(res.artist)
-      setAlbums(res.albums)
-      setLoading(false)
-      prefetchCoverArt(client, res.albums.map((a) => a.coverArt), 300)
-    })
+    setError(null)
+    client
+      .getArtist(artistId)
+      .then((res) => {
+        if (cancelled) return
+        setArtist(res.artist)
+        setAlbums(res.albums)
+        setLoading(false)
+        prefetchCoverArt(client, res.albums.map((a) => a.coverArt), 300)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : 'Artiste introuvable')
+        setLoading(false)
+      })
     return () => {
       cancelled = true
     }
-  }, [artistId])
+  }, [artistId, attempt])
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Chargement...</div>
+  if (loading) return <div className="p-6 text-sm text-gray-400">Chargement…</div>
+  if (error) return <LoadFailed what="Artiste indisponible" error={error} onRetry={() => setAttempt((n) => n + 1)} />
 
   return (
     <div className="animate-fade-in p-6">
@@ -45,7 +59,7 @@ export default function ArtistView({ client, artistId, onSelectAlbum }: Props): 
         <div>
           <p className="text-xs uppercase tracking-wide text-gray-400">Artiste</p>
           <h1 className="text-3xl font-bold">{artist?.name}</h1>
-          <p className="mt-1 text-sm text-gray-400">{albums.length} albums</p>
+          <p className="mt-1 text-sm text-gray-400">{plural(albums.length, 'album', 'albums')}</p>
         </div>
       </div>
 

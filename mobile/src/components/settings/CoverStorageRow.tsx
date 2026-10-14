@@ -41,8 +41,10 @@ export default function CoverStorageRow() {
         stop.current
           ? `Arrêté : ${done.done} pochettes vues sur ${done.total ?? '?'}.`
           : done.failed > 0
-            ? `${done.total} pochettes, dont ${done.failed} introuvables.`
-            : `Les ${done.total} pochettes de la bibliothèque sont sur le téléphone.`
+            ? `${done.total} pochettes, dont ${done.failed} ${done.failed > 1 ? 'introuvables' : 'introuvable'}.`
+            : done.total === 1
+              ? 'La pochette de la bibliothèque est sur le téléphone.'
+              : `Les ${done.total} pochettes de la bibliothèque sont sur le téléphone.`
       )
     } catch (err: any) {
       setResult(`Impossible de lire la bibliothèque : ${err?.message || 'erreur'}`)
@@ -74,7 +76,7 @@ export default function CoverStorageRow() {
     ? progress?.total
       ? `Enregistrement… ${progress.done} / ${progress.total}`
       : 'Lecture de la bibliothèque…'
-    : result ?? (count === 0 ? 'Aucune pochette enregistrée' : `${count} pochettes · ${megabytes(bytes)} sur le téléphone`)
+    : result ?? (count === 0 ? 'Aucune pochette enregistrée' : `${count} ${count > 1 ? 'pochettes' : 'pochette'} · ${megabytes(bytes)} sur le téléphone`)
 
   return (
     <View style={styles.row}>

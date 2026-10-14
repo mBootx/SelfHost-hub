@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Music, FolderOpen, Download, HardDriveDownload, Cast, RefreshCw, Copy, KeyRound } from 'lucide-react'
+import { Music, FolderOpen, Download, HardDriveDownload, Cast, RefreshCw, Copy, KeyRound, Palette, SlidersHorizontal, PanelBottomClose, Rocket, Sparkles } from 'lucide-react'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
@@ -7,65 +7,23 @@ import { useOfflineStore } from '@renderer/store/offlineStore'
 import { useRemoteStore } from '@renderer/store/remoteStore'
 import { useToastStore } from '@renderer/store/toastStore'
 import { useWhatsNewStore } from '@renderer/store/whatsNewStore'
+import { ACCENT_PRESETS, BACKGROUNDS, useAppearanceStore } from '@renderer/store/appearanceStore'
 import DowntifyLoginPage from '@renderer/components/Downtify/LoginPage'
 import DowntifySettingsForm from '@renderer/components/Downtify/SettingsForm'
 import DownloadQueue from '@renderer/components/Downtify/DownloadQueue'
 import Switch from '@renderer/components/Switch'
 import AppearanceSection from './AppearanceSection'
+import ConfirmModal from '@renderer/components/ConfirmModal'
+import { plural } from '@renderer/services/plural'
 import PlaybackSection from './PlaybackSection'
-
-type IconComponent = typeof Music
-
-function ServiceRow({
-  icon: Icon,
-  accent,
-  name,
-  connected,
-  subtitle,
-  onLogout
-}: {
-  icon: IconComponent
-  accent: string
-  name: string
-  connected: boolean
-  subtitle: string
-  onLogout?: () => void
-}): JSX.Element {
-  return (
-    <div className="flex items-center gap-4 rounded-lg border border-surface-border bg-surface-elevated p-4">
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${accent}`}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{name}</p>
-        <p className="flex items-center gap-1.5 text-xs text-gray-400">
-          <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-accent' : 'bg-gray-600'}`} />
-          {subtitle}
-        </p>
-      </div>
-      {connected && onLogout && (
-        <button
-          onClick={onLogout}
-          className="rounded-full border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-red-500 hover:text-red-400"
-        >
-          Se déconnecter
-        </button>
-      )}
-    </div>
-  )
-}
+import { Card, Fold, GroupLabel, Hero, PillButton, Row } from './kit'
 
 type UpdateState = 'idle' | 'checking' | 'current' | 'downloading' | 'ready' | 'dev' | 'error'
 
-function UpdatesRow(): JSX.Element {
-  const [currentVersion, setCurrentVersion] = useState('')
+function UpdatesRow({ version }: { version: string }): JSX.Element {
   const [state, setState] = useState<UpdateState>('idle')
   const [latestVersion, setLatestVersion] = useState('')
   const showWhatsNew = useWhatsNewStore((s) => s.showAll)
-
-  useEffect(() => {
-    window.api.updater.currentVersion().then(setCurrentVersion)
-  }, [])
 
   async function check(): Promise<void> {
     setState('checking')
@@ -80,7 +38,7 @@ function UpdatesRow(): JSX.Element {
 
   const messages: Record<UpdateState, string> = {
     idle: 'Les mises à jour sont vérifiées au démarrage puis toutes les 6 heures.',
-    checking: 'Recherche...',
+    checking: 'Recherche…',
     current: 'Vous avez la dernière version.',
     downloading: `Version ${latestVersion} en cours de téléchargement.`,
     ready: `Version ${latestVersion} prête : elle s'installera à la fermeture.`,
@@ -89,28 +47,19 @@ function UpdatesRow(): JSX.Element {
   }
 
   return (
-    <div className="flex items-center gap-4 rounded-lg border border-surface-border bg-surface-elevated p-4">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-hover">
-        <RefreshCw className={`h-5 w-5 text-gray-300 ${state === 'checking' ? 'animate-spin' : ''}`} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">SelfHost Hub {currentVersion && `v${currentVersion}`}</p>
-        <p className="text-xs text-gray-400">{messages[state]}</p>
-      </div>
-      <button
-        onClick={showWhatsNew}
-        className="rounded-full border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-accent hover:text-accent"
-      >
-        Nouveautés
-      </button>
-      <button
-        onClick={check}
-        disabled={state === 'checking'}
-        className="rounded-full border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-accent hover:text-accent disabled:opacity-60"
-      >
-        Rechercher
-      </button>
-    </div>
+    <>
+      <Row
+        icon={RefreshCw}
+        title={`SelfHost Hub${version ? ` v${version}` : ''}`}
+        meta={messages[state]}
+        right={
+          <PillButton onClick={check} disabled={state === 'checking'}>
+            Rechercher
+          </PillButton>
+        }
+      />
+      <Row icon={Sparkles} title="Nouveautés" meta="Ce qui a changé dans les dernières versions." onClick={showWhatsNew} />
+    </>
   )
 }
 
@@ -129,28 +78,20 @@ function DesktopRows(): JSX.Element | null {
 
   if (!settings) return null
   return (
-    <div className="space-y-4 rounded-lg border border-surface-border bg-surface-elevated p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold">Garder en arrière-plan</p>
-          <p className="text-xs text-gray-400">
-            Fermer la fenêtre laisse la musique jouer. L&apos;icône près de l&apos;horloge permet de la rouvrir ou de quitter.
-          </p>
-        </div>
-        <Switch checked={settings.closeToTray} onChange={(on) => update({ closeToTray: on })} label="Garder en arrière-plan" />
-      </div>
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold">Lancer au démarrage de Windows</p>
-          <p className="text-xs text-gray-400">Démarre discrètement, dans la zone de notification.</p>
-        </div>
-        <Switch
-          checked={settings.openAtLogin}
-          onChange={(on) => update({ openAtLogin: on })}
-          label="Lancer au démarrage de Windows"
-        />
-      </div>
-    </div>
+    <>
+      <Row
+        icon={PanelBottomClose}
+        title="Garder en arrière-plan"
+        meta="Fermer la fenêtre laisse la musique jouer. L'icône près de l'horloge permet de la rouvrir ou de quitter."
+        right={<Switch checked={settings.closeToTray} onChange={(on) => update({ closeToTray: on })} label="Garder en arrière-plan" />}
+      />
+      <Row
+        icon={Rocket}
+        title="Lancer au démarrage de Windows"
+        meta="Démarre discrètement, dans la zone de notification."
+        right={<Switch checked={settings.openAtLogin} onChange={(on) => update({ openAtLogin: on })} label="Lancer au démarrage de Windows" />}
+      />
+    </>
   )
 }
 
@@ -168,6 +109,9 @@ export default function SettingsModule(): JSX.Element {
   const removeOffline = useOfflineStore((s) => s.removeOffline)
   const offlineIds = Object.keys(offlineTracks)
 
+  const accent = useAppearanceStore((s) => s.accent)
+  const background = useAppearanceStore((s) => s.background)
+
   const remoteEnabled = useRemoteStore((s) => s.enabled)
   const remoteRunning = useRemoteStore((s) => s.running)
   const remoteAddress = useRemoteStore((s) => s.address)
@@ -177,117 +121,131 @@ export default function SettingsModule(): JSX.Element {
   const setRemoteDeviceName = useRemoteStore((s) => s.setDeviceName)
   const remotePairingCode = useRemoteStore((s) => s.pairingCode)
   const newRemotePairingCode = useRemoteStore((s) => s.newPairingCode)
+  const remoteError = useRemoteStore((s) => s.error)
+  const [confirmClearOffline, setConfirmClearOffline] = useState(false)
   const [deviceNameDraft, setDeviceNameDraft] = useState(remoteDeviceName)
   useEffect(() => setDeviceNameDraft(remoteDeviceName), [remoteDeviceName])
+  const [version, setVersion] = useState('')
+  useEffect(() => {
+    window.api.updater.currentVersion().then(setVersion)
+  }, [])
 
   const downtifyConnected = downtifyStatus === 'connected'
   const activeDownloads = downtifyQueue.filter((q) => q.status === 'downloading' || q.status === 'queued').length
+  const accentName = ACCENT_PRESETS.find((p) => p.hex.toLowerCase() === accent.toLowerCase())?.label ?? 'Perso'
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl space-y-8 p-6">
-        <h1 className="text-2xl font-bold tracking-tight">Réglages</h1>
+      <div className="mx-auto max-w-3xl space-y-8 p-6 pb-12">
+        <Hero
+          version={version}
+          chips={[
+            { label: 'Navidrome', on: navidromeStatus === 'connected' },
+            { label: 'FileBrowser', on: filebrowserStatus === 'connected' },
+            { label: 'Downtify', on: downtifyConnected },
+            { label: 'Téléphone', on: remoteRunning && remoteDeviceCount > 0 }
+          ]}
+        />
 
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Services</h2>
-          <ServiceRow
-            icon={Music}
-            accent="bg-accent text-black"
-            name="Navidrome"
-            connected={navidromeStatus === 'connected'}
-            subtitle={navidromeStatus === 'connected' ? `Connecté en tant que ${navidromeUsername}` : 'Non connecté'}
-            onLogout={navidromeLogout}
-          />
-          <ServiceRow
-            icon={FolderOpen}
-            accent="bg-blue-500 text-white"
-            name="FileBrowser"
-            connected={filebrowserStatus === 'connected'}
-            subtitle={filebrowserStatus === 'connected' ? 'Connecté' : 'Non connecté'}
-            onLogout={filebrowserLogout}
-          />
-          <ServiceRow
-            icon={Download}
-            accent="bg-orange-500 text-white"
-            name="Downtify"
-            connected={downtifyConnected}
-            subtitle={downtifyConnected ? 'Résultats intégrés à la recherche Navidrome' : 'Non connecté'}
-            onLogout={downtifyLogout}
-          />
+        <section>
+          <GroupLabel>Services</GroupLabel>
+          <Card>
+            <Row
+              icon={Music}
+              title="Navidrome"
+              meta={navidromeStatus === 'connected' ? `Connecté en tant que ${navidromeUsername}` : 'Non connecté'}
+              right={navidromeStatus === 'connected' ? <PillButton onClick={navidromeLogout}>Se déconnecter</PillButton> : undefined}
+            />
+            <Row
+              icon={FolderOpen}
+              tone="bg-blue-500/15 text-blue-400"
+              title="FileBrowser"
+              meta={filebrowserStatus === 'connected' ? 'Connecté' : 'Non connecté'}
+              right={filebrowserStatus === 'connected' ? <PillButton onClick={filebrowserLogout}>Se déconnecter</PillButton> : undefined}
+            />
+            <Row
+              icon={Download}
+              tone="bg-orange-500/15 text-orange-400"
+              title="Downtify"
+              meta={downtifyConnected ? 'Résultats intégrés à la recherche Navidrome' : 'Non connecté'}
+              right={downtifyConnected ? <PillButton onClick={downtifyLogout}>Se déconnecter</PillButton> : undefined}
+            />
+          </Card>
         </section>
 
-        <AppearanceSection />
-        <PlaybackSection />
-
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Contrôle à distance</h2>
-          <div className="flex items-center gap-4 rounded-lg border border-surface-border bg-surface-elevated p-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-500 text-white">
-              <Cast className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Piloter cet ordinateur depuis le téléphone</p>
-              <p className="text-xs text-gray-400">
-                {remoteRunning
+        <section>
+          <GroupLabel>Contrôle à distance</GroupLabel>
+          <Card>
+            <Row
+              icon={Cast}
+              tone="bg-purple-500/15 text-purple-400"
+              title="Piloter cet ordinateur depuis le téléphone"
+              meta={
+                remoteRunning
                   ? `En écoute sur ${remoteAddress || '?'}${
                       remoteDeviceCount > 0
-                        ? ` - ${remoteDeviceCount} appareil${remoteDeviceCount > 1 ? 's' : ''} connecté${remoteDeviceCount > 1 ? 's' : ''}`
+                        ? ` · ${remoteDeviceCount} appareil${remoteDeviceCount > 1 ? 's' : ''} connecté${remoteDeviceCount > 1 ? 's' : ''}`
                         : ''
                     }`
                   : remoteEnabled
-                    ? 'En attente de connexion à Navidrome...'
-                    : 'Désactivé - même réseau Wi-Fi requis'}
-              </p>
-            </div>
-            <Switch checked={remoteEnabled} onChange={setRemoteEnabled} label="Contrôle à distance" />
-          </div>
-          {remoteEnabled && remotePairingCode && (
-            <div className="flex items-center gap-4 rounded-lg border border-surface-border bg-surface-elevated p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-base text-gray-300">
-                <KeyRound className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-gray-400">Code d'appairage : à saisir une fois sur chaque téléphone</p>
-                <p className="select-all font-mono text-lg font-semibold tracking-widest" aria-label="Code d'appairage">
-                  {remotePairingCode}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard.writeText(remotePairingCode)
-                  useToastStore.getState().show('Code copié')
-                }}
-                className="flex items-center gap-1.5 rounded border border-surface-border px-3 py-1.5 text-xs text-gray-300 hover:bg-surface-hover"
-              >
-                <Copy className="h-3.5 w-3.5" /> Copier
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm("Un nouveau code déconnecte les téléphones déjà appairés : ils devront le saisir de nouveau. Continuer ?")) void newRemotePairingCode()
-                }}
-                className="rounded border border-surface-border px-3 py-1.5 text-xs text-gray-300 hover:bg-surface-hover"
-              >
-                Nouveau code
-              </button>
-            </div>
-          )}
-          {remoteEnabled && (
-            <div className="flex items-center gap-3 rounded-lg border border-surface-border bg-surface-elevated p-4">
-              <label className="text-xs text-gray-400" htmlFor="remote-device-name">
-                Nom de cet appareil
-              </label>
-              <input
-                id="remote-device-name"
-                type="text"
-                value={deviceNameDraft}
-                onChange={(e) => setDeviceNameDraft(e.target.value)}
-                onBlur={() => deviceNameDraft.trim() && setRemoteDeviceName(deviceNameDraft.trim())}
-                className="flex-1 rounded border border-surface-border bg-surface-base px-3 py-1.5 text-sm text-white"
+                    ? remoteError
+                      ? `Impossible de démarrer : ${remoteError}`
+                      : 'En attente de connexion à Navidrome…'
+                    : 'Désactivé (même réseau Wi-Fi requis)'
+              }
+              right={<Switch checked={remoteEnabled} onChange={setRemoteEnabled} label="Contrôle à distance" />}
+            />
+            {remoteEnabled && remotePairingCode && (
+              <Row
+                icon={KeyRound}
+                title="Code d'appairage"
+                meta={
+                  <>
+                    <span className="block">À saisir une fois sur chaque téléphone</span>
+                    <span className="select-all font-mono text-lg font-semibold tracking-widest text-white" aria-label="Code d'appairage">
+                      {remotePairingCode}
+                    </span>
+                  </>
+                }
+                right={
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(remotePairingCode)
+                        useToastStore.getState().show('Code copié')
+                      }}
+                      className="flex items-center gap-1.5 rounded-full bg-surface-hover px-3.5 py-1.5 text-xs font-bold text-gray-200 transition-colors hover:bg-surface-border hover:text-white"
+                    >
+                      <Copy className="h-3.5 w-3.5" /> Copier
+                    </button>
+                    <PillButton
+                      onClick={() => {
+                        if (window.confirm("Un nouveau code déconnecte les téléphones déjà appairés : ils devront le saisir de nouveau. Continuer ?")) void newRemotePairingCode()
+                      }}
+                    >
+                      Nouveau code
+                    </PillButton>
+                  </div>
+                }
               />
-            </div>
-          )}
+            )}
+            {remoteEnabled && (
+              <div className="flex items-center gap-3 px-4 py-3.5">
+                <label className="text-xs font-medium text-gray-400" htmlFor="remote-device-name">
+                  Nom de cet appareil
+                </label>
+                <input
+                  id="remote-device-name"
+                  type="text"
+                  value={deviceNameDraft}
+                  onChange={(e) => setDeviceNameDraft(e.target.value)}
+                  onBlur={() => deviceNameDraft.trim() && setRemoteDeviceName(deviceNameDraft.trim())}
+                  className="flex-1 rounded-xl border-2 border-surface-border bg-surface-raised px-3 py-1.5 text-sm text-white outline-none transition-colors focus:border-accent"
+                />
+              </div>
+            )}
+          </Card>
         </section>
 
         {/* Downtify has no tab of its own any more: connecting, the queue and the
@@ -295,54 +253,71 @@ export default function SettingsModule(): JSX.Element {
             the Navidrome search. */}
         {downtifyConnected ? (
           <>
-            <section className="space-y-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                File de téléchargement{activeDownloads > 0 ? ` (${activeDownloads} en cours)` : ''}
-              </h2>
+            <section>
+              <GroupLabel>File de téléchargement{activeDownloads > 0 ? ` (${activeDownloads} en cours)` : ''}</GroupLabel>
               <DownloadQueue />
             </section>
 
-            <section className="space-y-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Options de téléchargement</h2>
+            <section>
+              <GroupLabel>Options de téléchargement</GroupLabel>
               <DowntifySettingsForm />
             </section>
           </>
         ) : (
-          <section className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Connexion à Downtify</h2>
-            <div className="overflow-hidden rounded-lg border border-surface-border">
+          <section>
+            <GroupLabel>Connexion à Downtify</GroupLabel>
+            <div className="overflow-hidden rounded-2xl border border-surface-border">
               <DowntifyLoginPage />
             </div>
           </section>
         )}
 
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Stockage</h2>
-          <div className="flex items-center gap-4 rounded-lg border border-surface-border bg-surface-elevated p-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-hover">
-              <HardDriveDownload className="h-5 w-5 text-gray-300" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Titres hors-ligne</p>
-              <p className="text-xs text-gray-400">
-                {offlineIds.length === 0 ? 'Aucun titre téléchargé' : `${offlineIds.length} titres sur cet ordinateur`}
-              </p>
-            </div>
-            {offlineIds.length > 0 && (
-              <button
-                onClick={() => offlineIds.forEach((id) => removeOffline(id))}
-                className="rounded-full border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-red-500 hover:text-red-400"
-              >
-                Vider
-              </button>
-            )}
+        <section>
+          <GroupLabel>Personnaliser</GroupLabel>
+          <div className="space-y-2.5">
+            <Fold icon={Palette} title="Apparence" summary={`${accentName} · ${BACKGROUNDS[background].label}`}>
+              <AppearanceSection />
+            </Fold>
+            <Fold icon={SlidersHorizontal} title="Lecture et égaliseur" summary="Fondu enchaîné, lecture sans blanc, égaliseur">
+              <PlaybackSection />
+            </Fold>
           </div>
         </section>
 
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Application</h2>
-          <DesktopRows />
-          <UpdatesRow />
+        <section>
+          <GroupLabel>Stockage</GroupLabel>
+          <Card>
+            <Row
+              icon={HardDriveDownload}
+              title="Titres hors ligne"
+              meta={offlineIds.length === 0 ? 'Aucun titre téléchargé' : `${plural(offlineIds.length, 'titre', 'titres')} sur cet ordinateur`}
+              right={offlineIds.length > 0 ? <PillButton danger onClick={() => setConfirmClearOffline(true)}>Vider</PillButton> : undefined}
+            />
+          </Card>
+        </section>
+
+        <ConfirmModal
+          open={confirmClearOffline}
+          title="Vider les titres hors ligne ?"
+          description={
+            offlineIds.length > 1
+              ? `Les ${offlineIds.length} titres téléchargés seront supprimés de cet ordinateur. Ils restent sur le serveur.`
+              : 'Le titre téléchargé sera supprimé de cet ordinateur. Il reste sur le serveur.'
+          }
+          confirmLabel="Vider"
+          onCancel={() => setConfirmClearOffline(false)}
+          onConfirm={() => {
+            offlineIds.forEach((id) => removeOffline(id))
+            setConfirmClearOffline(false)
+          }}
+        />
+
+        <section>
+          <GroupLabel>Application</GroupLabel>
+          <Card>
+            <DesktopRows />
+            <UpdatesRow version={version} />
+          </Card>
         </section>
       </div>
     </div>

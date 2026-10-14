@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native'
+import { View, Text, Pressable, StyleSheet, StyleProp, ViewStyle } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { colors, spacing } from '@/constants/theme'
+import { colors, radius, spacing } from '@/constants/theme'
 
 type IconComponent = React.ComponentType<{ size?: number; color?: string }>
 
@@ -37,7 +37,18 @@ export function SectionTitle({ children, action }: { children: React.ReactNode; 
   )
 }
 
-export function EmptyState({ icon: Icon, title, hint }: { icon: IconComponent; title: string; hint?: string }) {
+export function EmptyState({
+  icon: Icon,
+  title,
+  hint,
+  action
+}: {
+  icon: IconComponent
+  title: string
+  hint?: string
+  /** A button under the text ("Réessayer"). */
+  action?: { label: string; onPress: () => void }
+}) {
   return (
     <View style={styles.empty}>
       <View style={styles.emptyIcon}>
@@ -45,6 +56,15 @@ export function EmptyState({ icon: Icon, title, hint }: { icon: IconComponent; t
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       {!!hint && <Text style={styles.emptyHint}>{hint}</Text>}
+      {action && (
+        <Pressable
+          style={({ pressed }) => [styles.emptyButton, pressed && styles.emptyButtonPressed]}
+          onPress={action.onPress}
+          accessibilityRole="button"
+        >
+          <Text style={styles.emptyButtonText}>{action.label}</Text>
+        </Pressable>
+      )}
     </View>
   )
 }
@@ -77,5 +97,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   emptyTitle: { color: colors.textSecondary, fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  emptyHint: { color: colors.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 17 }
+  emptyHint: { color: colors.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 17 },
+  emptyButton: {
+    marginTop: spacing.sm,
+    backgroundColor: colors.accent,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm
+  },
+  emptyButtonPressed: { opacity: 0.6 },
+  emptyButtonText: { color: '#000', fontWeight: '700', fontSize: 13 }
 })

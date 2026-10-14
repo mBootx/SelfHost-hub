@@ -82,7 +82,7 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
           lastPurge = Date.now()
           void purgeExpiredTrash(client, target.root)
             .then((result) => {
-              if (result.removed > 0) logEvent('photos', `Corbeille : ${result.removed} jour(s) de plus de ${TRASH_DAYS} jours effacé(s)`)
+              if (result.removed > 0) logEvent('photos', `Corbeille : ${result.removed} ${result.removed > 1 ? 'jours effacés' : 'jour effacé'} (plus de ${TRASH_DAYS} jours)`)
             })
             .catch(() => {})
         }

@@ -121,11 +121,11 @@ function ServiceRow({
           : colors.textMuted
   const label =
     health.state === 'up'
-      ? `En ligne - ${health.latencyMs} ms`
+      ? `En ligne · ${health.latencyMs} ms`
       : health.state === 'down'
         ? 'Injoignable'
         : health.state === 'checking'
-          ? 'Vérification...'
+          ? 'Vérification…'
           : 'Non connecté'
   return (
     <View style={styles.row}>
@@ -138,7 +138,7 @@ function ServiceRow({
           <View style={[styles.dot, { backgroundColor: dot }]} />
           <Text style={styles.statusText} numberOfLines={1}>
             {label}
-            {health.state === 'up' && health.version ? ` - version ${health.version}` : ''}
+            {health.state === 'up' && health.version ? ` · version ${health.version}` : ''}
           </Text>
         </View>
         {health.state === 'down' && !!health.error && (
@@ -409,7 +409,7 @@ export default function ServerScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={handlePullRefresh} tintColor={colors.accent} colors={[colors.accent]} />
       }
     >
-      {waking && <Text style={styles.wakingText}>En attente du réveil du serveur...</Text>}
+      {waking && <Text style={styles.wakingText}>En attente du réveil du serveur…</Text>}
 
       <Section title="Services">
         <ServiceRow icon={Music} iconColor="#000" accent={colors.accent} name="Navidrome" health={navidromeHealth} />
@@ -429,7 +429,7 @@ export default function ServerScreen() {
             {scanning ? <ActivityIndicator color={colors.accent} /> : <ScanLine size={20} color={colors.textSecondary} />}
           </View>
           <View style={styles.rowInfo}>
-            <Text style={styles.rowTitle}>{scanning ? 'Scan en cours...' : scan ? `Dernier scan ${timeAgo(scan.lastScan)}` : 'Scan de la bibliothèque'}</Text>
+            <Text style={styles.rowTitle}>{scanning ? 'Scan en cours…' : scan ? `Dernier scan ${timeAgo(scan.lastScan)}` : 'Scan de la bibliothèque'}</Text>
             <Text style={styles.rowMeta}>Les téléchargements Downtify en lancent un automatiquement.</Text>
           </View>
           <Pressable
@@ -493,7 +493,7 @@ export default function ServerScreen() {
                   </View>
                 )}
                 <Text style={styles.rowMeta}>
-                  {source.total ? `${source.usedPercentage} % utilisés - ${formatBytes(source.total - source.used)} libres\n` : ''}
+                  {source.total ? `${source.usedPercentage} % utilisés · ${formatBytes(source.total - source.used)} libres\n` : ''}
                   {formatCount(source.numFiles)} fichiers, {formatCount(source.numDirs)} dossiers
                 </Text>
               </View>

@@ -70,7 +70,7 @@ function DayChart({ summary, look }: { summary: WeeklyWrapped; look: Look }) {
   const most = Math.max(1, ...summary.days)
   return (
     <View style={styles.section}>
-      <View style={styles.chart} accessibilityRole="image" accessibilityLabel={summary.days.map((m, i) => `${DAY_NAMES[i]} ${m} minutes`).join(', ')}>
+      <View style={styles.chart} accessibilityRole="image" accessibilityLabel={summary.days.map((m, i) => `${DAY_NAMES[i]} ${m} ${m > 1 ? 'minutes' : 'minute'}`).join(', ')}>
         {summary.days.map((minutes, day) => (
           <View key={day} style={styles.chartColumn}>
             <View style={styles.chartTrack}>
@@ -90,7 +90,7 @@ function DayChart({ summary, look }: { summary: WeeklyWrapped; look: Look }) {
       </View>
       {summary.busiestDay !== null && (
         <Text style={styles.caption}>
-          Ton grand jour : <Text style={styles.captionStrong}>{DAY_NAMES[summary.busiestDay]}</Text>, {durationLabel(summary.days[summary.busiestDay])}
+          Votre grand jour : <Text style={styles.captionStrong}>{DAY_NAMES[summary.busiestDay]}</Text>, {durationLabel(summary.days[summary.busiestDay])}
         </Text>
       )}
     </View>
@@ -215,7 +215,7 @@ export default function WrappedModal() {
             <ChevronLeft size={22} color="#fff" />
           </Pressable>
           <View style={styles.topTitle}>
-            <Text style={styles.overline}>{current ? 'Cette semaine · en cours' : 'Ton récap de la semaine'}</Text>
+            <Text style={styles.overline}>{current ? 'Cette semaine · en cours' : 'Votre récap de la semaine'}</Text>
             <Text style={styles.weekLabel}>{weekLabel(week)}</Text>
           </View>
           <Pressable
@@ -249,9 +249,9 @@ export default function WrappedModal() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + spacing.xxl }]} showsVerticalScrollIndicator={false}>
-            <View style={styles.heroBlock} accessible accessibilityLabel={`${summary.minutes} minutes d'écoute${change ? `, ${change}` : ''}`}>
+            <View style={styles.heroBlock} accessible accessibilityLabel={`${summary.minutes} ${summary.minutes > 1 ? 'minutes' : 'minute'} d'écoute${change ? `, ${change}` : ''}`}>
               <Text style={styles.heroNumber}>{minutes.toLocaleString('fr-FR')}</Text>
-              <Text style={styles.heroUnit}>minutes d'écoute</Text>
+              <Text style={styles.heroUnit}>{summary.minutes > 1 ? "minutes d'écoute" : "minute d'écoute"}</Text>
               {summary.minutes >= 60 && <Text style={styles.heroSub}>soit {durationLabel(summary.minutes)}</Text>}
               {change && (
                 <View style={[styles.chip, { borderColor: look.accent }]}>

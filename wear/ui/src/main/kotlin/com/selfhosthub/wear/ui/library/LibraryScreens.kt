@@ -21,6 +21,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.items
+import androidx.wear.compose.foundation.lazy.itemsIndexed
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.Icon
@@ -167,7 +168,8 @@ fun TracksContent(
                 )
             }
         }
-        items(list.items.orEmpty(), key = { it.id }) { track ->
+        // A playlist can hold the same song twice: its place in the list keeps the rows apart (a repeated key crashed the list).
+        itemsIndexed(list.items.orEmpty(), key = { index, track -> "$index:${track.id}" }) { _, track ->
             MediaRow(graph, track.coverId, track.title, trackLine(track), onClick = { onPlay(track) }, onLongClick = { onMore(track) })
         }
     }

@@ -48,6 +48,8 @@ export default function App(): JSX.Element {
   const initRemote = useRemoteStore((s) => s.init)
   const checkWhatsNew = useWhatsNewStore((s) => s.check)
   const navidromeConnected = useNavidromeStore((s) => s.status === 'connected')
+  // The player also runs with a server out of reach (a client is kept for a saved login): downloaded songs still play.
+  const hasPlayer = useNavidromeStore((s) => s.client !== null)
 
   useEffect(() => {
     // Reconnect all three services as soon as the app launches, not only
@@ -65,6 +67,25 @@ export default function App(): JSX.Element {
     startScrobbler()
     startDownloadWatcher()
     checkWhatsNew()
+  }, [])
+
+  // A saved login whose server was out of reach (the computer offline at start, the server asleep) is tried again
+  // when the network comes back and every half minute, instead of waiting for a restart.
+  useEffect(() => {
+    const retry = (): void => {
+      const navidrome = useNavidromeStore.getState()
+      if (navidrome.status === 'error' && navidrome.savedSession) void navidrome.restoreSession()
+      const filebrowser = useFileBrowserStore.getState()
+      if (filebrowser.status === 'error' && filebrowser.savedSession) void filebrowser.restoreSession()
+      const downtify = useDowntifyStore.getState()
+      if (downtify.status === 'error') void downtify.restoreSession()
+    }
+    window.addEventListener('online', retry)
+    const timer = setInterval(retry, 30_000)
+    return () => {
+      window.removeEventListener('online', retry)
+      clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {
@@ -113,13 +134,13 @@ export default function App(): JSX.Element {
         </main>
       </div>
       {/* Rendered outside the routed <main> so playback survives switching tabs. */}
-      {navidromeConnected && (
+      {hasPlayer && (
         <ErrorBoundary label="Lecteur Navidrome">
           <Player />
         </ErrorBoundary>
       )}
       {/* The full-screen player covers everything while it is open; the player bar underneath keeps playing. */}
-      {navidromeConnected && (
+      {hasPlayer && (
         <ErrorBoundary label="Plein écran">
           <BigPicture />
         </ErrorBoundary>

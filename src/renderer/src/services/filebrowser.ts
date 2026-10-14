@@ -263,7 +263,7 @@ export class FileBrowserClient {
     })
     if (!res.ok) {
       if (res.status === 409) throw new ApiError('Un fichier du même nom existe déjà', 409)
-      throw new ApiError("Échec de l'upload", res.status || 500)
+      throw new ApiError('Échec du téléversement', res.status || 500)
     }
   }
 

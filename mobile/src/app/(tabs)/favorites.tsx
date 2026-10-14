@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
+import { useFocusEffect } from 'expo-router'
 import { View, Text, FlatList, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native'
 import { Heart } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
@@ -34,16 +35,23 @@ function FavoritesContent() {
     }
   }, [client])
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    load().finally(() => {
-      if (!cancelled) setLoading(false)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [load])
+  // Read again each time the tab is shown: a song liked or unliked elsewhere (the player, the watch, the PC) is
+  // there without pulling down. Only the first read shows the spinner.
+  const loadedOnce = useRef(false)
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      if (!loadedOnce.current) setLoading(true)
+      load().finally(() => {
+        if (cancelled) return
+        loadedOnce.current = true
+        setLoading(false)
+      })
+      return () => {
+        cancelled = true
+      }
+    }, [load])
+  )
 
   async function handleRefresh(): Promise<void> {
     setRefreshing(true)

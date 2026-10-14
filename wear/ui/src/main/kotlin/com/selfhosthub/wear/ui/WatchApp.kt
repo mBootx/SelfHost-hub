@@ -24,6 +24,7 @@ import com.selfhosthub.wear.ui.library.SearchRoute
 import com.selfhosthub.wear.ui.nowplaying.AmbientNowPlayingRoute
 import com.selfhosthub.wear.ui.nowplaying.ArtRoute
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingRoute
+import com.selfhosthub.wear.ui.nowplaying.VolumeRoute
 import com.selfhosthub.wear.ui.settings.SettingsRoute
 import com.selfhosthub.wear.ui.setup.SetupContent
 import com.selfhosthub.wear.ui.theme.SelfHostWatchTheme
@@ -31,6 +32,7 @@ import com.selfhosthub.wear.ui.theme.SelfHostWatchTheme
 object Routes {
     const val NOW_PLAYING = "now-playing"
     const val ART = "art"
+    const val VOLUME = "volume"
     const val LIBRARY = "library"
     const val ARTISTS = "artists"
     const val ALBUMS = "albums"
@@ -75,10 +77,12 @@ fun WatchApp(graph: WatchGraph, ambient: AmbientState, versionName: String, play
                     onLibrary = { nav.navigate(Routes.LIBRARY) },
                     onDevices = { nav.navigate(Routes.DEVICES) },
                     onSettings = { nav.navigate(Routes.SETTINGS) },
-                    onArt = { nav.navigate(Routes.ART) }
+                    onArt = { nav.navigate(Routes.ART) },
+                    onVolume = { nav.navigate(Routes.VOLUME) }
                 )
             }
             composable(Routes.ART) { ArtRoute(graph, onClose = { nav.popBackStack() }) }
+            composable(Routes.VOLUME) { VolumeRoute(graph) }
             composable(Routes.LIBRARY) {
                 if (setup == null) {
                     SetupContent()

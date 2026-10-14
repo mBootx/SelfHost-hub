@@ -1,6 +1,7 @@
 package com.selfhosthub.wear.ui.library
 
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,7 +22,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -152,6 +156,37 @@ fun Notice(icon: ImageVector, title: String, hint: String?, onAction: (() -> Uni
     }
 }
 
+/**
+ * A press held on the row, for a screen that offers more than a tap. It watches the touch before the chip does
+ * (PointerEventPass.Initial): the chip's own click takes every touch it is given, so a long-press detector placed
+ * around it never saw one (the "more" actions could not be opened). A finger that moves is scrolling the list, not
+ * holding a row; once the hold is recognised the rest of the touch is used up, so lifting the finger does not also
+ * play the song.
+ */
+private fun Modifier.onHold(onHold: (() -> Unit)?, feedback: () -> Unit): Modifier =
+    if (onHold == null) this
+    else pointerInput(onHold) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val slop = viewConfiguration.touchSlop
+            val ended = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                while (true) {
+                    val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed || (change.position - down.position).getDistance() > slop) break
+                }
+                true
+            }
+            if (ended == null) {
+                feedback()
+                onHold()
+                do {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    event.changes.forEach { it.consume() }
+                } while (event.changes.any { it.pressed })
+            }
+        }
+    }
+
 /** One row of a list: a cover, a title, a line under it. A long press opens more actions, when the screen has them. */
 @Composable
 fun MediaRow(
@@ -163,7 +198,8 @@ fun MediaRow(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null
 ) {
-    val longPress = if (onLongClick != null) Modifier.pointerInput(onLongClick) { detectTapGestures(onLongPress = { onLongClick() }) } else Modifier
+    val haptic = LocalHapticFeedback.current
+    val longPress = Modifier.onHold(onLongClick) { haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
     Chip(
         onClick = onClick,
         label = { Text(title, maxLines = 1) },

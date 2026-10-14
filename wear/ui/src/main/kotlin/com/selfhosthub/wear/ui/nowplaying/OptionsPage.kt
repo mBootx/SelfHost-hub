@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeDown
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -83,21 +81,9 @@ internal fun OptionsPage(ui: NowPlayingUi, actions: NowPlayingActions, liked: Bo
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                ToggleIconButton(Icons.AutoMirrored.Filled.VolumeDown, stringResource(R.string.volume), active = false) {
-                    haptics.tick()
-                    actions.onVolumeStep(-1)
-                }
-                Text(
-                    stringResource(R.string.volume_percent, ControlMath.volumePercent(ui.volume)),
-                    style = MaterialTheme.typography.title3,
-                    modifier = Modifier.size(width = 56.dp, height = 24.dp),
-                    maxLines = 1
-                )
-                ToggleIconButton(Icons.AutoMirrored.Filled.VolumeUp, stringResource(R.string.volume), active = false) {
-                    haptics.tick()
-                    actions.onVolumeStep(1)
-                }
+            OptionChip(volumeIcon(ui.volume), stringResource(R.string.volume), stringResource(R.string.volume_percent, ControlMath.volumePercent(ui.volume))) {
+                haptics.tap()
+                actions.onVolume()
             }
         }
         item {

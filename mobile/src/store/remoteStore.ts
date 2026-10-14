@@ -68,6 +68,8 @@ interface RemoteControlState {
 
 let subscribedToPlayback = false
 let lastStatePush = 0
+/** A link to the PC that dropped is looked for again after this long (the PC restarting, the Wi-Fi switching). */
+const RECONNECT_DELAY_MS = 3000
 
 function generateDeviceId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
@@ -184,7 +186,15 @@ function wireClient(
   })
   client.onCommand((command) => applyCommandLocally(command.action, command.payload))
   client.onClose(() => {
+    // A connection replaced since (turned off and on, paired again) closing late must not undo the new one.
+    if (get().client !== client) return
     set({ status: 'disconnected', client: null, deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID })
+    logEvent('remote', 'Liaison avec le PC perdue')
+    // It dropped on its own (the PC restarted, the Wi-Fi changed): it is looked for again once, a moment later.
+    setTimeout(() => {
+      const { enabled, pairing, status } = get()
+      if (enabled && pairing && status === 'disconnected') get().autoConnect().catch(() => {})
+    }, RECONNECT_DELAY_MS)
   })
 }
 
@@ -286,8 +296,13 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
 
       const lastIp = await storage.loadPref<string>('remote.lastHubIp')
       if (lastIp && (await get().connectManual(lastIp))) return
+      // Turned off while the last address was tried.
+      if (!get().enabled) return
+      // Still looking: the failed try at the last address is not the outcome.
+      set({ status: 'connecting', error: null })
 
       const [hub] = await discoverHubs({ hubId: pairing.hubId })
+      if (!get().enabled) return
       if (!hub) {
         set({ status: 'error', error: 'PC introuvable sur le réseau (même Wi-Fi requis)' })
         return
@@ -352,8 +367,9 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
     },
 
     disconnect: () => {
-      get().client?.close()
+      const { client } = get()
       set({ client: null, status: 'disconnected', deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID, error: null })
+      client?.close()
     },
 
     selectDevice: (id) => {

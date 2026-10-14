@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
-import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native'
+import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native'
 import { useNavigation } from 'expo-router'
 import { Download, X } from 'lucide-react-native'
 import { useDowntifyStore } from '@/store/downtifyStore'
+import { useToastStore } from '@/store/toastStore'
 import CoverImage from '@/components/CoverImage'
 import { EmptyState } from '@/components/Screen'
 import { colors, layout, radius, spacing } from '@/constants/theme'
@@ -21,6 +22,22 @@ export default function DowntifyQueueScreen() {
   const refreshQueue = useDowntifyStore((s) => s.refreshQueue)
   const cancelQueueItem = useDowntifyStore((s) => s.cancelQueueItem)
   const clearQueue = useDowntifyStore((s) => s.clearQueue)
+  const showToast = useToastStore((s) => s.show)
+
+  function confirmClear(): void {
+    Alert.alert('Vider la file ?', 'Les téléchargements en attente sont annulés et l’historique est effacé.', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Vider',
+        style: 'destructive',
+        onPress: () => clearQueue().catch((err) => showToast(err instanceof Error && err.message ? err.message : 'Downtify ne répond pas'))
+      }
+    ])
+  }
+
+  function cancel(songId: string): void {
+    cancelQueueItem(songId).catch((err) => showToast(err instanceof Error && err.message ? err.message : 'Downtify ne répond pas'))
+  }
 
   useEffect(() => {
     navigation.setOptions({ title: 'Téléchargements' })
@@ -37,7 +54,7 @@ export default function DowntifyQueueScreen() {
       ListHeaderComponent={
         queue.length > 0 ? (
           <Pressable
-            onPress={() => clearQueue()}
+            onPress={confirmClear}
             style={({ pressed }) => [styles.clearButton, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel="Vider la file"
@@ -63,7 +80,7 @@ export default function DowntifyQueueScreen() {
             </View>
             <Text style={[styles.status, item.status === 'error' && styles.statusError]}>{statusLabel(item.status)}</Text>
             <Pressable
-              onPress={() => cancelQueueItem(item.song.song_id)}
+              onPress={() => cancel(item.song.song_id)}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel={`Retirer ${item.song.name}`}

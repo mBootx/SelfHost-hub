@@ -6,6 +6,9 @@ import { isStarred, useStarStore } from '@/store/starStore'
 import { usePlaylistPickerStore } from '@/store/playlistPickerStore'
 import { useToastStore } from '@/store/toastStore'
 import ActionSheet, { ActionSheetItem } from '@/components/ActionSheet'
+import CoverImage from '@/components/CoverImage'
+import { StyleSheet } from 'react-native'
+import { radius } from '@/constants/theme'
 
 /** Long-press menu for a track. Mounted once, near the tab navigator. */
 export default function TrackOptionsSheet() {
@@ -27,8 +30,8 @@ export default function TrackOptionsSheet() {
           label: 'Lire ensuite',
           icon: ListStart,
           onPress: () => {
-            playNext(song)
-            showToast(`"${song.title}" sera lu ensuite`)
+            const ahead = playNext(song)
+            showToast(ahead === 0 ? `« ${song.title} » sera lu ensuite` : `« ${song.title} » sera lu après ${ahead === 1 ? 'le titre déjà ajouté' : `les ${ahead} titres déjà ajoutés`}`)
           }
         },
         {
@@ -69,5 +72,10 @@ export default function TrackOptionsSheet() {
       ]
     : []
 
-  return <ActionSheet visible={!!song} title={song?.title} items={items} onClose={close} />
+  const coverId = song?.coverArt || song?.albumId
+  const leading = <CoverImage uri={coverId && client ? client.coverArtUrl(coverId, 120) : null} style={styles.cover} iconSize={20} recyclingKey={song?.id} />
+
+  return <ActionSheet visible={!!song} title={song?.title} subtitle={song ? [song.artist, song.album].filter(Boolean).join(" · ") : undefined} leading={leading} items={items} onClose={close} />
 }
+
+const styles = StyleSheet.create({ cover: { width: 48, height: 48, borderRadius: radius.sm + 2 } })

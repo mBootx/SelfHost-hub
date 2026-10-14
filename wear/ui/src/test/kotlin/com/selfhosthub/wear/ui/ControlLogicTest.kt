@@ -47,6 +47,43 @@ class ControlMathTest {
     }
 
     @Test
+    fun `a click of a Galaxy Watch bezel is one step, whatever pixels it reports`() {
+        assertEquals(1 to 0f, ControlMath.rotarySteps(0f, 12f, lowRes = true))
+        assertEquals(1 to 0f, ControlMath.rotarySteps(0f, 96f, lowRes = true))
+        assertEquals(-1 to 0f, ControlMath.rotarySteps(0f, -3f, lowRes = true))
+        assertEquals(0 to 0f, ControlMath.rotarySteps(0f, 0f, lowRes = true))
+        // A crown still adds its small pieces up.
+        assertEquals(0 to 12f, ControlMath.rotarySteps(0f, 12f, lowRes = false))
+    }
+
+    @Test
+    fun `a finger sliding round the ring turns the volume, the short way round and kept inside`() {
+        // 0° is 3 o'clock and the screen's y goes down: 6 o'clock is 90°, 12 o'clock is -90°.
+        assertEquals(0f, ControlMath.angleOf(10f, 0f), 1e-4f)
+        assertEquals(90f, ControlMath.angleOf(0f, 10f), 1e-4f)
+        assertEquals(-90f, ControlMath.angleOf(0f, -10f), 1e-4f)
+        // Across the 180° line (9 o'clock) the turn is the small one, not a whole lap.
+        assertEquals(20f, ControlMath.turnBetween(170f, -170f), 1e-4f)
+        assertEquals(-20f, ControlMath.turnBetween(-170f, 170f), 1e-4f)
+        assertEquals(-30f, ControlMath.turnBetween(10f, -20f), 1e-4f)
+        // The whole arc is the whole range: a quarter of it is a quarter of the volume.
+        assertEquals(0.75, ControlMath.volumeTurned(0.5, 67.5f), 1e-6)
+        assertEquals(1.0, ControlMath.volumeTurned(0.9, 90f), 0.0)
+        assertEquals(0.0, ControlMath.volumeTurned(0.1, -90f), 0.0)
+    }
+
+    @Test
+    fun `only the edge of the screen is the ring, and the steps the watch vibrates on`() {
+        assertTrue(ControlMath.onRing(100f, 120f))
+        assertFalse(ControlMath.onRing(40f, 120f))
+        assertFalse(ControlMath.onRing(10f, 0f))
+        assertEquals(0, ControlMath.stepOf(0.0))
+        assertEquals(25, ControlMath.stepOf(1.0))
+        assertEquals(ControlMath.stepOf(0.5), ControlMath.stepOf(0.51))
+        assertTrue(ControlMath.stepOf(0.5) != ControlMath.stepOf(0.54))
+    }
+
+    @Test
     fun `the volume moves four percent a step and stays between 0 and 1`() {
         assertEquals(0.54, ControlMath.volumeAfter(0.5, 1), 1e-9)
         assertEquals(0.42, ControlMath.volumeAfter(0.5, -2), 1e-9)

@@ -189,6 +189,13 @@ export class RemoteHubClient {
       }
 
       ws.onclose = () => {
+        // Closed by the PC before it said yes or no: no need to wait for the timeout to say so.
+        if (!settled) {
+          settled = true
+          clearTimeout(timer)
+          reject(new Error('Connexion refusée par le PC'))
+          return
+        }
         this.socket = null
         this.closeHandlers.forEach((h) => h())
       }

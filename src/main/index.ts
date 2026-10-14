@@ -157,6 +157,42 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
+/** Why a request got no answer, in words for the screen: the network library's own are English and technical. */
+function networkFailure(err: unknown): string {
+  const code = (err as { code?: unknown } | null)?.code
+  if (code === 'ECONNABORTED' || code === 'ETIMEDOUT' || code === 'ESOCKETTIMEDOUT') return 'Le serveur ne répond pas'
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'Adresse du serveur introuvable'
+  if (code === 'ERR_INVALID_URL' || code === 'ERR_BAD_OPTION_VALUE') return 'Adresse du serveur invalide'
+  return 'Serveur injoignable'
+}
+
+/** A file in the offline folder, or null for a name that would lead out of it. */
+function offlinePath(filename: string): string | null {
+  const filePath = join(offlineDir, filename)
+  const rel = relative(offlineDir, filePath)
+  return !rel || rel.startsWith('..') || rel.includes(':') ? null : filePath
+}
+
+/** Writes a download to disk; a failure on either side (the network dropping, the disk) ends it, and the half-written file goes. */
+function writeStream(source: NodeJS.ReadableStream, filePath: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const target = createWriteStream(filePath)
+    const fail = (err: unknown): void => {
+      target.destroy()
+      try {
+        if (existsSync(filePath)) unlinkSync(filePath)
+      } catch {
+        // already gone
+      }
+      reject(err)
+    }
+    source.on('error', fail)
+    target.on('error', fail)
+    target.on('finish', () => resolve())
+    source.pipe(target)
+  })
+}
+
 /** Encrypts with the OS keychain when there is one, like the passwords. */
 function writeSecret(key: string, value: string): void {
   const bytes = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(value) : Buffer.from(value, 'utf-8')
@@ -235,8 +271,7 @@ function registerIpc(): void {
         headers: res.headers
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Network error'
-      return { ok: false, status: 0, data: null, headers: {}, error: message }
+      return { ok: false, status: 0, data: null, headers: {}, error: networkFailure(err) }
     }
   })
 
@@ -273,6 +308,8 @@ function registerIpc(): void {
         let lastLoaded = 0
         let lastTick = Date.now()
         const readStream = createReadStream(args.filePath)
+        // A file that can't be read (moved, locked) ends the upload instead of leaving it waiting.
+        readStream.on('error', (err) => passthrough.destroy(err))
         readStream.on('data', (chunk: string | Buffer) => {
           loaded += Buffer.byteLength(chunk)
           const now = Date.now()
@@ -301,7 +338,7 @@ function registerIpc(): void {
         })
         return { ok: res.status >= 200 && res.status < 300, status: res.status }
       } catch (err) {
-        return { ok: false, status: 0, error: err instanceof Error ? err.message : 'Upload failed' }
+        return { ok: false, status: 0, error: networkFailure(err) }
       }
     }
   )
@@ -329,16 +366,14 @@ function registerIpc(): void {
           responseType: 'stream',
           validateStatus: () => true
         })
-        if (res.status < 200 || res.status >= 300) return { ok: false, status: res.status }
-        await new Promise<void>((resolve, reject) => {
-          const stream = createWriteStream(save.filePath as string)
-          res.data.pipe(stream)
-          stream.on('finish', () => resolve())
-          stream.on('error', reject)
-        })
+        if (res.status < 200 || res.status >= 300) {
+          res.data.destroy()
+          return { ok: false, status: res.status }
+        }
+        await writeStream(res.data, save.filePath)
         return { ok: true, path: save.filePath }
       } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : 'Download failed' }
+        return { ok: false, error: networkFailure(err) }
       }
     }
   )
@@ -350,46 +385,47 @@ function registerIpc(): void {
     'offline:download',
     async (event, args: { id: string; url: string; extension: string }) => {
       const filename = `${args.id}.${args.extension || 'mp3'}`
-      const filePath = join(offlineDir, filename)
+      const filePath = offlinePath(filename)
+      if (!filePath) return { ok: false, error: 'Nom de fichier invalide' }
       const sender = event.sender
       try {
         const res = await axios.get(args.url, { responseType: 'stream', validateStatus: () => true })
-        if (res.status < 200 || res.status >= 300) return { ok: false, status: res.status }
+        if (res.status < 200 || res.status >= 300) {
+          res.data.destroy()
+          return { ok: false, status: res.status }
+        }
         const total = Number(res.headers['content-length'] || 0)
         let loaded = 0
         let lastLoaded = 0
         let lastTick = Date.now()
-        await new Promise<void>((resolve, reject) => {
-          const stream = createWriteStream(filePath)
-          res.data.on('data', (chunk: Buffer) => {
-            loaded += chunk.length
-            const now = Date.now()
-            const elapsed = (now - lastTick) / 1000
-            if (elapsed >= 0.2 || loaded === total) {
-              const speedBps = elapsed > 0 ? (loaded - lastLoaded) / elapsed : 0
-              sender.send('offline:downloadProgress', { id: args.id, loaded, total, speedBps })
-              lastLoaded = loaded
-              lastTick = now
-            }
-          })
-          res.data.pipe(stream)
-          stream.on('finish', () => resolve())
-          stream.on('error', reject)
+        res.data.on('data', (chunk: Buffer) => {
+          loaded += chunk.length
+          const now = Date.now()
+          const elapsed = (now - lastTick) / 1000
+          if (elapsed >= 0.2 || loaded === total) {
+            const speedBps = elapsed > 0 ? (loaded - lastLoaded) / elapsed : 0
+            if (!sender.isDestroyed()) sender.send('offline:downloadProgress', { id: args.id, loaded, total, speedBps })
+            lastLoaded = loaded
+            lastTick = now
+          }
         })
+        // Before: a connection that dropped mid-song left the download "in progress" for ever.
+        await writeStream(res.data, filePath)
         return { ok: true, filename }
       } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : 'Download failed' }
+        return { ok: false, error: networkFailure(err) }
       }
     }
   )
 
   ipcMain.handle('offline:delete', (_e, args: { filename: string }) => {
     try {
-      const filePath = join(offlineDir, args.filename)
+      const filePath = offlinePath(args.filename)
+      if (!filePath) return { ok: false, error: 'Nom de fichier invalide' }
       if (existsSync(filePath)) unlinkSync(filePath)
       return { ok: true }
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : 'Delete failed' }
+      return { ok: false, error: err instanceof Error ? err.message : 'Suppression impossible' }
     }
   })
 

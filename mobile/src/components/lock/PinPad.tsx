@@ -97,7 +97,7 @@ export default function PinPad({ length, onSubmit, onFingerprint, disabled = fal
 
   return (
     <View style={[styles.container, disabled && styles.disabled]}>
-      <Animated.View style={[styles.dots, { transform: [{ translateX: shake }] }]} accessibilityLabel={`${pin.length} chiffres saisis`}>
+      <Animated.View style={[styles.dots, { transform: [{ translateX: shake }] }]} accessibilityLabel={`${pin.length} ${pin.length > 1 ? 'chiffres saisis' : 'chiffre saisi'}`}>
         {Array.from({ length: dotCount }, (_, i) => (
           <View key={i} style={[styles.dot, i < pin.length && styles.dotFilled]} />
         ))}

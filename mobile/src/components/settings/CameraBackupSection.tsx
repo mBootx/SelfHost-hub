@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { View, Text, TextInput, Switch, Pressable, Alert, Linking, ActivityIndicator, StyleSheet } from 'react-native'
 import LegacyBackups from '@/components/photos/LegacyBackups'
 import BackupAlbums from '@/components/settings/BackupAlbums'
-import { SectionTitle } from '@/components/Screen'
 import { DEFAULT_BACKUP_FOLDER, useCameraBackupStore } from '@/store/cameraBackupStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 import {
@@ -125,13 +124,10 @@ export default function CameraBackupSection() {
   else if (phase === 'no-server') status = error ? `FileBrowser injoignable : ${error}` : 'FileBrowser non connecté'
   else if (phase === 'error') status = `Interrompue : ${error || 'erreur inconnue'}`
   else if (pending) status = `${pending.toLocaleString('fr-FR')} en attente`
-  else status = lastSuccessAt ? `À jour - dernier envoi ${timeAgo(lastSuccessAt)}` : 'À jour'
+  else status = lastSuccessAt ? `À jour · dernier envoi ${timeAgo(lastSuccessAt)}` : 'À jour'
 
   return (
     <>
-      <View style={styles.sectionGap}>
-        <SectionTitle>Sauvegarde des photos</SectionTitle>
-      </View>
       <View style={styles.card}>
         <View style={styles.toggleRow}>
           <View style={styles.toggleText}>

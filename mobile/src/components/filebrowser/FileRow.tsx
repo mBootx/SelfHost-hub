@@ -61,7 +61,7 @@ export default function FileRow({ item, onPress, onMenu, onLongPress, selecting 
           {item.name}
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
-          {subtitle ?? `${item.isDir ? 'Dossier' : formatSize(item.size)}${item.modified ? ` - ${new Date(item.modified).toLocaleDateString('fr-FR')}` : ''}`}
+          {subtitle ?? `${item.isDir ? 'Dossier' : formatSize(item.size)}${item.modified ? ` · ${new Date(item.modified).toLocaleDateString('fr-FR')}` : ''}`}
         </Text>
       </View>
       {item.isShared ? <Link2 size={14} color={colors.textMuted} /> : null}

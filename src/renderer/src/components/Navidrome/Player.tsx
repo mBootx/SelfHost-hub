@@ -29,6 +29,8 @@ import { useAudioSettingsStore } from '@renderer/store/audioSettingsStore'
 import { useUIStore } from '@renderer/store/uiStore'
 import { getAudioEngine, seekTo } from '@renderer/services/playbackEngine'
 import { resumePosition } from '@renderer/services/playbackMemory'
+import { plural } from '@renderer/services/plural'
+import { useScrub } from '@renderer/hooks/useScrub'
 
 const SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.75]
 
@@ -54,8 +56,16 @@ function ProgressBar({ hasSong }: { hasSong: boolean }): JSX.Element {
   const setProgress = useNavidromeStore((s) => s.setProgress)
   const sendCommand = useRemoteStore((s) => s.sendCommand)
 
-  const currentTime = isRemote ? remote?.currentTime ?? 0 : localCurrentTime
   const duration = isRemote ? remote?.duration ?? 0 : localDuration
+  const scrub = useScrub(isRemote ? remote?.currentTime ?? 0 : localCurrentTime, (t) => {
+    if (isRemote) {
+      sendCommand('seek', { seconds: t })
+    } else {
+      seekTo(t)
+      setProgress(t, duration)
+    }
+  })
+  const currentTime = scrub.value
   const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0
 
   return (
@@ -66,15 +76,8 @@ function ProgressBar({ hasSong }: { hasSong: boolean }): JSX.Element {
         min={0}
         max={duration || 0}
         value={currentTime}
-        onChange={(e) => {
-          const t = Number(e.target.value)
-          if (isRemote) {
-            sendCommand('seek', { seconds: t })
-          } else {
-            seekTo(t)
-            setProgress(t, duration)
-          }
-        }}
+        onPointerDown={scrub.onPointerDown}
+        onChange={scrub.onChange}
         disabled={!hasSong}
         className="range-accent w-full disabled:cursor-default disabled:opacity-50"
         style={{ '--range-progress': `${progressPercent}%` } as React.CSSProperties}
@@ -103,7 +106,7 @@ export default function Player(): JSX.Element {
   const toggleShuffle = useNavidromeStore((s) => s.toggleShuffle)
   const setVolume = useNavidromeStore((s) => s.setVolume)
   const setProgress = useNavidromeStore((s) => s.setProgress)
-  const playQueue = useNavidromeStore((s) => s.playQueue)
+  const jumpTo = useNavidromeStore((s) => s.jumpTo)
   const removeFromQueueAt = useNavidromeStore((s) => s.removeFromQueueAt)
   const reorderQueue = useNavidromeStore((s) => s.reorderQueue)
   const clearQueue = useNavidromeStore((s) => s.clearQueue)
@@ -161,7 +164,16 @@ export default function Player(): JSX.Element {
         if (repeatMode === 'one' || (repeatMode === 'all' && queue.length === 1)) engine.restart()
         else next()
       },
-      onAutoAdvance: () => useNavidromeStore.getState().next()
+      onAutoAdvance: () => useNavidromeStore.getState().next(),
+      onError: (trackId) => {
+        const state = useNavidromeStore.getState()
+        const failed = state.queue[state.queueIndex]
+        if (failed?.id !== trackId) return
+        // Said only when sound was expected: a track restored at start-up with the server away fails quietly, and
+        // pressing play tries it again.
+        if (state.isPlaying) useToastStore.getState().show(`Lecture impossible : « ${failed.title} » (serveur injoignable ou fichier introuvable)`)
+        useNavidromeStore.setState({ isPlaying: false })
+      }
     })
     return () => {
       engine.setHandlers(null)
@@ -212,12 +224,16 @@ export default function Player(): JSX.Element {
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       const tag = (e.target as HTMLElement)?.tagName
-      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA'
+      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable
       if (isTyping) {
         // "/" is a normal character while typing - only treat it as the search
         // shortcut when nothing has focus yet.
         return
       }
+      // Ctrl+R, Alt+S and the like belong to Windows and Chromium, not to the player.
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      // Space on a focused button presses that button: playing or pausing as well would undo its click.
+      if (e.code === 'Space' && (tag === 'BUTTON' || tag === 'SELECT' || tag === 'A')) return
       if (e.code === 'Space') {
         e.preventDefault()
         if (isRemote) sendCommand('toggle')
@@ -251,7 +267,7 @@ export default function Player(): JSX.Element {
       } else if (e.key === '/') {
         e.preventDefault()
         window.dispatchEvent(new Event('shub:focus-search'))
-      } else if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      } else if (e.key === 'f' || e.key === 'F') {
         // The full-screen player; the same key closes it.
         e.preventDefault()
         useUIStore.getState().toggleBigPicture()
@@ -286,6 +302,16 @@ export default function Player(): JSX.Element {
   function handleSetVolume(v: number): void {
     if (isRemote) sendCommand('setVolume', { volume: v })
     else setVolume(v)
+  }
+  // Unmuting goes back to the volume there was, not to a fixed one.
+  const volumeBeforeMute = useRef(0.8)
+  function handleToggleMute(): void {
+    if (volume > 0) {
+      volumeBeforeMute.current = volume
+      handleSetVolume(0)
+    } else {
+      handleSetVolume(volumeBeforeMute.current > 0 ? volumeBeforeMute.current : 0.8)
+    }
   }
   function handleCycleSpeed(): void {
     const idx = SPEEDS.indexOf(localPlaybackRate)
@@ -429,13 +455,13 @@ export default function Player(): JSX.Element {
             <p className={`flex items-center gap-1.5 truncate text-sm font-medium ${song ? 'text-white' : 'text-gray-500'}`}>
               <span className="truncate">{song?.title || 'Aucune lecture'}</span>
               {isSongOffline && !isRemote && (
-                <span title="Disponible hors-ligne">
+                <span title="Disponible hors ligne">
                   <HardDriveDownload className="h-3.5 w-3.5 shrink-0 text-accent" />
                 </span>
               )}
             </p>
             <p className="truncate text-xs text-gray-400">
-              {isRemote ? `${song?.artist || '-'} - ${deviceList.find((d) => d.deviceId === selectedDeviceId)?.deviceName}` : song?.artist || '-'}
+              {isRemote ? `${song?.artist || '-'} · ${deviceList.find((d) => d.deviceId === selectedDeviceId)?.deviceName}` : song?.artist || '-'}
             </p>
           </div>
         </div>
@@ -444,24 +470,31 @@ export default function Player(): JSX.Element {
           <div className="flex items-center gap-4">
             <button
               onClick={handleToggleShuffle}
+              title="Aléatoire (S)"
+              aria-label="Lecture aléatoire"
+              aria-pressed={shuffle}
               className={`transition-colors ${shuffle ? 'text-accent' : 'text-gray-400 hover:text-white'}`}
             >
               <Shuffle className="h-4 w-4" />
             </button>
-            <button onClick={handlePrev} className="text-gray-300 hover:text-white">
+            <button onClick={handlePrev} title="Précédent" aria-label="Titre précédent" className="text-gray-300 hover:text-white">
               <SkipBack className="h-5 w-5" />
             </button>
             <button
               onClick={handleTogglePlay}
+              title={isPlaying ? 'Pause (Espace)' : 'Lecture (Espace)'}
+              aria-label={isPlaying ? 'Pause' : 'Lecture'}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black transition-transform hover:scale-105"
             >
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 pl-0.5" />}
             </button>
-            <button onClick={handleNext} className="text-gray-300 hover:text-white">
+            <button onClick={handleNext} title="Suivant" aria-label="Titre suivant" className="text-gray-300 hover:text-white">
               <SkipForward className="h-5 w-5" />
             </button>
             <button
               onClick={handleCycleRepeat}
+              title={repeatMode === 'one' ? 'Répéter ce titre (R)' : repeatMode === 'all' ? 'Répéter tout (R)' : 'Répéter (R)'}
+              aria-label="Répétition"
               className={`transition-colors ${repeatMode !== 'off' ? 'text-accent' : 'text-gray-400 hover:text-white'}`}
             >
               {repeatMode === 'one' ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
@@ -551,7 +584,7 @@ export default function Player(): JSX.Element {
             <ListMusic className="h-4 w-4" />
           </button>
           <button
-            onClick={() => handleSetVolume(volume > 0 ? 0 : 0.8)}
+            onClick={handleToggleMute}
             title={volume > 0 ? 'Muet' : 'Rétablir le son'}
             className="text-gray-400 transition-colors hover:text-white"
           >
@@ -574,7 +607,7 @@ export default function Player(): JSX.Element {
         <div className="max-h-64 animate-fade-in overflow-y-auto border-t border-surface-border px-2 py-2">
           <div className="flex items-center justify-between px-2 pb-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-              File de lecture - {queue.length} titres
+              File de lecture · {plural(queue.length, 'titre', 'titres')}
             </p>
             {queue.length > 0 &&
               (confirmClear ? (
@@ -624,7 +657,7 @@ export default function Player(): JSX.Element {
               } ${dragOverIndex === i && draggedIndex !== null && draggedIndex !== i ? 'border-t-2 border-accent' : ''}`}
             >
               <GripVertical className="h-3.5 w-3.5 shrink-0 cursor-grab text-gray-600" />
-              <button onClick={() => playQueue(queue, i)} className="min-w-0 flex-1 truncate py-0.5 text-left">
+              <button onClick={() => jumpTo(i)} className="min-w-0 flex-1 truncate py-0.5 text-left">
                 {s.title} <span className="text-gray-500">- {s.artist}</span>
               </button>
               <span className="shrink-0 text-xs text-gray-500">{formatTime(s.duration)}</span>

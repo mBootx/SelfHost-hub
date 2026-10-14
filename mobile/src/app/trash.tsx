@@ -128,7 +128,7 @@ export default function TrashScreen() {
       setViewerAt(null)
       invalidateGallery()
       if (report.failed.length > 0) {
-        Alert.alert('Restauration incomplète', `${report.failed.length} sur ${paths.length} n'ont pas pu être restaurés : ${report.failed[0].message}.`)
+        Alert.alert('Restauration incomplète', `${report.failed.length} sur ${paths.length} ${report.failed.length > 1 ? "n'ont pas pu être restaurés" : "n'a pas pu être restauré"} : ${report.failed[0].message}.`)
       } else {
         showToast(plural(report.restored.length, 'élément restauré', 'éléments restaurés'))
       }
@@ -158,7 +158,7 @@ export default function TrashScreen() {
       setSelection(new Set())
       setViewerAt(null)
       if (report.failed.length > 0) {
-        Alert.alert('Suppression incomplète', `${report.failed.length} sur ${paths.length} n'ont pas pu être supprimés : ${report.failed[0].message}.`)
+        Alert.alert('Suppression incomplète', `${report.failed.length} sur ${paths.length} ${report.failed.length > 1 ? "n'ont pas pu être supprimés" : "n'a pas pu être supprimé"} : ${report.failed[0].message}.`)
       } else {
         showToast(plural(report.deleted.length, 'élément supprimé', 'éléments supprimés'))
       }
@@ -180,7 +180,7 @@ export default function TrashScreen() {
     setWorking('Suppression…')
     try {
       const result = await emptyTrash(client, root)
-      if (result.failed > 0) Alert.alert('Corbeille incomplète', `${result.failed} jours n'ont pas pu être effacés.`)
+      if (result.failed > 0) Alert.alert('Corbeille incomplète', `${plural(result.failed, 'jour', 'jours')} de la corbeille ${result.failed > 1 ? "n'ont pas pu être effacés" : "n'a pas pu être effacé"}.`)
       else showToast('Corbeille vidée')
       await load()
     } catch (err) {
@@ -286,7 +286,7 @@ export default function TrashScreen() {
       ) : items && items.length > 0 ? (
         <View style={styles.intro}>
           <Text style={styles.introText}>
-            {plural(items.length, 'élément', 'éléments')} · supprimés définitivement au bout de {TRASH_DAYS} jours
+            {plural(items.length, 'élément', 'éléments')} · {items.length > 1 ? 'supprimés' : 'supprimé'} définitivement au bout de {TRASH_DAYS} jours
           </Text>
           <Pressable onPress={confirmEmpty} hitSlop={8} accessibilityRole="button" accessibilityLabel="Vider la corbeille">
             <Text style={styles.empty}>Vider</Text>

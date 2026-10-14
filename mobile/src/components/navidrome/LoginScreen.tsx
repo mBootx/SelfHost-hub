@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Music } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
+import { storage } from '@/services/storage'
 import LoginLayout, { Field } from '@/components/LoginLayout'
 import { colors } from '@/constants/theme'
 
@@ -11,6 +12,24 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // The server and account saved on the phone, if any: only the password is left to type (after it was refused, say).
+  useEffect(() => {
+    let cancelled = false
+    storage
+      .loadConnection('navidrome')
+      .then((saved) => {
+        if (cancelled || !saved) return
+        setUrl((current) => (current === 'http://' ? saved.url : current))
+        setUsername((current) => current || saved.username)
+      })
+      .catch(() => {})
+    const failure = useNavidromeStore.getState()
+    if (failure.status === 'error' && failure.error) setError(failure.error)
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function handleSubmit(): Promise<void> {
     setError(null)

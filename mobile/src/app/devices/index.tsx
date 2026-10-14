@@ -6,11 +6,12 @@ import { useRemoteStore, LOCAL_DEVICE_ID } from '@/store/remoteStore'
 import { EmptyState } from '@/components/Screen'
 import { colors, radius, spacing } from '@/constants/theme'
 
-function statusLabel(status: string, error: string | null): string {
+function statusLabel(enabled: boolean, status: string, error: string | null): string {
+  if (!enabled) return 'Désactivé'
   if (status === 'connected') return 'Connecté au PC'
-  if (status === 'connecting') return 'Recherche du PC sur le réseau...'
+  if (status === 'connecting') return 'Recherche du PC sur le réseau…'
   if (status === 'error') return error || 'Connexion impossible'
-  return 'Désactivé'
+  return 'Non connecté'
 }
 
 export default function DevicesScreen() {
@@ -25,6 +26,7 @@ export default function DevicesScreen() {
   const setEnabled = useRemoteStore((s) => s.setEnabled)
   const setDeviceName = useRemoteStore((s) => s.setDeviceName)
   const connectManual = useRemoteStore((s) => s.connectManual)
+  const autoConnect = useRemoteStore((s) => s.autoConnect)
   const pairing = useRemoteStore((s) => s.pairing)
   const pair = useRemoteStore((s) => s.pair)
   const unpair = useRemoteStore((s) => s.unpair)
@@ -60,11 +62,15 @@ export default function DevicesScreen() {
     ])
   }
 
+  /** With an address, the PC there; without one, the paired PC looked for on the network again. */
   async function handleManualConnect(): Promise<void> {
-    if (!manualIp.trim()) return
     setConnecting(true)
-    await connectManual(manualIp.trim())
-    setConnecting(false)
+    try {
+      if (manualIp.trim()) await connectManual(manualIp.trim())
+      else await autoConnect()
+    } finally {
+      setConnecting(false)
+    }
   }
 
   return (
@@ -72,7 +78,7 @@ export default function DevicesScreen() {
       <View style={styles.row}>
         <View style={styles.rowInfo}>
           <Text style={styles.rowTitle}>Activer le contrôle à distance</Text>
-          <Text style={styles.rowMeta}>{statusLabel(status, error)}</Text>
+          <Text style={styles.rowMeta}>{statusLabel(enabled, status, error)}</Text>
         </View>
         <Switch
           value={enabled}
@@ -142,9 +148,9 @@ export default function DevicesScreen() {
             </View>
           )}
 
-          {pairing && status === 'error' && (
+          {pairing && (status === 'error' || status === 'disconnected') && (
             <View style={styles.card}>
-              <Text style={styles.fieldLabel}>PC introuvable automatiquement - adresse IP</Text>
+              <Text style={styles.fieldLabel}>PC introuvable automatiquement ? Son adresse IP (laisser vide pour le chercher de nouveau)</Text>
               <View style={styles.manualRow}>
                 <TextInput
                   style={[styles.input, styles.manualInput]}
@@ -210,7 +216,7 @@ export default function DevicesScreen() {
                       </Text>
                       {state?.song && (
                         <Text style={styles.deviceSubtitle} numberOfLines={1}>
-                          {state.song.title} - {state.song.artist}
+                          {state.song.title} · {state.song.artist}
                         </Text>
                       )}
                     </View>
@@ -225,21 +231,27 @@ export default function DevicesScreen() {
               <View style={styles.transportInfo}>
                 <Cast size={16} color={colors.accent} />
                 <Text style={styles.transportTitle} numberOfLines={1}>
-                  {selected.song ? `${selected.song.title} - ${selected.song.artist}` : 'Aucune lecture'}
+                  {selected.song ? `${selected.song.title} · ${selected.song.artist}` : 'Aucune lecture'}
                 </Text>
               </View>
               <View style={styles.transportControls}>
-                <Pressable onPress={() => sendCommand('prev')} hitSlop={10}>
+                <Pressable onPress={() => sendCommand('prev')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Titre précédent">
                   <SkipBack size={22} color={colors.text} fill={colors.text} />
                 </Pressable>
-                <Pressable style={styles.playButton} onPress={() => sendCommand('toggle')} hitSlop={10}>
+                <Pressable
+                  style={styles.playButton}
+                  onPress={() => sendCommand('toggle')}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={selected.isPlaying ? 'Pause' : 'Lecture'}
+                >
                   {selected.isPlaying ? (
                     <Pause size={20} color="#000" fill="#000" />
                   ) : (
                     <Play size={20} color="#000" fill="#000" />
                   )}
                 </Pressable>
-                <Pressable onPress={() => sendCommand('next')} hitSlop={10}>
+                <Pressable onPress={() => sendCommand('next')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Titre suivant">
                   <SkipForward size={22} color={colors.text} fill={colors.text} />
                 </Pressable>
               </View>
@@ -252,7 +264,7 @@ export default function DevicesScreen() {
         <EmptyState
           icon={Cast}
           title="Contrôle à distance désactivé"
-          hint="Active-le pour piloter ce téléphone depuis le PC, ou l'inverse - même réseau Wi-Fi requis."
+          hint="Activez-le pour piloter ce téléphone depuis le PC, ou l'inverse (même réseau Wi-Fi requis)."
         />
       )}
     </ScrollView>

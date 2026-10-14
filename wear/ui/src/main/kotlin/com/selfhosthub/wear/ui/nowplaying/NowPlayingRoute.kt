@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -20,6 +21,7 @@ import com.selfhosthub.wear.ui.common.AmbientState
 import com.selfhosthub.wear.ui.common.rememberCover
 import com.selfhosthub.wear.ui.common.rememberCoverLook
 import com.selfhosthub.wear.ui.common.rememberHaptics
+import com.selfhosthub.wear.ui.common.rememberLowResRotary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -47,7 +49,8 @@ fun NowPlayingRoute(
     onLibrary: () -> Unit,
     onDevices: () -> Unit,
     onSettings: () -> Unit,
-    onArt: () -> Unit
+    onArt: () -> Unit,
+    onVolume: () -> Unit
 ) {
     val (_, ui) = rememberNowPlaying(graph, periodMs = 1_000)
     val cover = rememberCover(graph, ui.coverArt, ArtworkSize.MEDIUM)
@@ -55,6 +58,7 @@ fun NowPlayingRoute(
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
     val link = graph.link
+    val lowRes = rememberLowResRotary()
 
     var carried by remember { mutableFloatStateOf(0f) }
     // The songs liked from the watch this time: the heart stays full for them.
@@ -83,14 +87,14 @@ fun NowPlayingRoute(
         onShuffle = { link.send(PlayerCommand.ToggleShuffle) },
         onRepeat = { link.send(PlayerCommand.SetRepeatMode(ui.repeat.next())) },
         onCrown = { pixels ->
-            val (steps, rest) = ControlMath.crownSteps(carried, pixels)
+            val (steps, rest) = ControlMath.rotarySteps(carried, pixels, lowRes)
             carried = rest
             if (steps != 0) {
                 haptics.tick()
                 scope.launch { changeVolume(steps) }
             }
         },
-        onVolumeStep = { steps -> changeVolume(steps) },
+        onVolume = onVolume,
         onLibrary = onLibrary,
         onDevices = onDevices,
         onSettings = onSettings,
@@ -107,6 +111,71 @@ fun NowPlayingRoute(
         }
     )
     NowPlayingContent(ui, cover, actions, overlay, look = look, liked = ui.songId in liked, onCoverClick = onArt)
+}
+
+/**
+ * The volume screen, wired to the phone. What it shows is the player's volume, except while it is being turned and for
+ * a moment after: then it is the value the watch sent, so that a state from the phone that left before the last turn
+ * does not pull the ring back.
+ */
+@Composable
+fun VolumeRoute(graph: WatchGraph) {
+    val (_, ui) = rememberNowPlaying(graph, periodMs = 5_000)
+    val cover = rememberCover(graph, ui.coverArt, ArtworkSize.MEDIUM)
+    val look = rememberCoverLook(cover, hasCover = ui.coverArt != null)
+    val haptics = rememberHaptics()
+    val lowRes = rememberLowResRotary()
+    val link = graph.link
+    val context = LocalContext.current
+
+    var held by remember { mutableStateOf<Double?>(null) }
+    var touchedAt by remember { mutableLongStateOf(0L) }
+    var carried by remember { mutableFloatStateOf(0f) }
+    // What the volume was before the mute button, to give it back.
+    var beforeMute by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(touchedAt) {
+        if (touchedAt > 0L) {
+            delay(1_500)
+            held = null
+        }
+    }
+
+    fun set(volume: Double) {
+        // Read from the state, not from this composition: two clicks of the bezel can come before the screen is redrawn.
+        val before = held ?: ui.volume
+        val next = volume.coerceIn(0.0, 1.0)
+        if (ControlMath.stepOf(next) != ControlMath.stepOf(before)) haptics.tick()
+        held = next
+        touchedAt = System.currentTimeMillis()
+        // Whole percents only: a finger on the ring moves by fractions of one, and the phone needs no more.
+        if (ControlMath.volumePercent(next) != ControlMath.volumePercent(before)) {
+            link.send(PlayerCommand.SetVolume(ControlMath.volumePercent(next) / 100.0))
+        }
+    }
+
+    VolumeContent(
+        volume = held ?: ui.volume,
+        caption = ui.statusLine ?: ui.playerName?.let { context.getString(R.string.playing_on, it) },
+        captionIsWarning = ui.statusLine != null,
+        enabled = ui.connected,
+        onRotary = { pixels ->
+            val (steps, rest) = ControlMath.rotarySteps(carried, pixels, lowRes)
+            carried = rest
+            if (steps != 0) set(ControlMath.volumeAfter(held ?: ui.volume, steps))
+        },
+        onChange = { set(it) },
+        onMute = {
+            haptics.tap()
+            val now = held ?: ui.volume
+            if (now > 0.0) {
+                beforeMute = now
+                set(0.0)
+            } else {
+                set(beforeMute ?: 0.5)
+            }
+        },
+        look = if (ui.hasSong) look else null
+    )
 }
 
 /** The always-on version, redrawn at most once a second and each minute when the system updates the screen. */

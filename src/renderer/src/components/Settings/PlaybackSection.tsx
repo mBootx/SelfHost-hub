@@ -25,9 +25,8 @@ export default function PlaybackSection(): JSX.Element {
 
   return (
     <>
-      <section className="space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Lecture</h2>
-        <div className="space-y-5 rounded-lg border border-surface-border bg-surface-elevated p-4">
+      <section>
+        <div className="space-y-5 rounded-xl border border-surface-border bg-surface-elevated p-4">
           <div>
             <div className="mb-2 flex items-center justify-between">
               <p className="text-sm font-semibold">Fondu enchaîné</p>
@@ -64,7 +63,7 @@ export default function PlaybackSection(): JSX.Element {
 
       <section className="space-y-3">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Égaliseur</h2>
-        <div className="space-y-5 rounded-lg border border-surface-border bg-surface-elevated p-4">
+        <div className="space-y-5 rounded-xl border border-surface-border bg-surface-elevated p-4">
           <div className="flex items-center justify-between gap-4">
             <p className="text-sm font-semibold">Activer l'égaliseur</p>
             <Switch checked={eqEnabled} onChange={setEqEnabled} label="Activer l'égaliseur" />

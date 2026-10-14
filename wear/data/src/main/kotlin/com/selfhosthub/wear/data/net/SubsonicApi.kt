@@ -51,7 +51,15 @@ data class ApiSong(
     val track: Int?
 )
 
-data class ApiPlaylist(val id: String, val name: String, val songCount: Int, val changed: String?, val coverArt: String?)
+data class ApiPlaylist(
+    val id: String,
+    val name: String,
+    val songCount: Int,
+    val changed: String?,
+    val coverArt: String?,
+    /** The account it belongs to (Navidrome says so; an older server may not). */
+    val owner: String? = null
+)
 
 data class ArtistIndex(val artists: List<ApiArtist>, val lastModified: Long?)
 data class AlbumDetail(val album: ApiAlbum, val songs: List<ApiSong>)
@@ -105,8 +113,15 @@ class SubsonicApi(
         return AlbumDetail(album.toAlbum() ?: throw SubsonicException("Album illisible", null, null), album.children("song").mapNotNull { it.toSong() })
     }
 
-    suspend fun playlists(): List<ApiPlaylist> =
-        call("getPlaylists").objectOrNull("playlists").children("playlist").mapNotNull { it.toPlaylist() }
+    /**
+     * The playlists of the signed-in account. Navidrome also lists the public playlists of everyone else, and every
+     * playlist of every account to an admin: each account sees only its own, as in the phone and PC apps.
+     */
+    suspend fun playlists(): List<ApiPlaylist> {
+        val all = call("getPlaylists").objectOrNull("playlists").children("playlist").mapNotNull { it.toPlaylist() }
+        val me = login()?.username ?: return all
+        return all.filter { it.owner == null || it.owner.equals(me, ignoreCase = true) }
+    }
 
     suspend fun songsOfPlaylist(playlistId: String): PlaylistDetail {
         val playlist = call("getPlaylist", "id" to playlistId).objectOrNull("playlist")
@@ -285,5 +300,5 @@ private fun JsonObject.toSong(): ApiSong? {
 
 private fun JsonObject.toPlaylist(): ApiPlaylist? {
     val id = string("id") ?: return null
-    return ApiPlaylist(id, string("name") ?: "?", int("songCount") ?: 0, string("changed"), string("coverArt"))
+    return ApiPlaylist(id, string("name") ?: "?", int("songCount") ?: 0, string("changed"), string("coverArt"), string("owner"))
 }

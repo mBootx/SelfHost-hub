@@ -238,7 +238,7 @@ test('a downloaded song brings its covers at every size the app shows', async ()
   fs.writeFileSync(offlineEntry, ["export { useOfflineStore } from '@/store/offlineStore'", "export * from '@/services/coverStore'", ''].join(NL))
   const o = require(await bundle(offlineEntry, STUBS, path.join(bundle.OUT, 'covers-offline.js')))
   await o.loadCoverStore()
-  const client = { streamUrl: (id) => 'https://music.example/rest/stream?id=' + id, coverArtUrl: (id, size) => url(id, size) }
+  const client = { originalUrl: (id) => 'https://music.example/rest/stream?id=' + id + '&format=raw', coverArtUrl: (id, size) => url(id, size) }
   await o.useOfflineStore.getState().downloadTrack({ id: 'song-1', title: 'T', artist: 'A', albumId: 'al-7', duration: 100 }, client)
   for (let i = 0; i < 5; i++) await settle()
   for (const size of [160, 320, 640]) assert.ok(o.storedCoverUri(url('al-7', size)), 'size ' + size)

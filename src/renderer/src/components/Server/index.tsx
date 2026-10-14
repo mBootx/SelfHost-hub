@@ -9,6 +9,7 @@ import { storage } from '@renderer/services/storage'
 import type { NowPlayingEntry, ScanStatus } from '@renderer/services/navidrome'
 import type { SourceUsage } from '@renderer/services/filebrowser'
 import type { ConnectionStatus } from '@renderer/types'
+import PlaylistAccounts from './PlaylistAccounts'
 
 type IconComponent = typeof Music
 
@@ -102,11 +103,11 @@ function ServiceCard({ icon: Icon, accent, name, health }: { icon: IconComponent
           : 'bg-gray-600'
   const label =
     health.state === 'up'
-      ? `En ligne - ${health.latencyMs} ms`
+      ? `En ligne · ${health.latencyMs} ms`
       : health.state === 'down'
         ? 'Injoignable'
         : health.state === 'checking'
-          ? 'Vérification...'
+          ? 'Vérification…'
           : 'Non connecté'
   return (
     <div className="flex items-center gap-3 rounded-lg border border-surface-border bg-surface-elevated p-4">
@@ -204,7 +205,7 @@ function WakeOnLanSection({ onSent }: { onSent: () => void }): JSX.Element {
           disabled={!macValid || sending}
           className="rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-accent-hover disabled:opacity-50"
         >
-          {sending ? 'Envoi...' : 'Réveiller'}
+          {sending ? 'Envoi…' : 'Réveiller'}
         </button>
       </div>
       {result && <p className={`text-xs ${result.ok ? 'text-gray-300' : 'text-red-400'}`}>{result.text}</p>}
@@ -337,10 +338,10 @@ export default function ServerDashboard(): JSX.Element {
             <h1 className="text-2xl font-bold tracking-tight">Serveur</h1>
             <p className="text-xs text-gray-400">
               {waking
-                ? 'En attente du réveil du serveur...'
+                ? 'En attente du réveil du serveur…'
                 : checkedAt
                   ? `Vérifié à ${new Date(checkedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
-                  : 'Vérification...'}
+                  : 'Vérification…'}
             </p>
           </div>
           <button
@@ -375,7 +376,7 @@ export default function ServerDashboard(): JSX.Element {
               <ScanLine className={`h-5 w-5 text-gray-300 ${scanning ? 'animate-pulse' : ''}`} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">{scanning ? 'Scan en cours...' : scan ? `Dernier scan ${timeAgo(scan.lastScan)}` : 'Scan de la bibliothèque'}</p>
+              <p className="text-sm font-semibold">{scanning ? 'Scan en cours…' : scan ? `Dernier scan ${timeAgo(scan.lastScan)}` : 'Scan de la bibliothèque'}</p>
               <p className="text-xs text-gray-400">
                 Cherche les fichiers ajoutés ou modifiés. Les téléchargements Downtify en lancent un automatiquement.
               </p>
@@ -440,7 +441,7 @@ export default function ServerDashboard(): JSX.Element {
                     </div>
                   )}
                   <p className="text-xs text-gray-500">
-                    {source.total ? `${source.usedPercentage} % utilisés - ${formatBytes(source.total - source.used)} libres - ` : ''}
+                    {source.total ? `${source.usedPercentage} % utilisés · ${formatBytes(source.total - source.used)} libres · ` : ''}
                     {formatCount(source.numFiles)} fichiers, {formatCount(source.numDirs)} dossiers
                   </p>
                 </div>
@@ -458,6 +459,13 @@ export default function ServerDashboard(): JSX.Element {
               <Stat label="Terminés" value={formatCount(queueCounts.done)} />
               <Stat label="Échecs" value={formatCount(queueCounts.failed)} />
             </div>
+          </section>
+        )}
+
+        {navidromeClient && navidromeStatus === 'connected' && (
+          <section className="space-y-3">
+            <SectionTitle>Playlists des comptes</SectionTitle>
+            <PlaylistAccounts />
           </section>
         )}
 

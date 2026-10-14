@@ -115,8 +115,8 @@ test('"last" adds from the starting song to the end of the queue', async () => {
 test('"next" puts the songs right after the one playing, in order', async () => {
   const q = queue()
   await media.runPlayMedia({ kind: 'album', id: 'al-1', mode: 'next' }, library(SONGS), q)
-  // playNext puts each one first in line, so the last goes in first.
-  assert.deepStrictEqual(q.log, [['playNext', 's3'], ['playNext', 's2'], ['playNext', 's1']])
+  // Songs played next line up in the order they are added, so they go in from the first.
+  assert.deepStrictEqual(q.log, [['playNext', 's1'], ['playNext', 's2'], ['playNext', 's3']])
 })
 
 test('an empty album plays nothing, and a failing lookup is the caller\'s to handle', async () => {

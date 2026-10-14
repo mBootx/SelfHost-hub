@@ -10,9 +10,8 @@ export default function AppearanceSection(): JSX.Element {
   const isCustomAccent = !ACCENT_PRESETS.some((p) => p.hex.toLowerCase() === accent.toLowerCase())
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Apparence</h2>
-      <div className="space-y-5 rounded-lg border border-surface-border bg-surface-elevated p-4">
+    <section>
+      <div className="space-y-5 rounded-xl border border-surface-border bg-surface-elevated p-4">
         <div>
           <p className="mb-2.5 text-sm font-semibold">Couleur d'accent</p>
           <div className="flex flex-wrap items-center gap-2.5">

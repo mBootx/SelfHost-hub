@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import Slider from '@react-native-community/slider'
-import { SectionTitle } from '@/components/Screen'
 import CarModeToggle from '@/components/carmode/CarModeToggle'
 import { GESTURE_INFO } from '@/components/carmode/GestureIndicator'
 import { GESTURES } from '@/services/gestureRecognizer'
@@ -68,9 +67,6 @@ export default function CarModeSection() {
 
   return (
     <>
-      <View style={styles.sectionGap}>
-        <SectionTitle>Mode voiture</SectionTitle>
-      </View>
       <CarModeToggle />
       <View style={styles.card}>
         <View style={styles.labelRow}>

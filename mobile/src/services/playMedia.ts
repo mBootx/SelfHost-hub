@@ -53,7 +53,7 @@ export interface MediaLibrary<S extends { id: string }> {
 /** What the player can do with a queue. */
 export interface QueueActions<S> {
   playQueue(songs: S[], startIndex: number): void
-  playNext(song: S): void
+  playNext(song: S): unknown
   addToQueue(songs: S[]): void
 }
 
@@ -78,8 +78,8 @@ export async function runPlayMedia<S extends { id: string }>(request: PlayMediaR
   } else if (request.mode === 'last') {
     queue.addToQueue(songs.slice(start))
   } else {
-    // Each one goes right after the song playing, so the last is put in first to end up in order.
-    for (const song of songs.slice(start).reverse()) queue.playNext(song)
+    // Songs played next line up in the order they are added: the album goes in from its first song.
+    for (const song of songs.slice(start)) queue.playNext(song)
   }
   return true
 }

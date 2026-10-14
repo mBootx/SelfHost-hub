@@ -23,7 +23,7 @@ class FakeNavidrome : Dispatcher() {
         val created: String = "2024-01-01T00:00:00Z",
         val songs: List<Song> = emptyList()
     )
-    data class Playlist(val id: String, val name: String, val changed: String, val songs: List<Song>)
+    data class Playlist(val id: String, val name: String, val changed: String, val songs: List<Song>, val owner: String? = "maxime")
 
     val artists = mutableListOf<Artist>()
     val albums = mutableListOf<Album>()
@@ -166,6 +166,7 @@ class FakeNavidrome : Dispatcher() {
         addProperty("name", p.name)
         addProperty("songCount", p.songs.size)
         addProperty("changed", p.changed)
+        if (p.owner != null) addProperty("owner", p.owner)
     }
 
     private fun ok(key: String? = null, payload: JsonObject? = null): MockResponse {

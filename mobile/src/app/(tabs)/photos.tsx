@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router'
 import { ArrowUpDown, CloudOff, Download, Images, Search, Share2, ShieldAlert, Trash2 } from 'lucide-react-native'
 import ActionSheet, { ActionSheetItem } from '@/components/ActionSheet'
 import LoginScreen from '@/components/filebrowser/LoginScreen'
+import ReconnectPanel from '@/components/ReconnectPanel'
 import PhotoTile from '@/components/photos/PhotoTile'
 import PhotoViewer, { ViewerAction } from '@/components/photos/PhotoViewer'
 import { BarAction, Chips, SearchField, SelectionBar } from '@/components/photos/PhotosChrome'
@@ -109,6 +110,10 @@ export default function PhotosTab() {
   const { width } = useWindowDimensions()
   const client = useFileBrowserStore((s) => s.client)
   const connection = useFileBrowserStore((s) => s.status)
+  const connectionError = useFileBrowserStore((s) => s.error)
+  const savedSession = useFileBrowserStore((s) => s.savedSession)
+  const restoreSession = useFileBrowserStore((s) => s.restoreSession)
+  const [switching, setSwitching] = useState(false)
   const template = useCameraBackupStore((s) => s.settings.folder)
   const olderFolder = useCameraBackupStore((s) => s.settings.legacyFolder)
   const backupOn = useCameraBackupStore((s) => s.settings.enabled)
@@ -240,7 +245,7 @@ export default function PhotosTab() {
     const one = paths.length === 1
     Alert.alert(
       one ? 'Mettre à la corbeille ?' : `Mettre ${paths.length} éléments à la corbeille ?`,
-      `${one ? 'Il sera déplacé' : 'Ils seront déplacés'} dans la corbeille du serveur et supprimé${one ? '' : 's'} définitivement au bout de ${TRASH_DAYS} jours; vous pouvez les récupérer d'ici là. Les copies restées sur votre téléphone ne sont pas touchées.`,
+      `${one ? 'Il sera déplacé' : 'Ils seront déplacés'} dans la corbeille du serveur et supprimé${one ? '' : 's'} définitivement au bout de ${TRASH_DAYS} jours ; vous pouvez ${one ? 'le' : 'les'} récupérer d'ici là. Les copies restées sur votre téléphone ne sont pas touchées.`,
       [
         { text: 'Annuler', style: 'cancel' },
         { text: 'Mettre à la corbeille', style: 'destructive', onPress: () => void trashPaths(paths) }
@@ -253,7 +258,7 @@ export default function PhotosTab() {
     const result = await trash(client, paths)
     setSelection(new Set())
     if (result.failed > 0) {
-      Alert.alert('Corbeille incomplète', `${result.failed} sur ${paths.length} n'ont pas pu être déplacés${result.message ? ` : ${result.message}` : ''}.`)
+      Alert.alert('Corbeille incomplète', `${result.failed} sur ${paths.length} ${result.failed > 1 ? "n'ont pas pu être déplacés" : "n'a pas pu être déplacé"}${result.message ? ` : ${result.message}` : ''}.`)
     } else {
       showToast(plural(result.moved, 'élément mis à la corbeille', 'éléments mis à la corbeille'))
     }
@@ -282,7 +287,7 @@ export default function PhotosTab() {
       const report = await saveToGallery(client, items, (done, total) => setWorking(`Enregistrement ${done} sur ${total}…`))
       setSelection(new Set())
       if (report.failed > 0) {
-        Alert.alert('Enregistrement incomplet', `${report.failed} sur ${items.length} n'ont pas pu être enregistrés${report.message ? ` : ${report.message}` : ''}.`)
+        Alert.alert('Enregistrement incomplet', `${report.failed} sur ${items.length} ${report.failed > 1 ? "n'ont pas pu être enregistrés" : "n'a pas pu être enregistré"}${report.message ? ` : ${report.message}` : ''}.`)
       } else {
         showToast(plural(report.saved, 'élément enregistré sur le téléphone', 'éléments enregistrés sur le téléphone'))
       }
@@ -333,7 +338,7 @@ export default function PhotosTab() {
     [client, size, selecting, selection, open, toggle]
   )
 
-  if (connection === 'connecting') {
+  if (connection === 'connecting' || (connection === 'disconnected' && savedSession === null)) {
     return (
       <Screen>
         <View style={styles.center}>
@@ -345,7 +350,11 @@ export default function PhotosTab() {
   if (connection !== 'connected' || !client) {
     return (
       <Screen>
-        <LoginScreen />
+        {connection === 'error' && savedSession && !switching ? (
+          <ReconnectPanel service="FileBrowser" error={connectionError} onRetry={restoreSession} onSwitch={() => setSwitching(true)} />
+        ) : (
+          <LoginScreen />
+        )}
       </Screen>
     )
   }

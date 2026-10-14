@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
 import { useDownloadStore } from '@renderer/store/downloadStore'
 import LoginPage from './LoginPage'
+import ServiceUnavailable from '@renderer/components/ServiceUnavailable'
 import FileExplorer from './FileExplorer'
 import DownloadsHistory from './DownloadsHistory'
 
@@ -9,11 +10,15 @@ type Pane = 'server' | 'downloads'
 
 export default function FileBrowserModule(): JSX.Element {
   const status = useFileBrowserStore((s) => s.status)
+  const error = useFileBrowserStore((s) => s.error)
+  const savedSession = useFileBrowserStore((s) => s.savedSession)
+  const restoreSession = useFileBrowserStore((s) => s.restoreSession)
   const downloadCount = useDownloadStore((s) => s.files.length)
   const [pane, setPane] = useState<Pane>('server')
+  const [switching, setSwitching] = useState(false)
 
-  if (status === 'connecting') {
-    return <div className="flex h-full items-center justify-center text-sm text-gray-400">Reconnexion en cours...</div>
+  if (status === 'connecting' || (status === 'disconnected' && savedSession === null)) {
+    return <div className="flex h-full items-center justify-center text-sm text-gray-400">Reconnexion en cours…</div>
   }
 
   // The history is local, so it stays reachable when the server isn't.
@@ -25,11 +30,15 @@ export default function FileBrowserModule(): JSX.Element {
             onClick={() => setPane('downloads')}
             className="border-b border-surface-border py-2 text-center text-xs text-accent hover:underline"
           >
-            Voir mes {downloadCount} téléchargements
+            Voir {downloadCount > 1 ? `mes ${downloadCount} téléchargements` : 'mon téléchargement'}
           </button>
         )}
         <div className="min-h-0 flex-1">
-          <LoginPage />
+          {status === 'error' && savedSession && !switching ? (
+            <ServiceUnavailable serviceName="FileBrowser" message={error ?? undefined} onRetry={() => restoreSession()} onSwitch={() => setSwitching(true)} />
+          ) : (
+            <LoginPage />
+          )}
         </div>
       </div>
     )

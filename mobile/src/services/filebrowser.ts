@@ -366,7 +366,7 @@ export class FileBrowserClient {
     const result = await task.uploadAsync()
     if (!result || result.status < 200 || result.status >= 300) {
       if (result?.status === 409) throw new ApiError('Un fichier du même nom existe déjà', 409)
-      throw new ApiError("Échec de l'upload", result?.status || 500)
+      throw new ApiError("Échec de l'envoi", result?.status || 500)
     }
   }
 

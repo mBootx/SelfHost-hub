@@ -135,6 +135,14 @@ class SubsonicApiTest {
     }
 
     @Test
+    fun `only the account's own playlists are kept, whatever else the server lists`() = runBlocking {
+        navidrome.playlists += FakeNavidrome.Playlist("pl-1", "Mienne", "2026-01-01T10:00:00Z", emptyList(), owner = "Maxime")
+        navidrome.playlists += FakeNavidrome.Playlist("pl-2", "Celle d'Ana, publique", "2026-01-01T10:00:00Z", emptyList(), owner = "ana")
+        navidrome.playlists += FakeNavidrome.Playlist("pl-3", "Sans propriétaire dit", "2026-01-01T10:00:00Z", emptyList(), owner = null)
+        assertEquals(listOf("Mienne", "Sans propriétaire dit"), api.playlists().map { it.name })
+    }
+
+    @Test
     fun `search gives artists, albums and songs`() = runBlocking {
         val result = api.search("a")
         assertTrue(result.artists.isNotEmpty() && result.albums.isNotEmpty() && result.songs.isNotEmpty())

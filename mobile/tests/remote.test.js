@@ -74,6 +74,30 @@ const get = (port, urlPath) =>
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms))
 
+test('a PC that closes the connection before answering is reported at once, not after the timeout', async () => {
+  const server = new WS.WebSocketServer({ port: 0 })
+  server.on('connection', (socket) => socket.close())
+  await new Promise((r) => server.on('listening', r))
+  const started = Date.now()
+  await assert.rejects(() => connect(server.address().port, 'AAAAAAAAAA'), /refusée/)
+  assert.ok(Date.now() - started < 2000, 'took ' + (Date.now() - started) + ' ms')
+  server.close()
+})
+
+test('renaming the PC while the hub runs tells the phones', async () => {
+  const { port, code, store } = await startHub()
+  const client = new phone.RemoteHubClient()
+  const lists = []
+  client.onDevices((devices) => lists.push(devices))
+  await client.connect('127.0.0.1', port, 'phone-1', 'Pixel', code)
+  await pause(50)
+  await hub.startHub({ window: fakeWindow(), deviceName: 'Salon', store, port: 0 })
+  await pause(100)
+  const last = lists[lists.length - 1]
+  assert.ok(last && last.some((d) => d.deviceId === 'hub' && d.deviceName === 'Salon'), JSON.stringify(last))
+  client.close()
+})
+
 test('codes: ten characters from the safe alphabet, formatted for reading, forgiving to type', () => {
   const code = hub.generateCode()
   assert.match(code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}$/)

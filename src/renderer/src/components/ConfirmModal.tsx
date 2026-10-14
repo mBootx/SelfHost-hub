@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import ModalShell from '@renderer/components/ModalShell'
 
 interface Props {
   open: boolean
@@ -32,33 +33,31 @@ export default function ConfirmModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onCancel}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm animate-slide-up space-y-4 rounded-xl bg-surface-elevated p-5 shadow-2xl"
-      >
-        <div className="flex items-start gap-3">
-          <div className="shrink-0 rounded-full bg-red-500/10 p-2">
-            <AlertTriangle className="h-5 w-5 text-red-400" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold">{title}</h2>
-            <p className="mt-1 text-xs text-gray-400">{description}</p>
-          </div>
+    <ModalShell
+      title={title}
+      onClose={onCancel}
+      width="max-w-sm"
+      leading={
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/15">
+          <AlertTriangle className="h-5 w-5 text-red-400" />
         </div>
+      }
+    >
+      <div className="space-y-5 px-5 pb-5 pt-1">
+        <p className="text-sm leading-relaxed text-gray-400">{description}</p>
         <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="rounded-full px-4 py-2 text-xs text-gray-300 hover:text-white">
+          <button onClick={onCancel} className="rounded-full px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:text-white">
             Annuler
           </button>
           <button
             onClick={handleConfirm}
             disabled={loading}
-            className="rounded-full bg-red-500 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-60"
+            className="rounded-full bg-red-500 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-red-600 disabled:opacity-60"
           >
-            {loading ? 'Suppression...' : confirmLabel}
+            {loading ? 'Suppression…' : confirmLabel}
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   )
 }

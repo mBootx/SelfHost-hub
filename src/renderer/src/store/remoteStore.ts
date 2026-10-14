@@ -45,6 +45,8 @@ interface RemoteState {
   address: string | null
   /** The code that pairs a phone with this PC ("ABCDE-FGHJK"), while the hub is running. */
   pairingCode: string | null
+  /** Why the hub could not start (the port taken by another program, say). */
+  error: string | null
   deviceName: string
   deviceList: RemoteDeviceSummary[]
   devices: Record<string, RemoteDeviceState>
@@ -108,6 +110,7 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
   running: false,
   address: null,
   pairingCode: null,
+  error: null,
   deviceName: 'PC',
   deviceList: [],
   devices: {},
@@ -187,10 +190,11 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
     const loggedIn = get().enabled ? await storage.loadConnection('navidrome') : null
     if (loggedIn) {
       const res = await window.api.remote.start({ deviceName: get().deviceName })
-      if (res.ok) set({ running: true, address: res.address, pairingCode: await window.api.remote.pairingCode() })
+      if (res.ok) set({ running: true, error: null, address: res.address, pairingCode: await window.api.remote.pairingCode() })
+      else set({ running: false, error: res.error || 'erreur inconnue' })
     } else {
       await window.api.remote.stop()
-      set({ running: false, pairingCode: null })
+      set({ running: false, pairingCode: null, error: null })
     }
   },
 

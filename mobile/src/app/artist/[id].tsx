@@ -5,6 +5,8 @@ import { User } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { NDAlbum, NDArtist } from '@/services/navidrome'
 import { prefetchCoverArt } from '@/services/imagePrefetch'
+import { plural } from '@/services/plural'
+import { EmptyState } from '@/components/Screen'
 import AlbumTile from '@/components/navidrome/AlbumTile'
 import CoverImage from '@/components/CoverImage'
 import { colors, layout, radius, spacing } from '@/constants/theme'
@@ -17,27 +19,47 @@ export default function ArtistScreen() {
   const [artist, setArtist] = useState<NDArtist | null>(null)
   const [albums, setAlbums] = useState<NDAlbum[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (!client || !id) return
+    let cancelled = false
     setLoading(true)
     client
       .getArtist(id)
       .then((res) => {
+        if (cancelled) return
         setArtist(res.artist)
         setAlbums(res.albums)
+        setError(null)
         navigation.setOptions({ title: res.artist?.name || 'Artiste' })
         prefetchCoverArt(client, res.albums.map((a) => a.coverArt), 300)
       })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [id, client])
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Artiste introuvable')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id, client, attempt])
 
   if (!client) return <View style={styles.container} />
   if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.accent} />
+      </View>
+    )
+  }
+
+  if (error && !artist) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <EmptyState icon={User} title="Artiste indisponible" hint={error} action={{ label: 'Réessayer', onPress: () => setAttempt((n) => n + 1) }} />
       </View>
     )
   }
@@ -63,7 +85,7 @@ export default function ArtistScreen() {
           <Text style={styles.name} numberOfLines={2}>
             {artist?.name}
           </Text>
-          <Text style={styles.meta}>{albums.length} albums</Text>
+          <Text style={styles.meta}>{plural(albums.length, 'album', 'albums')}</Text>
         </View>
       }
       renderItem={({ item }) => <AlbumTile album={item} />}

@@ -1,5 +1,6 @@
 import { md5 } from 'js-md5'
 import { fetchWithTimeout } from './http'
+import { NavidromeAdmin } from './navidromeAdmin'
 
 export interface NavidromeConfig {
   url: string
@@ -48,6 +49,8 @@ export interface NDSong {
   starred?: string
   genre?: string
   replayGain?: ReplayGain
+  /** The file's extension on the server (mp3, flac...). */
+  suffix?: string
 }
 
 export interface NDGenre {
@@ -62,6 +65,10 @@ export interface NDPlaylist {
   songCount: number
   duration: number
   coverArt?: string
+  /** The account it belongs to. */
+  owner?: string
+  /** Shown to every account of the server, not only to its owner. */
+  public?: boolean
 }
 
 /** A song someone is playing right now, on any device, as the server sees it. */
@@ -100,6 +107,12 @@ function coverSizeBucket(size: number): number {
   return size <= 160 ? 160 : size <= 320 ? 320 : 640
 }
 
+/** The extension a downloaded song's file gets: its own (flac, ogg...), "mp3" when the server does not say. */
+export function fileExtension(suffix: string | undefined): string {
+  const clean = (suffix ?? '').trim().toLowerCase()
+  return /^[a-z0-9]{1,5}$/.test(clean) ? clean : 'mp3'
+}
+
 export class ApiError extends Error {
   status: number
   /** Subsonic's own error code when the server answered 200 with a failure in the body (70: not found, 0: unexplained...). */
@@ -109,6 +122,21 @@ export class ApiError extends Error {
     this.status = status
     this.code = code
   }
+}
+
+/**
+ * The server could not be reached (no network, the server or its proxy down), as opposed to a request it refused:
+ * worth trying again later, and no reason to forget the login.
+ */
+export function isUnreachable(err: unknown): boolean {
+  const status = (err as { status?: unknown } | null)?.status
+  return status === 0 || status === 502 || status === 503 || status === 504
+}
+
+/** What a request that never got an answer is called: the platform's own words are English and say little. */
+function unreachableMessage(err: unknown): string {
+  const name = (err as { name?: unknown } | null)?.name
+  return name === 'AbortError' ? 'Le serveur ne répond pas' : 'Serveur injoignable'
 }
 
 export class NavidromeClient {
@@ -151,18 +179,25 @@ export class NavidromeClient {
     return `${this.baseUrl}/rest/${endpoint}.view?${search.toString()}`
   }
 
-  private async call<T>(method: string, params: Record<string, string | string[]> = {}): Promise<T> {
+  /**
+   * One Subsonic request. `post` sends the parameters as a form rather than in the address: for a long list of songs,
+   * which in an address could pass what a proxy in front of the server accepts.
+   */
+  private async call<T>(method: string, params: Record<string, string | string[]> = {}, post = false): Promise<T> {
     const search = new URLSearchParams()
     for (const [key, value] of Object.entries({ ...this.authParams(), ...params })) {
       if (Array.isArray(value)) value.forEach((v) => search.append(key, v))
       else search.append(key, value)
     }
-    const url = `${this.baseUrl}/rest/${method}.view?${search.toString()}`
+    const url = post ? `${this.baseUrl}/rest/${method}.view` : `${this.baseUrl}/rest/${method}.view?${search.toString()}`
     let res: Response
     try {
-      res = await fetchWithTimeout(url)
+      res = await fetchWithTimeout(
+        url,
+        post ? { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: search.toString() } : {}
+      )
     } catch (err) {
-      throw new ApiError(err instanceof Error ? err.message : 'Serveur injoignable', 0)
+      throw new ApiError(unreachableMessage(err), 0)
     }
     if (!res.ok) throw new ApiError(`Requête échouée (${res.status})`, res.status)
     const json = await res.json().catch(() => null)
@@ -208,9 +243,20 @@ export class NavidromeClient {
     return { album: body.album, songs: body.album?.song || [] }
   }
 
-  async getAlbumList(type: 'newest' | 'recent' | 'frequent' | 'random' = 'newest', size = 40): Promise<NDAlbum[]> {
-    const body = await this.call<any>('getAlbumList2', { type, size: String(size) })
+  async getAlbumList(type: 'newest' | 'recent' | 'frequent' | 'random' = 'newest', size = 40, offset = 0): Promise<NDAlbum[]> {
+    const body = await this.call<any>('getAlbumList2', { type, size: String(size), offset: String(offset) })
     return body.albumList2?.album || []
+  }
+
+  /** Every album of the library, the newest first (the server gives at most 500 at a time). */
+  async getAllAlbums(): Promise<NDAlbum[]> {
+    const PAGE = 500
+    const albums: NDAlbum[] = []
+    for (let offset = 0; ; offset += PAGE) {
+      const page = await this.getAlbumList('newest', PAGE, offset)
+      albums.push(...page)
+      if (page.length < PAGE) return albums
+    }
   }
 
   /** One page of every album, by name (what saving all the covers walks through). */
@@ -266,6 +312,24 @@ export class NavidromeClient {
     if (songIds && songIds.length > 0) params.songId = songIds
     const body = await this.call<any>('createPlaylist', params)
     return body.playlist
+  }
+
+  /**
+   * Puts the playlist's songs in this order (the whole list: Subsonic's createPlaylist with an id replaces its songs).
+   * Refused for a playlist that follows an M3U file.
+   */
+  async replacePlaylistSongs(playlistId: string, songIds: string[]): Promise<void> {
+    await this.call('createPlaylist', { playlistId, songId: songIds }, true)
+  }
+
+  /** Shown to every account (true) or to its owner only (false). */
+  async setPlaylistPublic(playlistId: string, isPublic: boolean): Promise<void> {
+    await this.call('updatePlaylist', { playlistId, public: String(isPublic) })
+  }
+
+  /** Navidrome's own API, for an admin account: every account's playlists, and who they belong to. */
+  admin(): NavidromeAdmin {
+    return new NavidromeAdmin(this.baseUrl, this.username, this.password)
   }
 
   async addToPlaylist(playlistId: string, songIds: string[]): Promise<void> {
@@ -363,6 +427,14 @@ export class NavidromeClient {
       this.coverArtUrls.set(key, url)
     }
     return url
+  }
+
+/**
+   * The song's file as it is on the server, never converted to another format or bitrate (Subsonic `format=raw`): what
+   * a download keeps. A plain stream can be converted when the server has a conversion set for this player.
+   */
+  originalUrl(songId: string): string {
+    return this.buildMediaUrl('stream', { id: songId, format: 'raw' })
   }
 
   downloadUrl(id: string): string {

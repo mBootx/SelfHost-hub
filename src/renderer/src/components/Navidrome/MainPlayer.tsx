@@ -10,6 +10,7 @@ import { fetchLyrics, LyricsResult } from '@renderer/services/lyrics'
 import { findArtwork, loadArtworkOverrides } from '@renderer/services/artwork'
 import { prefetchCoverArt } from '@renderer/services/imagePrefetch'
 import { seekTo } from '@renderer/services/playbackEngine'
+import { plural } from '@renderer/services/plural'
 import ArtistView from './ArtistView'
 import AlbumView from './AlbumView'
 import PlaylistView from './PlaylistView'
@@ -19,8 +20,12 @@ import ServiceUnavailable from '@renderer/components/ServiceUnavailable'
 import ContextMenu from '@renderer/components/ContextMenu'
 import ConfirmModal from '@renderer/components/ConfirmModal'
 import SearchResultsList from '@renderer/components/Downtify/SearchResultsList'
+import { useNavigate } from 'react-router-dom'
+import { useIsOwner } from '@renderer/hooks/useIsOwner'
 
 const SEARCH_DEBOUNCE_MS = 300
+/** A grid of albums is drawn this many at a time, more as it is scrolled: a whole library at once (thousands) was slow. */
+const GRID_PAGE = 120
 
 type Section = 'home' | 'artists' | 'albums' | 'playlists' | 'favorites' | 'search'
 
@@ -32,9 +37,31 @@ function AlbumGrid({
   onSelect: (id: string) => void
 }): JSX.Element {
   const client = useNavidromeStore((s) => s.client)
+  const [shown, setShown] = useState(GRID_PAGE)
+  const sentinel = useRef<HTMLDivElement>(null)
+  const more = shown < albums.length
+
+  // Back to the first page when the list itself changes (another section, a new search).
+  useEffect(() => setShown(GRID_PAGE), [albums])
+
+  // The next page is drawn when the end of this one comes near.
+  useEffect(() => {
+    const target = sentinel.current
+    if (!more || !target) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setShown((n) => n + GRID_PAGE)
+      },
+      { rootMargin: '800px 0px' }
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [more, shown])
+
   return (
+    <>
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-      {albums.map((album) => (
+      {albums.slice(0, shown).map((album) => (
         <button
           key={album.id}
           onClick={() => onSelect(album.id)}
@@ -55,6 +82,8 @@ function AlbumGrid({
         </button>
       ))}
     </div>
+    {more && <div ref={sentinel} className="h-8" />}
+    </>
   )
 }
 
@@ -91,6 +120,14 @@ export default function MainPlayer(): JSX.Element {
   })
   const [downtifyResults, setDowntifyResults] = useState<DowntifySong[]>([])
   const [downtifySearching, setDowntifySearching] = useState(false)
+  // Why the library could not be searched (the server out of reach): not the same as finding nothing.
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [searchDone, setSearchDone] = useState(false)
+  // The whole library's albums, newest first; until they are in, the newest ones already loaded stand in.
+  const [allAlbums, setAllAlbums] = useState<NDAlbum[] | null>(null)
+  const [albumsError, setAlbumsError] = useState<string | null>(null)
+  const [favoritesError, setFavoritesError] = useState<string | null>(null)
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false)
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null)
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null)
   const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null)
@@ -99,11 +136,13 @@ export default function MainPlayer(): JSX.Element {
   const [playlistToDelete, setPlaylistToDelete] = useState<NDPlaylist | null>(null)
   const deletePlaylist = useNavidromeStore((s) => s.deletePlaylist)
   const showToast = useToastStore((s) => s.show)
+  const navigate = useNavigate()
+  const isOwner = useIsOwner()
 
   async function handleDeletePlaylist(playlist: NDPlaylist): Promise<void> {
     try {
       await deletePlaylist(playlist.id)
-      showToast(`Playlist "${playlist.name}" supprimée`)
+      showToast(`Playlist « ${playlist.name} » supprimée`)
     } catch (err: any) {
       showToast(err?.message || 'Impossible de supprimer la playlist')
     } finally {
@@ -127,6 +166,25 @@ export default function MainPlayer(): JSX.Element {
   useEffect(() => {
     loadArtworkOverrides().then(setArtworkOverrides)
   }, [])
+
+  // Every album, the first time the Albums section is opened (it used to show only the 20 newest).
+  useEffect(() => {
+    if (section !== 'albums' || allAlbums !== null || !client) return
+    let cancelled = false
+    client
+      .getAllAlbums()
+      .then((albums) => {
+        if (cancelled) return
+        setAllAlbums(albums)
+        setAlbumsError(null)
+      })
+      .catch((err) => {
+        if (!cancelled) setAlbumsError(err instanceof Error ? err.message : 'Impossible de charger les albums')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [section, allAlbums, client])
 
   // Picks up what was played on the phone since this list was last loaded.
   useEffect(() => {
@@ -193,10 +251,15 @@ export default function MainPlayer(): JSX.Element {
     setSelectedAlbum(null)
     setSelectedPlaylist(null)
     if (s === 'favorites' && client) {
-      client.getStarred().then((res) => {
-        setFavorites(res)
-        prefetchCoverArt(client, res.albums.map((a) => a.coverArt), 300)
-      })
+      setFavoritesError(null)
+      client
+        .getStarred()
+        .then((res) => {
+          setFavorites(res)
+          setFavoritesLoaded(true)
+          prefetchCoverArt(client, res.albums.map((a) => a.coverArt), 300)
+        })
+        .catch((err) => setFavoritesError(err instanceof Error ? err.message : 'Impossible de charger les favoris'))
     }
   }
 
@@ -216,10 +279,19 @@ export default function MainPlayer(): JSX.Element {
       setSearchResults({ artists: [], albums: [], songs: [] })
       setDowntifyResults([])
       setDowntifySearching(false)
+      setSearchError(null)
+      setSearchDone(false)
+      // The box emptied: back to the home page rather than an empty page of results.
+      if (term.length === 0 && section === 'search') setSection('home')
       return
     }
 
     setSection('search')
+    // The results take the place of an album, artist or playlist that was open (they used to stay hidden behind it).
+    setSelectedAlbum(null)
+    setSelectedArtist(null)
+    setSelectedPlaylist(null)
+    setSearchDone(false)
     const mine = ++searchTicket.current
     setDowntifySearching(downtifyStatus === 'connected' && !!downtifyClient)
 
@@ -235,6 +307,8 @@ export default function MainPlayer(): JSX.Element {
       if (searchTicket.current !== mine) return
       const localResults = local.status === 'fulfilled' ? local.value : { artists: [], albums: [], songs: [] }
       setSearchResults(localResults)
+      setSearchError(local.status === 'rejected' ? (local.reason instanceof Error ? local.reason.message : 'Serveur injoignable') : null)
+      setSearchDone(true)
       setDowntifyResults(remote.status === 'fulfilled' ? remote.value.slice(0, 8) : [])
       setDowntifySearching(false)
       prefetchCoverArt(client, localResults.albums.map((a) => a.coverArt), 300)
@@ -272,8 +346,13 @@ export default function MainPlayer(): JSX.Element {
     }
 
     if (section === 'search') {
+      const nothing = searchResults.artists.length === 0 && searchResults.albums.length === 0 && searchResults.songs.length === 0
       return (
         <div className="animate-fade-in space-y-8 p-6">
+          {searchDone && searchError && <p className="text-sm text-red-400">Recherche impossible : {searchError}</p>}
+          {searchDone && !searchError && nothing && downtifyResults.length === 0 && !downtifySearching && (
+            <p className="text-sm text-gray-400">Aucun résultat pour « {searchQuery.trim()} ».</p>
+          )}
           {searchResults.artists.length > 0 && (
             <div>
               <h2 className="mb-3 text-lg font-semibold">Artistes</h2>
@@ -303,7 +382,6 @@ export default function MainPlayer(): JSX.Element {
                 {searchResults.songs.map((s, i) => (
                   <button
                     key={s.id}
-                    onDoubleClick={() => playQueue(searchResults.songs, i)}
                     onClick={() => playQueue(searchResults.songs, i)}
                     className="flex w-full items-center gap-3 rounded px-2 py-1.5 text-left text-sm hover:bg-surface-hover"
                   >
@@ -332,7 +410,7 @@ export default function MainPlayer(): JSX.Element {
                 Pas dans votre bibliothèque ? Télécharger via Downtify
               </h2>
               {downtifySearching ? (
-                <p className="text-sm text-gray-400">Recherche sur Downtify...</p>
+                <p className="text-sm text-gray-400">Recherche sur Downtify…</p>
               ) : (
                 <SearchResultsList songs={downtifyResults} compact />
               )}
@@ -366,14 +444,21 @@ export default function MainPlayer(): JSX.Element {
     if (section === 'albums') {
       return (
         <div className="animate-fade-in p-6">
-          <AlbumGrid albums={recentAlbums} onSelect={setSelectedAlbum} />
+          {albumsError && <p className="mb-4 text-sm text-red-400">Albums indisponibles : {albumsError}</p>}
+          <AlbumGrid albums={allAlbums ?? recentAlbums} onSelect={setSelectedAlbum} />
         </div>
       )
     }
 
     if (section === 'playlists') {
       return (
-        <div className="animate-fade-in grid grid-cols-2 gap-4 p-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className="animate-fade-in p-6">
+          {isOwner && (
+            <button onClick={() => navigate('/server')} className="mb-4 text-xs text-gray-400 underline hover:text-white">
+              Playlists de tous les comptes : à qui elles sont, modifiables ou non (page Serveur)
+            </button>
+          )}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           <button
             onClick={() => setShowNewPlaylist(true)}
             className="lazy-tile group rounded-md p-3 text-left hover:bg-surface-hover"
@@ -406,9 +491,10 @@ export default function MainPlayer(): JSX.Element {
                 </div>
               )}
               <p className="truncate text-sm font-medium">{p.name}</p>
-              <p className="text-xs text-gray-400">{p.songCount} titres</p>
+              <p className="text-xs text-gray-400">{plural(p.songCount, 'titre', 'titres')}</p>
             </button>
           ))}
+        </div>
         </div>
       )
     }
@@ -416,6 +502,10 @@ export default function MainPlayer(): JSX.Element {
     if (section === 'favorites') {
       return (
         <div className="animate-fade-in space-y-8 p-6">
+          {favoritesError && <p className="text-sm text-red-400">Favoris indisponibles : {favoritesError}</p>}
+          {favoritesLoaded && !favoritesError && favorites.albums.length === 0 && favorites.songs.length === 0 && (
+            <p className="text-sm text-gray-400">Aucun favori pour le moment : les titres et albums que vous aimez apparaîtront ici.</p>
+          )}
           <div>
             <h2 className="mb-3 text-lg font-semibold">Albums favoris</h2>
             <AlbumGrid albums={favorites.albums} onSelect={setSelectedAlbum} />
@@ -517,7 +607,7 @@ export default function MainPlayer(): JSX.Element {
             ref={searchInputRef}
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Rechercher artistes, albums, titres... (/)"
+            placeholder="Rechercher artistes, albums, titres… (/)"
             className="w-full bg-transparent text-sm outline-none placeholder:text-gray-500"
           />
         </div>
@@ -644,7 +734,7 @@ export default function MainPlayer(): JSX.Element {
       <ConfirmModal
         open={!!playlistToDelete}
         title="Supprimer la playlist ?"
-        description={playlistToDelete ? `"${playlistToDelete.name}" sera définitivement supprimée.` : ''}
+        description={playlistToDelete ? `« ${playlistToDelete.name} » sera définitivement supprimée.` : ''}
         onCancel={() => setPlaylistToDelete(null)}
         onConfirm={() => (playlistToDelete ? handleDeletePlaylist(playlistToDelete) : undefined)}
       />

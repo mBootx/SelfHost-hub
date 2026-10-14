@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl, Alert, Linking, ActivityIndicator, BackHandler } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import * as DocumentPicker from 'expo-document-picker'
 import { File } from 'expo-file-system'
 import * as Clipboard from 'expo-clipboard'
@@ -112,16 +112,20 @@ export default function ExplorerScreen() {
     if (samePath(uploadsFinished.destPath, currentPath)) refresh()
   }, [uploadsFinished.seq, uploadsFinished.destPath, currentPath, refresh])
 
-  // Back leaves the selection, then the search, as in any file manager.
-  useEffect(() => {
-    if (!selecting && !searching) return
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (selecting) setSelection(new Map())
-      else closeSearch()
-      return true
-    })
-    return () => subscription.remove()
-  }, [selecting, searching])
+  // Back leaves the selection, then the search, then goes back to the folder before, as in any file manager. Only
+  // while the Files tab is the one shown: the other tabs stay mounted behind it.
+  useFocusEffect(
+    useCallback(() => {
+      if (!selecting && !searching && !canGoBack) return
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (selecting) setSelection(new Map())
+        else if (searching) closeSearch()
+        else void goBack()
+        return true
+      })
+      return () => subscription.remove()
+    }, [selecting, searching, canGoBack, goBack])
+  )
 
   // Search as the name is typed, a moment after the last key, ignoring answers that arrive late.
   useEffect(() => {
@@ -161,6 +165,14 @@ export default function ExplorerScreen() {
   if (!client) return <View style={styles.container} />
 
   const crumbs = currentPath.split('/').filter(Boolean)
+
+  /** Signing out forgets the saved password: the small icon next to the others asks first. */
+  function confirmLogout(): void {
+    Alert.alert('Se déconnecter de FileBrowser ?', 'Le mot de passe enregistré sur ce téléphone sera effacé : il faudra le saisir de nouveau.', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Se déconnecter', style: 'destructive', onPress: () => void logout() }
+    ])
+  }
 
   function closeSearch(): void {
     setSearching(false)
@@ -301,8 +313,10 @@ export default function ExplorerScreen() {
   function confirmDelete(targets: FBItem[]): void {
     const one = targets.length === 1
     Alert.alert(
-      one ? 'Supprimer' : `Supprimer ${targets.length} éléments ?`,
-      one ? `Supprimer « ${targets[0].name} » ?` : 'Ils seront supprimés définitivement du serveur.',
+      one ? `Supprimer « ${targets[0].name} » ?` : `Supprimer ${targets.length} éléments ?`,
+      one
+        ? `${targets[0].isDir ? 'Le dossier et son contenu seront supprimés' : 'Il sera supprimé'} définitivement du serveur.`
+        : 'Ils seront supprimés définitivement du serveur.',
       [
         { text: 'Annuler', style: 'cancel' },
         { text: 'Supprimer', style: 'destructive', onPress: () => void deleteItems(targets) }
@@ -451,7 +465,7 @@ export default function ExplorerScreen() {
           <Pressable onPress={() => router.push('/shares')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Liens de partage">
             <Link2 size={18} color={colors.textSecondary} />
           </Pressable>
-          <Pressable onPress={() => logout()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Se déconnecter de FileBrowser">
+          <Pressable onPress={confirmLogout} hitSlop={10} accessibilityRole="button" accessibilityLabel="Se déconnecter de FileBrowser">
             <LogOut size={18} color={colors.textSecondary} />
           </Pressable>
         </View>
@@ -479,7 +493,7 @@ export default function ExplorerScreen() {
           </Pressable>
           <Pressable style={[styles.actionButton, styles.actionButtonPrimary]} onPress={handlePickUpload}>
             <Upload size={14} color="#000" />
-            <Text style={[styles.actionButtonText, { color: '#000' }]}>Uploader</Text>
+            <Text style={[styles.actionButtonText, { color: '#000' }]}>Envoyer</Text>
           </Pressable>
         </View>
       )}
@@ -516,7 +530,7 @@ export default function ExplorerScreen() {
             ) : searching ? (
               <EmptyState icon={Search} title="Rechercher" hint={`Tapez au moins ${MIN_SEARCH_LENGTH} lettres du nom d'un fichier ou d'un dossier.`} />
             ) : (
-              <EmptyState icon={FolderOpen} title="Dossier vide" hint="Utilisez Uploader pour y ajouter des fichiers." />
+              <EmptyState icon={FolderOpen} title="Dossier vide" hint="Touchez « Envoyer » pour y ajouter des fichiers du téléphone." />
             )
           }
           renderItem={({ item }) => (
