@@ -18,8 +18,6 @@ dependencies {
   // The equalizer attaches to each expo-audio player's audio session. expo-audio is built from
   // source (see buildFromSource in package.json), so its Gradle project exists to depend on.
   implementation project(':expo-audio')
-  // SplashSafety takes the startup logo down if React's own signal for it never came.
-  implementation project(':expo-splash-screen')
   // expo-audio keeps Media3 private; this only lets us compile against ExoPlayer (same version).
   compileOnly "androidx.media3:media3-exoplayer:1.9.0"
   // The Wear OS data layer: how the phone hands the watch app its setup (WatchBridge.kt).

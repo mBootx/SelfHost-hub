@@ -9,6 +9,23 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.1.0',
+    items: [
+      {
+        title: 'Sélection multiple',
+        text: "Appui long sur un titre puis « Sélectionner plusieurs titres », ou le bouton « Sélectionner » d'un album, d'une playlist, des favoris ou d'une recherche. Une barre agit sur tous les titres choisis : lire, lire ensuite (dans l'ordre choisi), file, playlist, télécharger, favoris."
+      },
+      {
+        title: 'Montre : recherche Downtify et page horloge',
+        text: "Sous les résultats de la recherche de la montre, un bouton cherche sur Downtify par le téléphone, et un titre touché est demandé au téléphone. Glissez vers le bas depuis le lecteur pour la page horloge : la vignette et l'heure, en contours sur l'écran toujours allumé."
+      },
+      {
+        title: 'Démarrage plus sûr',
+        text: "Le logo de démarrage ne peut plus rester affiché : il est retiré dès le premier écran. Un démarrage qui n'a pas abouti est noté dans Réglages → Diagnostic."
+      }
+    ]
+  },
+  {
     version: '3.0.0',
     items: [
       {

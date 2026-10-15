@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.1.0 — 2026-10-15
+
+### Added
+- **Pick several songs at once (Android).** Long-press a song and choose "Sélectionner plusieurs titres", or use the "Sélectionner" button on an album, a playlist, the favourites or the search results. Songs get a checkbox, a tap picks or unpicks, and a bar at the bottom acts on them all: play, play next (in the order picked), add to the queue, add to a playlist, download, like. "Tout sélectionner" picks the whole list; Back or the cross ends it.
+- **Downtify search on the watch.** Under the search results on the watch, a "Chercher « … » sur Downtify" button asks the phone, which has Downtify's address, for songs to download. Tapping a song asks the phone to have Downtify download it; the watch shows "Demandé au téléphone" and the progress is in the phone's download queue. If Downtify is not connected on the phone, or the phone app is closed, the watch says so.
+- **A clock page on the watch.** Swipe down from the player: the cover as a thumbnail and the time, and nothing else. On an always-on display it shows the cover as outlines in a thin frame (only the edges are lit) with the time, shifted a few pixels each minute with burn-in protection. The watch wakes on the page it was left on, and music starting brings back the player.
+
+### Fixed
+- **The phone app could rarely stay frozen on the startup logo (Android).** The logo is taken down by a one-time signal that can already have gone by when the app's process was running without a screen (a background task, the watch link or the media service). It is now taken down as soon as the first screen is mounted and whenever the app comes back to the foreground, with a native timer behind it. A start that never finishes is written in Réglages → Diagnostic at the next launch.
+
 ## 3.0.0 — 2026-10-14
 
 A major update: playlists per account, drag to reorder, a redesigned look on the phone and the PC, a rebuilt volume control on the watch, working car-mode gestures, and a long list of fixes.

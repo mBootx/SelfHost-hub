@@ -2,7 +2,6 @@ package expo.modules.selfhostnative
 
 import android.os.Handler
 import android.os.Looper
-import expo.modules.splashscreen.SplashScreenManager
 
 /**
  * A safety net for the startup logo. expo-splash-screen keeps the logo up until React reports that content appeared,
@@ -14,7 +13,13 @@ import expo.modules.splashscreen.SplashScreenManager
 object SplashSafety {
   private const val AFTER_MS = 8_000L
   private val main = Handler(Looper.getMainLooper())
-  private val hide = Runnable { runCatching { SplashScreenManager.hide() } }
+  private val hide = Runnable { runCatching { hideSplash() } }
+
+  // expo-splash-screen is a precompiled library here (no Gradle project to depend on), so it is called by name.
+  private fun hideSplash() {
+    val manager = Class.forName("expo.modules.splashscreen.SplashScreenManager")
+    manager.getMethod("hide").invoke(manager.getField("INSTANCE").get(null))
+  }
 
   /** Called each time the activity comes to the foreground: starts the countdown afresh. */
   fun arm() {
