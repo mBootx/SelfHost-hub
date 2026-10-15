@@ -42,6 +42,11 @@ import com.selfhosthub.wear.ui.library.PlaylistsContent
 import com.selfhosthub.wear.ui.library.SearchContent
 import com.selfhosthub.wear.ui.library.StoredList
 import com.selfhosthub.wear.ui.library.TracksContent
+import com.selfhosthub.wear.core.DowntifySong
+import com.selfhosthub.wear.ui.library.AskedState
+import com.selfhosthub.wear.ui.library.DowntifyUi
+import com.selfhosthub.wear.ui.nowplaying.AmbientClockContent
+import com.selfhosthub.wear.ui.nowplaying.NowPlayingPage
 import com.selfhosthub.wear.ui.nowplaying.AmbientNowPlayingContent
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingActions
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingContent
@@ -73,13 +78,18 @@ import org.robolectric.annotation.GraphicsMode
 class ScreenshotTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private fun shot(name: String, content: @Composable () -> Unit) {
+    private fun shot(name: String, settleMs: Long = 0, content: @Composable () -> Unit) {
         compose.setContent {
             SelfHostWatchTheme {
                 Box(Modifier.fillMaxSize().clip(CircleShape).background(Color.Black)) { content() }
             }
         }
         compose.waitForIdle()
+        // Pictures made off the main thread (the outlines of a cover) need a moment to arrive.
+        if (settleMs > 0) {
+            Thread.sleep(settleMs)
+            compose.waitForIdle()
+        }
         val bitmap = capture()
         val file = File("build/screenshots/$name.png").also { it.parentFile?.mkdirs() }
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -144,6 +154,38 @@ class ScreenshotTest {
             CoverBackdrop(look)
             CoverTheme(look?.colours) { OptionsPage(player("Neon Rivers", "Halcyon Drive").copy(songId = "s1"), noActions, liked = true) }
         }
+    }
+
+    /** The clock page: the cover as a thumbnail and the time, the page above the player. */
+    @Test fun clockPage() {
+        NowPlayingPage.current = NowPlayingPage.CLOCK
+        try {
+            val cover = coverBitmap(0xFF1F8A9E.toInt(), 0xFFF2D16B.toInt())
+            shot("clock-page") { NowPlayingContent(player("Neon Rivers", "Halcyon Drive"), cover, noActions, null, look = coverLookOf(cover), clock = "14:05") }
+        } finally {
+            NowPlayingPage.current = NowPlayingPage.PLAYER
+        }
+    }
+
+    @Test fun clockPageNothingPlaying() {
+        NowPlayingPage.current = NowPlayingPage.CLOCK
+        try {
+            shot("clock-page-nothing") { NowPlayingContent(NowPlayingUi(status = LinkStatus.CONNECTED), null, noActions, null, clock = "14:05") }
+        } finally {
+            NowPlayingPage.current = NowPlayingPage.PLAYER
+        }
+    }
+
+    @Test fun ambientClock() = shot("ambient-clock", settleMs = 500) {
+        AmbientClockContent(true, coverBitmap(0xFF1F8A9E.toInt(), 0xFFF2D16B.toInt()), "14:05", AmbientState(isAmbient = true), minuteOfDay = 0)
+    }
+
+    @Test fun ambientClockBurnIn() = shot("ambient-clock-burn-in", settleMs = 500) {
+        AmbientClockContent(true, coverBitmap(0xFF7A1F5C.toInt(), 0xFF35C2A0.toInt()), "14:05", AmbientState(isAmbient = true, burnInProtection = true, lowBit = true), minuteOfDay = 1)
+    }
+
+    @Test fun ambientClockNothingPlaying() = shot("ambient-clock-nothing") {
+        AmbientClockContent(false, null, "14:05", AmbientState(isAmbient = true), minuteOfDay = 0)
     }
 
     @Test fun nowPlayingVolume() = shot("now-playing-volume") { NowPlayingContent(player("Tessellate", "alt-J"), null, noActions, 62) }
@@ -225,6 +267,28 @@ class ScreenshotTest {
     @Test fun playlists() = shot("playlists") {
         PlaylistsContent(null, StoredList(listOf(PlaylistEntity("p1", "Route", 42, null, null, 0), PlaylistEntity("p2", "Calme", 1, null, null, 0)), false, null) {}) {}
     }
+
+    private val dtSongs = listOf(
+        DowntifySong("yt-1", "Breezeblocks", "alt-J", "An Awesome Wave", 227.0),
+        DowntifySong("yt-2", "Tessellate", "alt-J", null, 183.0),
+        DowntifySong("yt-3", "Matilda", "alt-J", null, 0.0)
+    )
+
+    private fun searchWithDowntify(state: DowntifyUi, asked: Map<String, AskedState> = emptyMap()) = shot("search-downtify-" + state::class.simpleName!!.lowercase()) {
+        SearchContent(
+            graph = null,
+            query = "alt-j",
+            result = LibrarySearchResult(artists = emptyList(), albums = emptyList(), tracks = emptyList(), fromServer = true),
+            searching = false, onEdit = {}, onArtist = {}, onAlbum = {}, onPlay = {}, onMore = {},
+            downtify = state, asked = asked
+        )
+    }
+
+    @Test fun searchDowntifyIdle() = searchWithDowntify(DowntifyUi.Idle)
+
+    @Test fun searchDowntifyFound() = searchWithDowntify(DowntifyUi.Found(dtSongs), mapOf("yt-1" to AskedState.ASKED, "yt-2" to AskedState.ASKING))
+
+    @Test fun searchDowntifyFailed() = searchWithDowntify(DowntifyUi.Failed("Downtify n’est pas connecté sur le téléphone"))
 
     @Test fun searchResults() = shot("search") {
         SearchContent(

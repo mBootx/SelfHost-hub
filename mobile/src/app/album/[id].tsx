@@ -13,6 +13,8 @@ import { plural } from '@/services/plural'
 import { EmptyState } from '@/components/Screen'
 import TrackRow from '@/components/navidrome/TrackRow'
 import CoverImage from '@/components/CoverImage'
+import SelectButton from '@/components/navidrome/SelectButton'
+import { useSelectionPool } from '@/hooks/useSelectionPool'
 import { colors, layout, radius, spacing } from '@/constants/theme'
 
 export default function AlbumScreen() {
@@ -33,6 +35,7 @@ export default function AlbumScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  useSelectionPool(songs)
 
   useEffect(() => {
     if (!client || !id) return
@@ -127,6 +130,7 @@ export default function AlbumScreen() {
             >
               <ListPlus size={16} color={colors.textSecondary} />
             </Pressable>
+            <SelectButton />
             <Pressable
               style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
               onPress={() => downloadTracks(songs, client)}

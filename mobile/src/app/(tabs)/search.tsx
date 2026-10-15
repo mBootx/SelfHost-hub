@@ -10,6 +10,8 @@ import ArtistRow from '@/components/navidrome/ArtistRow'
 import TrackRow from '@/components/navidrome/TrackRow'
 import DownloadRow from '@/components/downtify/DownloadRow'
 import { Screen, SectionTitle, EmptyState } from '@/components/Screen'
+import SelectButton from '@/components/navidrome/SelectButton'
+import { useSelectionPool } from '@/hooks/useSelectionPool'
 import { NDAlbum, NDArtist, NDSong } from '@/services/navidrome'
 import { prefetchCoverArt } from '@/services/imagePrefetch'
 import { DowntifySong } from '@/services/downtify'
@@ -104,6 +106,7 @@ function SearchContent() {
 
   const hasLocal = results.artists.length > 0 || results.albums.length > 0 || results.songs.length > 0
   const hasAny = hasLocal || downloadable.length > 0
+  useSelectionPool(results.songs)
   const searched = query.trim().length >= MIN_QUERY
 
   return (
@@ -182,7 +185,7 @@ function SearchContent() {
 
         {!searching && results.songs.length > 0 && client && (
           <View style={styles.section}>
-            <SectionTitle>Dans votre bibliothèque</SectionTitle>
+            <SectionTitle action={<SelectButton label="Sélectionner" />}>Dans votre bibliothèque</SectionTitle>
             {results.songs.map((song, i) => (
               <TrackRow
                 key={song.id}

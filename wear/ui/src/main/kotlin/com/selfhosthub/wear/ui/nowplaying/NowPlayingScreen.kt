@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -82,9 +83,9 @@ class NowPlayingActions(
 )
 
 /**
- * The first screen: what is playing, where it is in the song, and the three big buttons. Swiping up leads to the
- * second page, with the shuffle and repeat buttons, the volume, which player the controls act on, and the way into
- * the library and the settings. The crown changes the volume from either page. The cover of the song, blurred, is
+ * The first screen: what is playing, where it is in the song, and the three big buttons. Swiping down leads to the
+ * clock page (the cover as a thumbnail and the time), swiping up to the options page, with the shuffle and repeat
+ * buttons, the volume, which player the controls act on, and the way into the library and the settings. The crown changes the volume from either page. The cover of the song, blurred, is
  * behind both pages, and the controls take its colour (`look`; black and green without one).
  */
 @Composable
@@ -97,9 +98,18 @@ fun NowPlayingContent(
     look: CoverLook? = null,
     /** The song playing was liked from the watch (this session). */
     liked: Boolean = false,
-    onCoverClick: () -> Unit = {}
+    onCoverClick: () -> Unit = {},
+    /** The time to show on the clock page, already formatted. */
+    clock: String = "",
+    onPageChange: (Int) -> Unit = { NowPlayingPage.current = it }
 ) {
-    val pager = rememberPagerState(pageCount = { 2 })
+    val pager = rememberPagerState(initialPage = NowPlayingPage.current, pageCount = { NowPlayingPage.COUNT })
+    // The page being looked at is remembered, for the always-on screen and for waking up on it.
+    LaunchedEffect(pager) { snapshotFlow { pager.settledPage }.collect { onPageChange(it) } }
+    // ...and the page asked for from outside (the player opening because music started) is scrolled to.
+    LaunchedEffect(NowPlayingPage.current) {
+        if (pager.settledPage != NowPlayingPage.current && !pager.isScrollInProgress) pager.animateScrollToPage(NowPlayingPage.current)
+    }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 
@@ -117,7 +127,11 @@ fun NowPlayingContent(
         CoverTheme(if (ui.hasSong) look?.colours else null) {
             Box(Modifier.fillMaxSize()) {
                 VerticalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
-                    if (page == 0) PlayerPage(ui, cover, actions, onCoverClick) else OptionsPage(ui, actions, liked)
+                    when (page) {
+                        NowPlayingPage.CLOCK -> ClockPage(cover, ui.hasSong, clock, onCoverClick)
+                        NowPlayingPage.PLAYER -> PlayerPage(ui, cover, actions, onCoverClick)
+                        else -> OptionsPage(ui, actions, liked)
+                    }
                 }
                 PageDots(pager.currentPage, pager.pageCount, Modifier.align(Alignment.CenterEnd).padding(end = 5.dp))
                 if (volumeOverlayPercent != null) VolumeOverlay(volumeOverlayPercent)

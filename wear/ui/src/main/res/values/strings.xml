@@ -52,6 +52,13 @@
     <string name="section_artists">Artistes</string>
     <string name="section_albums">Albums</string>
     <string name="section_tracks">Titres</string>
+    <string name="section_downtify">Sur Downtify</string>
+    <string name="downtify_search">Chercher « %1$s » sur Downtify</string>
+    <string name="downtify_none">Rien sur Downtify</string>
+    <string name="downtify_asking">Demande en cours…</string>
+    <string name="downtify_asked">Demandé au téléphone</string>
+    <string name="downtify_failed">Échec : touchez pour réessayer</string>
+    <string name="downtify_toast_asked">Téléchargement demandé</string>
 
     <!-- Devices -->
     <string name="devices">Lecteur</string>

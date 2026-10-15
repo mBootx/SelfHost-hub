@@ -7,6 +7,8 @@ import { useNavidromeStore } from '@/store/navidromeStore'
 import { applyCommandLocally, currentStatePayload, LOCAL_DEVICE_ID, RemoteStatus, useRemoteStore } from '@/store/remoteStore'
 import { useWatchUpdate } from '@/store/watchUpdateStore'
 import { parseUpdateStatus, parseWatchRequest, UPDATE_PATHS } from '@/services/watchUpdateProtocol'
+import { DOWNTIFY_PREFIX, DowntifyDeps, handleDowntifyMessage } from '@/services/watchDowntify'
+import { useDowntifyStore } from '@/store/downtifyStore'
 
 /**
  * The live link with a Wear OS watch. The watch never talks to the PC: this phone is the only thing that does (the
@@ -364,6 +366,12 @@ function reconnectPc(): void {
   remote.autoConnect().catch(() => {})
 }
 
+/** Downtify, as the watch needs it: this phone's own connection to it. */
+const downtifyDeps: DowntifyDeps = {
+  client: () => useDowntifyStore.getState().client,
+  queueDownload: (song) => useDowntifyStore.getState().queueDownload(song)
+}
+
 /** A message from the watch: a request for the state, or a command. */
 export function handleWatchMessage(message: WatchMessage): void {
   const firstContact = useWatchLinkStatus.getState().lastContactAt === null
@@ -378,6 +386,12 @@ export function handleWatchMessage(message: WatchMessage): void {
     if (app) useWatchUpdate.getState().noteWatch(message.nodeId, app)
     reconnectPc()
     void answer(message.nodeId)
+    return
+  }
+  if (message.path.startsWith(DOWNTIFY_PREFIX)) {
+    const native = SelfHostNative
+    const send = (path: string, json: string): Promise<unknown> => (native?.sendToWatchNode ? native.sendToWatchNode(message.nodeId, path, json) : Promise.resolve(0))
+    handleDowntifyMessage(message.path, message.data, send, downtifyDeps).catch((err) => logEvent('watch', `Demande Downtify de la montre : ${describeError(err)}`, 'warn'))
     return
   }
   if (message.path === UPDATE_PATHS.status) {

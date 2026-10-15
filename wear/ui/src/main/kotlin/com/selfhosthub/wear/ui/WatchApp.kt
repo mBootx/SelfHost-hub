@@ -23,6 +23,7 @@ import com.selfhosthub.wear.ui.library.PlaylistsRoute
 import com.selfhosthub.wear.ui.library.SearchRoute
 import com.selfhosthub.wear.ui.nowplaying.AmbientNowPlayingRoute
 import com.selfhosthub.wear.ui.nowplaying.ArtRoute
+import com.selfhosthub.wear.ui.nowplaying.NowPlayingPage
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingRoute
 import com.selfhosthub.wear.ui.nowplaying.VolumeRoute
 import com.selfhosthub.wear.ui.settings.SettingsRoute
@@ -61,7 +62,11 @@ fun WatchApp(graph: WatchGraph, ambient: AmbientState, versionName: String, play
     val nav = rememberSwipeDismissableNavController()
     // Opened again for the player (music started, see AutoOpener) while another screen was up: back to the player.
     LaunchedEffect(playerRequests) {
-        if (playerRequests > 0) runCatching { nav.popBackStack(Routes.NOW_PLAYING, inclusive = false) }
+        if (playerRequests > 0) {
+            // Music started: the player itself, not the clock or the options page that was left up.
+            NowPlayingPage.current = NowPlayingPage.PLAYER
+            runCatching { nav.popBackStack(Routes.NOW_PLAYING, inclusive = false) }
+        }
     }
     SelfHostWatchTheme {
         if (ambient.isAmbient) {

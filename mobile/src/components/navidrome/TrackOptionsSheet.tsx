@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router'
-import { ListEnd, ListStart, ListPlus, Disc3, Heart, Radio } from 'lucide-react-native'
+import { ListEnd, ListStart, ListPlus, ListChecks, Disc3, Heart, Radio } from 'lucide-react-native'
+import { useSelectionStore } from '@/store/selectionStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useTrackSheetStore } from '@/store/trackSheetStore'
 import { isStarred, useStarStore } from '@/store/starStore'
@@ -24,8 +25,11 @@ export default function TrackOptionsSheet() {
   const starred = useStarStore((s) => (song ? isStarred(s, song) : false))
   const toggleStar = useStarStore((s) => s.toggle)
 
+  const startSelection = useSelectionStore((s) => s.start)
+
   const items: ActionSheetItem[] = song
     ? [
+        { label: 'Sélectionner plusieurs titres', icon: ListChecks, onPress: () => startSelection(song) },
         {
           label: 'Lire ensuite',
           icon: ListStart,

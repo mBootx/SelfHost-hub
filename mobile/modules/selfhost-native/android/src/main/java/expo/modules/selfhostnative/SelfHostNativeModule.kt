@@ -323,6 +323,10 @@ class SelfHostNativeModule : Module() {
       "onAudioFocus"
     )
 
+    // The startup logo that outstays its welcome is taken down (see SplashSafety).
+    OnActivityEntersForeground { SplashSafety.arm() }
+    OnActivityEntersBackground { SplashSafety.disarm() }
+
     OnCreate {
       live = this@SelfHostNativeModule
       MusicFocus.onChange = { change -> live?.sendEvent("onAudioFocus", mapOf("change" to change)) }

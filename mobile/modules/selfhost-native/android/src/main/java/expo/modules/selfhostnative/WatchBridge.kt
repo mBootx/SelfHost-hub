@@ -252,6 +252,13 @@ class WatchBridge(private val context: Context) {
 
     // Updating the watch app; see UpdateProtocol in wear/core. The phone sends the APK on a channel and asks the version;
     // the watch answers with statuses.
+    /** Downtify, asked for by the watch: answered by the JavaScript, or by "closed" here when there is none. */
+    const val DOWNTIFY_PREFIX = "/selfhost/downtify"
+    const val DOWNTIFY_SEARCH_PATH = "/selfhost/downtify/search"
+    const val DOWNTIFY_RESULTS_PATH = "/selfhost/downtify/results"
+    const val DOWNTIFY_DOWNLOAD_PATH = "/selfhost/downtify/download"
+    const val DOWNTIFY_QUEUED_PATH = "/selfhost/downtify/queued"
+
     const val UPDATE_PREFIX = "/selfhost/update"
     const val UPDATE_APK_PATH = "/selfhost/update/apk"
     const val UPDATE_STATUS_PATH = "/selfhost/update/status"

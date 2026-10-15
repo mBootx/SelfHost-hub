@@ -12,6 +12,7 @@ import com.selfhosthub.wear.data.LibraryRepository
 import com.selfhosthub.wear.data.LibrarySync
 import com.selfhosthub.wear.data.db.WatchDatabase
 import com.selfhosthub.wear.data.net.SubsonicApi
+import com.selfhosthub.wear.service.link.DowntifyLink
 import com.selfhosthub.wear.service.link.LinkLeases
 import com.selfhosthub.wear.service.link.PhoneLink
 import com.selfhosthub.wear.service.link.WearLinkTransport
@@ -55,6 +56,9 @@ interface WatchGraph {
 
     /** Keeps in touch with the phone for whoever needs it (the screen while it is shown). */
     val linkLeases: LinkLeases
+
+    /** Looking for a song to download with Downtify, which the phone has the address of (the watch does not). */
+    val downtify: DowntifyLink
 
     /** Updating this app from the phone: the APK it sends, and how it goes. */
     val updates: WatchUpdates
@@ -135,6 +139,8 @@ class DefaultWatchGraph(appContext: Context) : WatchGraph {
     }
 
     override val linkLeases: LinkLeases by lazy { LinkLeases(link, scope) }
+
+    override val downtify: DowntifyLink by lazy { DowntifyLink(WearLinkTransport(context)) }
 
     override suspend fun applySetup(incoming: WatchSetup) = withContext(Dispatchers.IO) {
         val oldLogin = setupState.value?.navidrome

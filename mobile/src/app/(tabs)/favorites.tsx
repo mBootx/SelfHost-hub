@@ -7,6 +7,8 @@ import NavidromeGate from '@/components/navidrome/NavidromeGate'
 import AlbumTile from '@/components/navidrome/AlbumTile'
 import TrackRow from '@/components/navidrome/TrackRow'
 import { Screen, ScreenHeader, SectionTitle, EmptyState } from '@/components/Screen'
+import SelectButton from '@/components/navidrome/SelectButton'
+import { useSelectionPool } from '@/hooks/useSelectionPool'
 import { NDAlbum, NDSong } from '@/services/navidrome'
 import { prefetchCoverArt } from '@/services/imagePrefetch'
 import { colors, layout, spacing } from '@/constants/theme'
@@ -20,6 +22,7 @@ function FavoritesContent() {
   const [favorites, setFavorites] = useState<{ albums: NDAlbum[]; songs: NDSong[] }>({ albums: [], songs: [] })
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  useSelectionPool(favorites.songs)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
@@ -97,7 +100,7 @@ function FavoritesContent() {
                 </View>
               )}
 
-              {favorites.songs.length > 0 && <SectionTitle>Titres</SectionTitle>}
+              {favorites.songs.length > 0 && <SectionTitle action={<SelectButton label="Sélectionner" />}>Titres</SectionTitle>}
             </>
           }
           data={favorites.songs}

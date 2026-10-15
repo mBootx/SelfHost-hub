@@ -12,6 +12,8 @@ import { EmptyState } from '@/components/Screen'
 import TrackRow from '@/components/navidrome/TrackRow'
 import DragList from '@/components/DragList'
 import CoverImage from '@/components/CoverImage'
+import SelectButton from '@/components/navidrome/SelectButton'
+import { useSelectionPool } from '@/hooks/useSelectionPool'
 import { colors, layout, radius, spacing } from '@/constants/theme'
 
 type SortMode = 'default' | 'title' | 'artist' | 'duration'
@@ -48,6 +50,8 @@ export default function PlaylistScreen() {
 
   const [playlist, setPlaylist] = useState<NDPlaylist | null>(null)
   const [entries, setEntries] = useState<Entry[]>([])
+  const poolSongs = useMemo(() => entries.map((e) => e.song), [entries])
+  useSelectionPool(poolSongs)
   const [removing, setRemoving] = useState<ReadonlySet<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -260,6 +264,7 @@ export default function PlaylistScreen() {
               <Play size={16} color="#000" fill="#000" />
               <Text style={styles.playButtonText}>Lecture</Text>
             </Pressable>
+            <SelectButton />
             <Pressable
               style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
               onPress={() => downloadTracks(songs, client)}

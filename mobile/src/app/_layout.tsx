@@ -6,12 +6,14 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import PlaybackController from '@/components/PlaybackController'
 import PlayerOverlay from '@/components/PlayerOverlay'
 import ShareSheet from '@/components/ShareSheet'
+import SelectionBar from '@/components/navidrome/SelectionBar'
 import UpdatePrompt from '@/components/UpdatePrompt'
 import WhatsNewModal from '@/components/WhatsNewModal'
 import WrappedModal from '@/components/wrapped/WrappedModal'
 import LockScreen from '@/components/lock/LockScreen'
 import { pruneStaleDownloads } from '@/services/appUpdate'
 import { installErrorLogging } from '@/services/diagnostics'
+import { hideSplash, markStarted, markStarting } from '@/services/startupGuard'
 import { startPlaybackMemory } from '@/services/playbackMemory'
 import { startScrobbler } from '@/services/scrobbler'
 import { startListeningLog } from '@/services/listeningLog'
@@ -44,6 +46,8 @@ import { ConnectionStatus } from '@/types'
 
 // As soon as this file loads, so a crash while the screens are being built is written down too.
 installErrorLogging()
+// Notes that this launch has begun: a launch that never finishes is then reported at the next one.
+markStarting()
 
 /** A quick hop to another app shouldn't re-check every service on the way back. */
 const RESUME_REVALIDATE_MS = 30_000
@@ -82,6 +86,8 @@ export default function RootLayout() {
   const checkWhatsNew = useWhatsNewStore((s) => s.check)
 
   useEffect(() => {
+    // The first screen is mounted: the startup logo goes (React's own signal for it can be missed), and the start counts as done.
+    markStarted()
     startAppLock()
     restoreNavidrome()
     restoreFileBrowser()
@@ -125,6 +131,7 @@ export default function RootLayout() {
   const backgroundedAt = useRef<number | null>(null)
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') hideSplash()
       if (next === 'background') {
         backgroundedAt.current = Date.now()
       } else if (next === 'active' && backgroundedAt.current !== null) {
@@ -165,6 +172,7 @@ export default function RootLayout() {
         <Stack.Screen name="car-mode" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
       </Stack>
       <PlayerOverlay />
+      <SelectionBar />
       <UpdatePrompt />
       <WhatsNewModal />
       <WrappedModal />

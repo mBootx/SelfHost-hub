@@ -6,6 +6,7 @@ import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import com.google.android.gms.wearable.MessageEvent
 import com.selfhosthub.wear.core.AppVersion
+import com.selfhosthub.wear.core.DowntifyProtocol
 import com.selfhosthub.wear.core.LinkProtocol
 import com.selfhosthub.wear.core.MemoryWatchPrefs
 import com.selfhosthub.wear.core.SetupProtocol
@@ -16,6 +17,8 @@ import com.selfhosthub.wear.data.ArtworkRepository
 import com.selfhosthub.wear.data.LibraryRepository
 import com.selfhosthub.wear.data.db.WatchDatabase
 import com.selfhosthub.wear.data.net.SubsonicApi
+import com.selfhosthub.wear.service.link.DowntifyLink
+import com.selfhosthub.wear.service.link.DowntifySearch
 import com.selfhosthub.wear.service.link.LinkLeases
 import com.selfhosthub.wear.service.link.LinkStatus
 import com.selfhosthub.wear.service.link.PhoneLink
@@ -28,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -45,6 +49,7 @@ class TestApplication : Application(), WatchGraphProvider {
     val phoneLink: PhoneLink by lazy { PhoneLink(transport, testScope, testPrefs) }
     val updateHost = FakeUpdateHost(java.io.File(System.getProperty("java.io.tmpdir"), "wear-update-test"))
     val watchUpdates: WatchUpdates by lazy { WatchUpdates(updateHost, transport) }
+    val downtifyLink: DowntifyLink by lazy { DowntifyLink(transport, searchTimeoutMs = 2_000, downloadTimeoutMs = 2_000, newId = { "r1" }) }
 
     override val graph: WatchGraph by lazy { FakeGraph(this) }
 }
@@ -62,6 +67,7 @@ private class FakeGraph(private val app: TestApplication) : WatchGraph {
     override val sync: SyncCoordinator get() = error("not used by these tests")
     override val link: PhoneLink get() = app.phoneLink
     override val linkLeases: LinkLeases get() = error("not used by these tests")
+    override val downtify: DowntifyLink get() = app.downtifyLink
     override val updates: WatchUpdates get() = app.watchUpdates
 
     override suspend fun applySetup(incoming: WatchSetup) {
@@ -130,6 +136,17 @@ class ListenersTest {
         val said = app.transport.sent.single { it.path == UpdateProtocol.STATUS_PATH }
         assertEquals("phone-1", said.nodeId)
         assertEquals("""{"v":1,"state":"version","versionName":"2.5.2","versionCode":20502}""", said.text)
+    }
+
+    @Test
+    fun `the songs the phone found for a Downtify search reach the search that waits for them`() {
+        app.transport.onSend = { sent ->
+            if (sent.path == DowntifyProtocol.SEARCH_PATH) {
+                service().onMessageReceived(Event(DowntifyProtocol.RESULTS_PATH, """{"v":1,"id":"r1","ok":true,"songs":[{"id":"yt-1","title":"T","artist":"A"}]}""".toByteArray()))
+            }
+        }
+        val outcome = runBlocking { app.downtifyLink.search("alt-J") }
+        assertEquals("yt-1", (outcome as DowntifySearch.Found).songs.single().id)
     }
 
     @Test

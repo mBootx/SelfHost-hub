@@ -110,7 +110,7 @@ fun NowPlayingRoute(
             }
         }
     )
-    NowPlayingContent(ui, cover, actions, overlay, look = look, liked = ui.songId in liked, onCoverClick = onArt)
+    NowPlayingContent(ui, cover, actions, overlay, look = look, liked = ui.songId in liked, onCoverClick = onArt, clock = rememberClockText())
 }
 
 /**
@@ -185,7 +185,14 @@ fun AmbientNowPlayingRoute(graph: WatchGraph, ambient: AmbientState) {
     val cover = rememberCover(graph, ui.coverArt, ArtworkSize.THUMBNAIL)
     // The minute of the day moves the content for burn-in protection; `tick` makes sure it is read again.
     val minuteOfDay = remember(ambient.tick) { System.currentTimeMillis() / 60_000 }
-    AmbientNowPlayingContent(ui, cover, ambient, minuteOfDay)
+    if (NowPlayingPage.current == NowPlayingPage.CLOCK) {
+        // The clock page was the one being looked at: the always-on screen is its own, with the cover as outlines.
+        val context = LocalContext.current
+        val time = remember(ambient.tick) { clockText(context, System.currentTimeMillis()) }
+        AmbientClockContent(ui.hasSong, cover, time, ambient, minuteOfDay)
+    } else {
+        AmbientNowPlayingContent(ui, cover, ambient, minuteOfDay)
+    }
 }
 
 /** The cover alone, at the largest size: the only place the 640 px version is ever downloaded. */

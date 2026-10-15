@@ -8,6 +8,7 @@ import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import com.google.gson.JsonObject
+import com.selfhosthub.wear.core.DowntifyProtocol
 import com.selfhosthub.wear.core.LinkProtocol
 import com.selfhosthub.wear.core.SetupCodec
 import com.selfhosthub.wear.core.SetupFormatException
@@ -34,6 +35,7 @@ class WatchListenerService : WearableListenerService() {
             event.path == SetupProtocol.SETUP_PATH -> onSetup(event)
             event.path == UpdateProtocol.ASK_PATH -> runBlocking { watchGraph().updates.announceVersion() }
             event.path.startsWith(LinkProtocol.PREFIX) -> watchGraph().link.onMessage(event.path, event.data)
+            event.path.startsWith(DowntifyProtocol.PREFIX) -> watchGraph().downtify.onMessage(event.path, event.data)
         }
     }
 

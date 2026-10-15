@@ -2,15 +2,16 @@ import { useRef } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import ReanimatedSwipeable, { SwipeableMethods, SwipeDirection } from 'react-native-gesture-handler/ReanimatedSwipeable'
 import Animated, { Extrapolation, SharedValue, interpolate, useAnimatedStyle } from 'react-native-reanimated'
-import { ListStart, Play, X } from 'lucide-react-native'
+import { Check, ListStart, Play, X } from 'lucide-react-native'
 import { NavidromeClient, NDSong } from '@/services/navidrome'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useTrackSheetStore } from '@/store/trackSheetStore'
+import { useSelectionStore } from '@/store/selectionStore'
 import { useToastStore } from '@/store/toastStore'
 import CoverImage from '@/components/CoverImage'
 import EqualizerBars from './EqualizerBars'
 import OfflineButton from './OfflineButton'
-import { colors, radius, spacing } from '@/constants/theme'
+import { colors, radius, spacing, tint } from '@/constants/theme'
 
 interface Props {
   song: NDSong
@@ -51,6 +52,10 @@ function PlayNextAction({ translation }: { translation: SharedValue<number> }) {
 
 export default function TrackRow({ song, client, isCurrent, isPlaying, onPress, showArtist, onRemove }: Props) {
   const openSheet = useTrackSheetStore((s) => s.open)
+  // While songs are being picked a tap picks (or unpicks) instead of playing, and the swipe is off.
+  const selecting = useSelectionStore((s) => s.active)
+  const picked = useSelectionStore((s) => !!s.ids[song.id])
+  const toggleSelected = useSelectionStore((s) => s.toggle)
   const playNext = useNavidromeStore((s) => s.playNext)
   const showToast = useToastStore((s) => s.show)
   const swipeRef = useRef<SwipeableMethods>(null)
@@ -67,6 +72,7 @@ export default function TrackRow({ song, client, isCurrent, isPlaying, onPress, 
     <ReanimatedSwipeable
       ref={swipeRef}
       friction={1.5}
+      enabled={!selecting}
       leftThreshold={SWIPE_THRESHOLD}
       overshootLeft={false}
       overshootRight={false}
@@ -80,11 +86,12 @@ export default function TrackRow({ song, client, isCurrent, isPlaying, onPress, 
       onSwipeableOpen={() => swipeRef.current?.close()}
     >
       <Pressable
-        style={({ pressed }) => [styles.row, isCurrent && styles.rowActive, pressed && styles.pressed]}
-        onPress={onPress}
-        onLongPress={() => openSheet(song)}
+        style={({ pressed }) => [styles.row, isCurrent && styles.rowActive, picked && styles.rowPicked, pressed && styles.pressed]}
+        onPress={selecting ? () => toggleSelected(song) : onPress}
+        onLongPress={() => (selecting ? toggleSelected(song) : openSheet(song))}
         delayLongPress={300}
-        accessibilityRole="button"
+        accessibilityRole={selecting ? 'checkbox' : 'button'}
+        accessibilityState={selecting ? { checked: picked } : undefined}
         accessibilityLabel={`${song.title}, ${song.artist}`}
         accessibilityHint="Glisser vers la droite pour lire ensuite, appui long pour les options"
         accessibilityActions={
@@ -100,6 +107,9 @@ export default function TrackRow({ song, client, isCurrent, isPlaying, onPress, 
           else if (e.nativeEvent.actionName === 'remove') onRemove?.()
         }}
       >
+        {selecting && (
+          <View style={[styles.check, picked && styles.checkOn]}>{picked && <Check size={14} color={colors.onAccent} strokeWidth={3.5} />}</View>
+        )}
         <View style={styles.thumbWrap}>
           <CoverImage
             uri={coverId ? client.coverArtUrl(coverId, 100) : null}
@@ -122,8 +132,8 @@ export default function TrackRow({ song, client, isCurrent, isPlaying, onPress, 
           )}
         </View>
         <Text style={styles.duration}>{formatDuration(song.duration)}</Text>
-        <OfflineButton song={song} client={client} />
-        {onRemove && (
+        {!selecting && <OfflineButton song={song} client={client} />}
+        {onRemove && !selecting && (
           <Pressable onPress={onRemove} hitSlop={10} accessibilityRole="button" accessibilityLabel="Retirer de la playlist">
             <X size={16} color={colors.textMuted} />
           </Pressable>
@@ -153,6 +163,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.base
   },
   rowActive: { backgroundColor: colors.raised },
+  rowPicked: { backgroundColor: tint(colors.accent, 0.12) },
+  check: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.textMuted, alignItems: 'center', justifyContent: 'center' },
+  checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   pressed: { opacity: 0.6 },
   thumbWrap: { width: 44, height: 44, borderRadius: radius.sm, overflow: 'hidden' },
   thumb: { width: '100%', height: '100%' },
