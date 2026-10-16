@@ -67,6 +67,7 @@ object HandTracker {
     /** The size of the upright picture the landmarker saw, sent with each frame so the points can be drawn over the preview. */
     @Volatile var frameWidth = 0
     @Volatile var frameHeight = 0
+    val matrix = Matrix()
   }
 
   private val main = Handler(Looper.getMainLooper())
@@ -255,12 +256,11 @@ object HandTracker {
       session.lastFrameAt = now
       val landmarker = session.landmarker ?: createLandmarker(session).also { session.landmarker = it }
       val source = image.toBitmap()
-      val matrix = Matrix().apply {
-        postRotate(image.imageInfo.rotationDegrees.toFloat())
-        // Mirrored, as the front camera's preview and a mirror show it.
-        postScale(-1f, 1f)
-      }
-      val upright = Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
+      session.matrix.reset()
+      session.matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
+      // Mirrored, as the front camera's preview and a mirror show it.
+      session.matrix.postScale(-1f, 1f)
+      val upright = Bitmap.createBitmap(source, 0, 0, source.width, source.height, session.matrix, true)
       if (upright !== source) source.recycle()
       session.frameWidth = upright.width
       session.frameHeight = upright.height

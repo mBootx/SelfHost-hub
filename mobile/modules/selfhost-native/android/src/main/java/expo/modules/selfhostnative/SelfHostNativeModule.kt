@@ -373,7 +373,10 @@ class SelfHostNativeModule : Module() {
     AsyncFunction("sendWakeOnLan") { mac: String, broadcast: String -> sendMagicPacket(mac, broadcast) }
 
     OnDestroy {
-      if (live === this@SelfHostNativeModule) live = null
+      if (live === this@SelfHostNativeModule) {
+        live = null
+        MusicFocus.onChange = null
+      }
       // The app's players are stopped with it (expo-audio): the focus goes back.
       MusicFocus.abandon()
       HandTracker.stop()

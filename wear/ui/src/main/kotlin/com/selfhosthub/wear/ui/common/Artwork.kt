@@ -56,13 +56,15 @@ fun decodeCover(bytes: ByteArray, targetPixels: Int): ImageBitmap? {
     return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
 }
 
+private val GRAYSCALE_FILTER = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+
 /** The cover for `coverId` at `size`: what is already decoded, else what is stored, else a download. Null while loading or without one. */
 @Composable
 fun rememberCover(graph: WatchGraph?, coverId: String?, size: ArtworkSize): ImageBitmap? {
     val key = coverId?.let { "$it@${size.pixels}" }
     var image by remember(key) { mutableStateOf(key?.let { ArtworkMemory.get(it) }) }
     LaunchedEffect(key, graph) {
-        if (key == null || coverId == null || graph == null || image != null) return@LaunchedEffect
+        if (key == null || graph == null || image != null) return@LaunchedEffect
         val bytes = graph.artwork.get(coverId, size) ?: return@LaunchedEffect
         val decoded = withContext(Dispatchers.Default) { decodeCover(bytes, size.pixels) } ?: return@LaunchedEffect
         ArtworkMemory.put(key, decoded)
@@ -87,7 +89,7 @@ fun CoverBox(
                 contentDescription = contentDescription,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                colorFilter = if (grayscale) ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }) else null
+                colorFilter = if (grayscale) GRAYSCALE_FILTER else null
             )
         } else {
             Icon(Icons.Filled.MusicNote, contentDescription = null, tint = WatchColors.OnSurfaceMuted, modifier = Modifier.fillMaxSize(0.5f))

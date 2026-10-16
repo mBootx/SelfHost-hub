@@ -73,12 +73,17 @@ object CoverPalette {
         // Each hue with its two neighbours: one colour often straddles two bins.
         data class Group(val share: Double, val vivid: Double, val colour: Int, val hue: Double)
         val groups = (0 until HUE_BINS).map { i ->
-            val near = listOf((i + HUE_BINS - 1) % HUE_BINS, i, (i + 1) % HUE_BINS)
-            val n = near.sumOf { count[it] }
-            val w = near.sumOf { weight[it] }
-            val colour = if (w > 0) rgb((near.sumOf { red[it] } / w).toInt(), (near.sumOf { green[it] } / w).toInt(), (near.sumOf { blue[it] } / w).toInt())
-            else BLACK
-            Group(n / total, if (n > 0) near.sumOf { vivid[it] } / n else 0.0, colour, hue(colour))
+            val prev = (i + HUE_BINS - 1) % HUE_BINS
+            val next = (i + 1) % HUE_BINS
+            val n = count[prev] + count[i] + count[next]
+            val w = weight[prev] + weight[i] + weight[next]
+            val colour = if (w > 0) rgb(
+                ((red[prev] + red[i] + red[next]) / w).toInt(),
+                ((green[prev] + green[i] + green[next]) / w).toInt(),
+                ((blue[prev] + blue[i] + blue[next]) / w).toInt()
+            ) else BLACK
+            val v = vivid[prev] + vivid[i] + vivid[next]
+            Group(n / total, if (n > 0) v / n else 0.0, colour, hue(colour))
         }
         fun striking(g: Group) = g.vivid * sqrt(g.share)
         val mostStriking = groups.filter { it.share >= MIN_ACCENT }.maxByOrNull(::striking)
@@ -128,8 +133,9 @@ object CoverPalette {
      */
     fun brightLuminance(pixels: IntArray): Double {
         if (pixels.isEmpty()) return 0.0
-        val sorted = pixels.map { luminance(it) }.sorted()
-        return sorted[((sorted.size - 1) * 0.9).toInt()]
+        val lums = DoubleArray(pixels.size) { luminance(pixels[it]) }
+        java.util.Arrays.sort(lums)
+        return lums[((lums.size - 1) * 0.9).toInt()]
     }
 
     // --- Colour maths ---

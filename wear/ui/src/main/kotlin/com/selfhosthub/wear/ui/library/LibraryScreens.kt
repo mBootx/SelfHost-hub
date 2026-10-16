@@ -4,10 +4,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,7 +44,7 @@ fun LibraryHomeContent(onArtists: () -> Unit, onAlbums: () -> Unit, onPlaylists:
     ListScreen(stringResource(R.string.library)) {
         item { HomeChip(Icons.Filled.Person, stringResource(R.string.artists)) { haptics.tap(); onArtists() } }
         item { HomeChip(Icons.Filled.Album, stringResource(R.string.albums)) { haptics.tap(); onAlbums() } }
-        item { HomeChip(Icons.Filled.QueueMusic, stringResource(R.string.playlists)) { haptics.tap(); onPlaylists() } }
+        item { HomeChip(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.playlists)) { haptics.tap(); onPlaylists() } }
         item { HomeChip(Icons.Filled.Search, stringResource(R.string.search)) { haptics.tap(); onSearch() } }
     }
 }

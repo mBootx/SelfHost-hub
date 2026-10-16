@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -45,7 +44,6 @@ fun SeekBar(
     // The gesture handlers below live as long as `enabled` does; the callbacks change with every song (its length).
     val currentOnSeek by rememberUpdatedState(onSeek)
     val currentOnPreview by rememberUpdatedState(onPreview)
-    var width by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf<Float?>(null) }
     val shown = (dragging ?: progress).coerceIn(0f, 1f)
     val thumbRadius = with(LocalDensity.current) { (if (dragging != null) 7.dp else 5.dp).toPx() }
@@ -91,7 +89,6 @@ fun SeekBar(
         contentAlignment = Alignment.Center
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            width = size.width
             val y = size.height / 2
             val left = thumbRadius
             val right = size.width - thumbRadius
@@ -101,5 +98,150 @@ fun SeekBar(
             if (x > left) drawRoundRect(accent, Offset(left, y - trackHeight / 2), Size(x - left, trackHeight), CornerRadius(trackHeight / 2))
             if (enabled) drawCircle(Color.White, thumbRadius, Offset(x, y))
         }
+    }
+}
+
+/**
+ * A circular time slider surrounding the center play/pause button (Spotify-style):
+ * draws a circular progress arc around the center content and detects scrub gestures around the ring.
+ */
+@Composable
+fun CircularSeekBar(
+    progress: Float,
+    enabled: Boolean,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    strokeWidth: androidx.compose.ui.unit.Dp = 3.5.dp,
+    onPreview: (Float?) -> Unit = {},
+    onSeek: (Float) -> Unit,
+    content: @Composable () -> Unit
+) {
+    val currentOnSeek by rememberUpdatedState(onSeek)
+    val currentOnPreview by rememberUpdatedState(onPreview)
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    val shown = (dragging ?: progress).coerceIn(0f, 1f)
+    val accent = MaterialTheme.colors.primary
+    val density = LocalDensity.current
+
+    Box(
+        modifier = modifier
+            .semantics {
+                this.contentDescription = contentDescription
+                progressBarRangeInfo = ProgressBarRangeInfo(shown, 0f..1f)
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(enabled) {
+                    if (!enabled) return@pointerInput
+                    detectTapGestures { offset ->
+                        val cx = size.width / 2f
+                        val cy = size.height / 2f
+                        val dx = offset.x - cx
+                        val dy = offset.y - cy
+                        val dist = kotlin.math.hypot(dx, dy)
+                        val strokePx = with(density) { strokeWidth.toPx() }
+                        val ringRadius = (minOf(size.width, size.height) - strokePx) / 2f
+                        if (dist >= ringRadius - with(density) { 10.dp.toPx() }) {
+                            val angle = (ControlMath.angleOf(dx, dy) + 90f + 360f) % 360f
+                            val f = (angle / 360f).coerceIn(0f, 1f)
+                            currentOnSeek(f)
+                        }
+                    }
+                }
+                .pointerInput(enabled) {
+                    if (!enabled) return@pointerInput
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val cx = size.width / 2f
+                            val cy = size.height / 2f
+                            val dx = offset.x - cx
+                            val dy = offset.y - cy
+                            val dist = kotlin.math.hypot(dx, dy)
+                            val strokePx = with(density) { strokeWidth.toPx() }
+                            val ringRadius = (minOf(size.width, size.height) - strokePx) / 2f
+                            if (dist >= ringRadius - with(density) { 10.dp.toPx() }) {
+                                val angle = (ControlMath.angleOf(dx, dy) + 90f + 360f) % 360f
+                                val f = (angle / 360f).coerceIn(0f, 1f)
+                                dragging = f
+                                currentOnPreview(f)
+                            }
+                        },
+                        onDragEnd = {
+                            dragging?.let(currentOnSeek)
+                            dragging = null
+                            currentOnPreview(null)
+                        },
+                        onDragCancel = {
+                            dragging = null
+                            currentOnPreview(null)
+                        }
+                    ) { change, _ ->
+                        if (dragging != null) {
+                            change.consume()
+                            val cx = size.width / 2f
+                            val cy = size.height / 2f
+                            val dx = change.position.x - cx
+                            val dy = change.position.y - cy
+                            val angle = (ControlMath.angleOf(dx, dy) + 90f + 360f) % 360f
+                            val f = (angle / 360f).coerceIn(0f, 1f)
+                            dragging = f
+                            currentOnPreview(f)
+                        }
+                    }
+                }
+        ) {
+            val strokePx = strokeWidth.toPx()
+            val diameter = minOf(size.width, size.height) - strokePx
+            val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+            val arcSize = Size(diameter, diameter)
+            val ringRadius = diameter / 2f
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+
+            // Full circular track (subtle translucent ring)
+            drawArc(
+                color = Color.White.copy(alpha = 0.22f),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = strokePx,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+            )
+
+            // Elapsed time progress arc
+            if (shown > 0f) {
+                drawArc(
+                    color = accent,
+                    startAngle = -90f,
+                    sweepAngle = shown * 360f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                        width = strokePx,
+                        cap = androidx.compose.ui.graphics.StrokeCap.Round
+                    )
+                )
+
+                // Thumb dot at the head of the progress arc
+                if (enabled) {
+                    val rad = Math.toRadians((-90f + shown * 360f).toDouble())
+                    val thumbX = (cx + ringRadius * kotlin.math.cos(rad)).toFloat()
+                    val thumbY = (cy + ringRadius * kotlin.math.sin(rad)).toFloat()
+                    val thumbR = if (dragging != null) strokePx * 1.5f else strokePx * 1.0f
+                    drawCircle(Color.White, radius = thumbR, center = Offset(thumbX, thumbY))
+                }
+            }
+        }
+
+        // Center content (Play/Pause transport button)
+        content()
     }
 }

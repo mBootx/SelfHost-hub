@@ -22,8 +22,12 @@ object PrivateAddress {
     private fun ipv4(text: String): Pair<Int, Int>? {
         val parts = text.split('.')
         if (parts.size != 4) return null
-        val numbers = parts.map { it.toIntOrNull()?.takeIf { n -> n in 0..255 } ?: return null }
-        return numbers[0] to numbers[1]
+        val n0 = parts[0].toIntOrNull() ?: return null
+        val n1 = parts[1].toIntOrNull() ?: return null
+        val n2 = parts[2].toIntOrNull() ?: return null
+        val n3 = parts[3].toIntOrNull() ?: return null
+        if (n0 !in 0..255 || n1 !in 0..255 || n2 !in 0..255 || n3 !in 0..255) return null
+        return n0 to n1
     }
 
     private val HOME_SUFFIXES = listOf(".local", ".lan", ".home", ".home.arpa", ".internal")

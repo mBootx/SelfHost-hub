@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -60,6 +61,7 @@ import com.selfhosthub.wear.ui.common.CoverBackdrop
 import com.selfhosthub.wear.ui.common.CoverBox
 import com.selfhosthub.wear.ui.common.CoverLook
 import com.selfhosthub.wear.ui.common.CoverTheme
+import com.selfhosthub.wear.ui.common.coverLookOf
 import com.selfhosthub.wear.ui.common.rememberHaptics
 import com.selfhosthub.wear.ui.theme.WatchColors
 
@@ -123,8 +125,9 @@ fun NowPlayingContent(
             .focusRequester(focus)
             .focusable()
     ) {
-        CoverBackdrop(if (ui.hasSong) look else null)
-        CoverTheme(if (ui.hasSong) look?.colours else null) {
+        val effectiveLook = look ?: remember(cover) { cover?.let { coverLookOf(it) } }
+        CoverBackdrop(if (ui.hasSong) effectiveLook else null)
+        CoverTheme(if (ui.hasSong) effectiveLook?.colours else null) {
             Box(Modifier.fillMaxSize()) {
                 VerticalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
                     when (page) {
@@ -150,66 +153,111 @@ private fun PlayerPage(ui: NowPlayingUi, cover: ImageBitmap?, actions: NowPlayin
     var preview by remember { mutableStateOf<Float?>(null) }
     val shownPosition = preview?.let { ControlMath.secondsFor(it, ui.duration) } ?: ui.position
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(top = 28.dp, bottom = 14.dp, start = 22.dp, end = 22.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
-        CoverBox(cover, Modifier.size(50.dp).clickable(onClickLabel = null) { onCoverClick() }, RoundedCornerShape(10.dp))
-        Spacer(Modifier.height(4.dp))
-        Text(
-            ui.title.orEmpty(),
-            style = MaterialTheme.typography.title3,
-            color = WatchColors.OnSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().basicMarquee(iterations = 3, initialDelayMillis = 1500)
-        )
-        Text(
-            ui.statusLine ?: ui.artist.orEmpty(),
-            style = MaterialTheme.typography.caption2,
-            color = if (ui.statusLine != null) WatchColors.Warning else MaterialTheme.colors.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-        SeekBar(
-            progress = ui.progress,
-            enabled = ui.connected && ui.duration > 0,
-            contentDescription = stringResource(R.string.seek_bar),
-            modifier = Modifier.fillMaxWidth(),
-            onPreview = { preview = it }
-        ) { fraction ->
-            haptics.confirm()
-            actions.onSeek(ControlMath.secondsFor(fraction, ui.duration))
+        // Track Title & Artist (top area, tap opens unblurred art)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(top = 22.dp, start = 26.dp, end = 26.dp)
+                .clickable(onClickLabel = null) { onCoverClick() }
+        ) {
+            Text(
+                ui.title.orEmpty(),
+                style = MaterialTheme.typography.title3,
+                color = WatchColors.OnSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .basicMarquee(iterations = 3, initialDelayMillis = 1500)
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                ui.statusLine ?: ui.artist.orEmpty(),
+                style = MaterialTheme.typography.caption2,
+                color = if (ui.statusLine != null) WatchColors.Warning else MaterialTheme.colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatClock(shownPosition), style = MaterialTheme.typography.caption3, color = MaterialTheme.colors.onSurfaceVariant)
-            Text(formatClock(ui.duration), style = MaterialTheme.typography.caption3, color = MaterialTheme.colors.onSurfaceVariant)
-        }
-        Spacer(Modifier.height(2.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            TransportButton(Icons.Filled.SkipPrevious, stringResource(R.string.previous), 38.dp, filled = false) {
+
+        // Center Transport: Last Song | Circular SeekBar with Center Play/Pause | Next Song
+        Row(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TransportButton(
+                icon = Icons.Filled.SkipPrevious,
+                description = stringResource(R.string.previous),
+                size = 38.dp,
+                filled = false
+            ) {
                 haptics.tap()
                 actions.onPrevious()
             }
-            TransportButton(
-                if (ui.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                stringResource(if (ui.isPlaying) R.string.pause else R.string.play),
-                54.dp,
-                filled = true
+
+            Spacer(Modifier.width(12.dp))
+
+            CircularSeekBar(
+                progress = ui.progress,
+                enabled = ui.connected && ui.duration > 0,
+                contentDescription = stringResource(R.string.seek_bar),
+                modifier = Modifier.size(76.dp),
+                strokeWidth = 3.5.dp,
+                onPreview = { preview = it },
+                onSeek = { fraction ->
+                    haptics.confirm()
+                    actions.onSeek(ControlMath.secondsFor(fraction, ui.duration))
+                }
             ) {
-                haptics.confirm()
-                actions.onToggle()
+                TransportButton(
+                    icon = if (ui.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    description = stringResource(if (ui.isPlaying) R.string.pause else R.string.play),
+                    size = 52.dp,
+                    filled = true
+                ) {
+                    haptics.confirm()
+                    actions.onToggle()
+                }
             }
-            TransportButton(Icons.Filled.SkipNext, stringResource(R.string.next), 38.dp, filled = false) {
+
+            Spacer(Modifier.width(12.dp))
+
+            TransportButton(
+                icon = Icons.Filled.SkipNext,
+                description = stringResource(R.string.next),
+                size = 38.dp,
+                filled = false
+            ) {
                 haptics.tap()
                 actions.onNext()
             }
+        }
+
+        // Track time: Elapsed / Duration (bottom area)
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 20.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${formatClock(shownPosition)} / ${formatClock(ui.duration)}",
+                style = MaterialTheme.typography.caption3,
+                color = MaterialTheme.colors.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

@@ -240,7 +240,10 @@ fun SearchRoute(graph: WatchGraph, onArtist: (ArtistEntity) -> Unit, onAlbum: (A
         onEdit = ::openKeyboard,
         onArtist = onArtist,
         onAlbum = onAlbum,
-        onPlay = { track -> if (track.albumId != null) sender.playAlbum(track.albumId!!, songId = track.id) else sender.playSong(track.id, PlayMode.NOW) },
+        onPlay = { track ->
+            val albumId = track.albumId
+            if (albumId != null) sender.playAlbum(albumId, songId = track.id) else sender.playSong(track.id, PlayMode.NOW)
+        },
         onMore = { more = it },
         downtify = downtify,
         asked = asked,
@@ -266,7 +269,12 @@ fun SearchRoute(graph: WatchGraph, onArtist: (ArtistEntity) -> Unit, onAlbum: (A
     TrackActionsDialog(
         track = more,
         onDismiss = { more = null },
-        onNow = { more?.let { track -> if (track.albumId != null) sender.playAlbum(track.albumId!!, songId = track.id) else sender.playSong(track.id, PlayMode.NOW) } },
+        onNow = {
+            more?.let { track ->
+                val albumId = track.albumId
+                if (albumId != null) sender.playAlbum(albumId, songId = track.id) else sender.playSong(track.id, PlayMode.NOW)
+            }
+        },
         onNext = { more?.let { sender.playSong(it.id, PlayMode.NEXT) } },
         onLast = { more?.let { sender.playSong(it.id, PlayMode.LAST) } }
     )

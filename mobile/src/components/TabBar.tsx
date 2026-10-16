@@ -1,7 +1,9 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import type { BottomTabBarProps } from 'expo-router/js-tabs'
 import { Home, Library, Heart, Search, FolderOpen, Images, Settings } from 'lucide-react-native'
-import { colors, layout, spacing } from '@/constants/theme'
+import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated'
+import { useTabAnimationStore } from '@/store/tabAnimationStore'
+import { colors, layout, radius, spacing, tint } from '@/constants/theme'
 
 type IconComponent = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>
 
@@ -20,7 +22,85 @@ const TABS: Record<string, { icon: IconComponent; label: string; name: string }>
   settings: { icon: Settings, label: 'Réglages', name: 'Réglages' }
 }
 
+interface TabItemProps {
+  routeKey: string
+  routeName: string
+  focused: boolean
+  tab: { icon: IconComponent; label: string; name: string }
+  duration: number
+  animationType: string
+  onPress: () => void
+}
+
+function TabItem({ focused, tab, duration, animationType, onPress }: TabItemProps) {
+  const Icon = tab.icon
+
+  const pillStyle = useAnimatedStyle(() => {
+    if (animationType === 'none') {
+      return { opacity: focused ? 1 : 0 }
+    }
+    return {
+      opacity: withTiming(focused ? 1 : 0, { duration: Math.min(duration, 220) })
+    }
+  }, [focused, animationType, duration])
+
+  const iconStyle = useAnimatedStyle(() => {
+    if (animationType === 'none') {
+      return { transform: [{ scale: 1 }] }
+    }
+    return {
+      transform: [
+        {
+          scale: withTiming(focused ? 1.08 : 1.0, { duration: Math.min(duration, 220) })
+        }
+      ]
+    }
+  }, [focused, animationType, duration])
+
+  const labelStyle = useAnimatedStyle(() => {
+    if (animationType === 'none') {
+      return { opacity: focused ? 1 : 0, transform: [{ translateY: 0 }] }
+    }
+    return {
+      opacity: withTiming(focused ? 1 : 0, { duration: Math.min(duration, 200) }),
+      transform: [
+        {
+          translateY: withTiming(focused ? 0 : 2, { duration: Math.min(duration, 200) })
+        }
+      ]
+    }
+  }, [focused, animationType, duration])
+
+  return (
+    <Pressable
+      style={styles.item}
+      onPress={onPress}
+      android_ripple={{ color: colors.hover, borderless: true, radius: 30 }}
+      accessibilityRole="button"
+      accessibilityState={{ selected: focused }}
+      accessibilityLabel={tab.name}
+    >
+      <View style={styles.iconWrap}>
+        <Animated.View style={[styles.pill, pillStyle]} />
+        <Animated.View style={iconStyle}>
+          <Icon size={23} color={focused ? colors.accent : colors.textMuted} strokeWidth={focused ? 2.4 : 1.9} />
+        </Animated.View>
+      </View>
+      {focused && (
+        <Animated.View style={labelStyle}>
+          <Text style={styles.label} numberOfLines={1}>
+            {tab.label}
+          </Text>
+        </Animated.View>
+      )}
+    </Pressable>
+  )
+}
+
 export default function TabBar({ state, navigation, insets }: BottomTabBarProps) {
+  const animationType = useTabAnimationStore((s) => s.animationType)
+  const durationMs = useTabAnimationStore((s) => s.durationMs)
+
   return (
     <View style={[styles.bar, { height: layout.tabBar + insets.bottom, paddingBottom: insets.bottom }]}>
       {state.routes.map((route, index) => {
@@ -28,7 +108,6 @@ export default function TabBar({ state, navigation, insets }: BottomTabBarProps)
         if (!tab) return null
 
         const focused = state.index === index
-        const Icon = tab.icon
 
         function onPress(): void {
           const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true })
@@ -38,24 +117,16 @@ export default function TabBar({ state, navigation, insets }: BottomTabBarProps)
         }
 
         return (
-          <Pressable
+          <TabItem
             key={route.key}
-            style={styles.item}
+            routeKey={route.key}
+            routeName={route.name}
+            focused={focused}
+            tab={tab}
+            duration={durationMs}
+            animationType={animationType}
             onPress={onPress}
-            android_ripple={{ color: colors.hover, borderless: true, radius: 30 }}
-            accessibilityRole="button"
-            accessibilityState={{ selected: focused }}
-            accessibilityLabel={tab.name}
-          >
-            <View style={styles.iconWrap}>
-              <Icon size={23} color={focused ? colors.accent : colors.textMuted} strokeWidth={focused ? 2.4 : 1.9} />
-            </View>
-            {focused && (
-              <Text style={styles.label} numberOfLines={1}>
-                {tab.label}
-              </Text>
-            )}
-          </Pressable>
+          />
         )
       })}
     </View>
@@ -73,6 +144,14 @@ const styles = StyleSheet.create({
   },
   item: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', gap: 2, paddingHorizontal: 2 },
   iconWrap: { height: 30, alignItems: 'center', justifyContent: 'center' },
+  pill: {
+    position: 'absolute',
+    width: 38,
+    height: 26,
+    borderRadius: radius.full,
+    backgroundColor: tint(colors.accent, 0.14)
+  },
   /** Only the active tab is labelled, so it never has to compete for width. */
   label: { color: colors.accent, fontSize: 9, fontWeight: '700', letterSpacing: -0.1 }
 })
+

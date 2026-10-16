@@ -78,9 +78,17 @@ object CoverOutline {
 
     /** The edge picture of a cover, `SIZE` pixels a side. */
     fun of(cover: ImageBitmap, binary: Boolean): ImageBitmap {
-        val small = Bitmap.createScaledBitmap(cover.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, false), SIZE, SIZE, true)
+        val androidBitmap = cover.asAndroidBitmap()
+        val softwareBitmap = if (androidBitmap.config == Bitmap.Config.HARDWARE) {
+            androidBitmap.copy(Bitmap.Config.ARGB_8888, false)
+        } else {
+            androidBitmap
+        }
+        val small = Bitmap.createScaledBitmap(softwareBitmap, SIZE, SIZE, true)
         val pixels = IntArray(SIZE * SIZE)
         small.getPixels(pixels, 0, SIZE, 0, 0, SIZE, SIZE)
+        if (softwareBitmap !== androidBitmap) softwareBitmap.recycle()
+        if (small !== androidBitmap && small !== softwareBitmap) small.recycle()
         val lines = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
         lines.setPixels(edges(pixels, SIZE, SIZE, binary), 0, SIZE, 0, 0, SIZE, SIZE)
         return lines.asImageBitmap()

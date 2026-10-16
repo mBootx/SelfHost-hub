@@ -9,6 +9,27 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.2.0',
+    items: [
+      {
+        title: 'Animations des onglets',
+        text: 'Changer d’onglet s’anime désormais de manière fluide. Rendez-vous dans Réglages → Personnaliser → Animations des onglets pour choisir le style (glissement ou fondu), la vitesse (rapide, équilibré, doux ou curseur personnalisé) et tester le résultat en direct.'
+      },
+      {
+        title: 'Montre : pochette plein écran et heure moderne',
+        text: 'La page horloge au-dessus du lecteur affiche la vignette de l’album en plein écran avec un dégradé élégant, et une typographie moderne placée dans le coin inférieur droit.'
+      },
+      {
+        title: 'Montre : lecteur style Spotify',
+        text: 'Bouton pause centré, curseur temporel circulaire autour du bouton avec contrôle tactile, boutons précédent/suivant sur les côtés, volume au cadran rotatif et fond en vignette floutée.'
+      },
+      {
+        title: 'Performances et optimisations',
+        text: 'Amélioration de la fluidité générale, élimination des allocations inutiles lors du suivi des gestes, widget plus réactif et gestion de la mémoire optimisée sur la montre et le téléphone.'
+      }
+    ]
+  },
+  {
     version: '3.1.0',
     items: [
       {

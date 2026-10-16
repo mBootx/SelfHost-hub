@@ -32,6 +32,7 @@ import { useWhatsNewStore } from '@/store/whatsNewStore'
 import { startWrappedSchedule } from '@/store/wrappedStore'
 import { startAppLock } from '@/store/appLockStore'
 import { useAudioSettingsStore } from '@/store/audioSettingsStore'
+import { useTabAnimationStore } from '@/store/tabAnimationStore'
 import { useCarModeStore } from '@/store/carModeStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
@@ -82,6 +83,7 @@ export default function RootLayout() {
   const loadHistory = useHistoryStore((s) => s.loadFromDisk)
   const checkForUpdate = useUpdateStore((s) => s.check)
   const loadAudioSettings = useAudioSettingsStore((s) => s.load)
+  const loadTabAnimation = useTabAnimationStore((s) => s.load)
   const loadCarMode = useCarModeStore((s) => s.load)
   const checkWhatsNew = useWhatsNewStore((s) => s.check)
 
@@ -99,6 +101,7 @@ export default function RootLayout() {
     loadHistory()
     loadPlaybackPrefs()
     loadAudioSettings()
+    loadTabAnimation()
     loadCarMode()
     startPlaybackMemory()
     startScrobbler()

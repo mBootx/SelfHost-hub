@@ -21,12 +21,13 @@ class ArtworkRepository(
     private val api: SubsonicApi,
     private val now: () -> Long = System::currentTimeMillis
 ) {
-    // One download per cover at a time: a list that scrolls back and forth asks for the same ones again.
-    private val locks = ConcurrentHashMap<String, Mutex>()
+    // One download per cover at a time: striped mutexes avoid unbounded heap growth as thousands of covers are browsed.
+    private val stripes = Array(STRIPE_COUNT) { Mutex() }
+    private fun mutexFor(coverId: String): Mutex = stripes[(coverId.hashCode() and 0x7FFFFFFF) % STRIPE_COUNT]
 
     /** The cover at `size`, or null when the server has none (or cannot be reached and none is stored). */
     suspend fun get(coverId: String, size: ArtworkSize): ByteArray? {
-        val mutex = locks.getOrPut(coverId) { Mutex() }
+        val mutex = mutexFor(coverId)
         return mutex.withLock {
             val stored = dao.get(coverId)
             readStored(stored, size)?.let { return@withLock it }
@@ -76,4 +77,8 @@ class ArtworkRepository(
 
     /** Large covers are only worth keeping while their song is around: drops those not used for `maxAgeMs`. */
     suspend fun dropOldLarge(maxAgeMs: Long) = dao.dropLargeOlderThan(now() - maxAgeMs)
+
+    private companion object {
+        const val STRIPE_COUNT = 32
+    }
 }

@@ -42,10 +42,10 @@ fun coverLookOf(image: ImageBitmap): CoverLook? {
     val sample = Bitmap.createScaledBitmap(bitmap, SAMPLE, SAMPLE, true)
     val pixels = IntArray(SAMPLE * SAMPLE)
     sample.getPixels(pixels, 0, SAMPLE, 0, 0, SAMPLE, SAMPLE)
+    if (sample !== bitmap) sample.recycle()
     val colours = CoverPalette.from(pixels) ?: return null
     val tiny = Bitmap.createScaledBitmap(bitmap, 10, 10, true)
     val blurred = Bitmap.createScaledBitmap(tiny, 80, 80, true)
-    if (sample !== bitmap) sample.recycle()
     if (tiny !== bitmap) tiny.recycle()
     return CoverLook(blurred.asImageBitmap(), colours)
 }

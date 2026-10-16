@@ -80,6 +80,7 @@ class PlayerWidgetProvider : AppWidgetProvider() {
       views.setOnClickPendingIntent(R.id.widget_toggle, command(context, "toggle", 1))
       views.setOnClickPendingIntent(R.id.widget_next, command(context, "next", 2))
       views.setOnClickPendingIntent(R.id.widget_previous, command(context, "previous", 3))
+      views.setImageViewResource(R.id.widget_cover, R.drawable.widget_cover_placeholder)
       val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
       if (open != null) {
         views.setOnClickPendingIntent(R.id.widget_root, PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
@@ -90,14 +91,13 @@ class PlayerWidgetProvider : AppWidgetProvider() {
       if (cover.isNotEmpty() && title.isNotEmpty()) {
         NowPlayingArtwork.request(cover) { art ->
           if (art == null) return@request
+          val currentIds = ids(context)
+          if (currentIds.isEmpty()) return@request
           val side = COVER_SIDE_PX
           val scaled = Bitmap.createScaledBitmap(art.bitmap, side, side, true)
           views.setImageViewBitmap(R.id.widget_cover, scaled)
-          manager.updateAppWidget(ids(context), views)
+          manager.updateAppWidget(currentIds, views)
         }
-      } else {
-        views.setImageViewResource(R.id.widget_cover, R.drawable.widget_cover_placeholder)
-        manager.updateAppWidget(ids, views)
       }
     }
   }

@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.2.0 — 2026-10-16
+
+### Added
+- **Smooth tab transitions & settings (Android).** Switching between bottom tabs now animates smoothly using a custom Bézier easing curve. A dedicated settings panel (Réglages → Personnaliser → Animations des onglets) allows selecting the transition style (Glissement, Fondu, Instantané), adjusting the animation speed (Rapide 150 ms, Équilibré 250 ms, Doux 380 ms, or custom slider from 80 to 500 ms), and testing in real time with an interactive live preview.
+- **Enhanced tab bar feedback (Android).** Tapping a tab now features an animated active pill indicator, subtle icon scaling, and smooth label transitions that adapt to the configured animation speed.
+- **Fullscreen artwork vignette on the watch.** The top panel (swipe down from Now Playing) now renders the album artwork in edge-to-edge fullscreen with a soft vertical gradient scrim for contrast, alongside a modern, stylish typography clock anchored in the bottom-right corner with circular safe-area insets.
+- **Spotify-style watch player interface (Wear OS).** The Now Playing screen features a centered Play/Pause button wrapped by a circular time slider with live scrubbing gestures, flanked by Previous and Next track controls on the sides. Turning the rotary crown or circular bezel controls audio volume with the edge bezel indicator, and the entire backdrop displays the blurred album artwork with a radial vignette veil.
+
+### Fixed
+- **Performance optimizations & bug fixes (Android & Wear OS).**
+  - Android native: Reused transformation matrices in hand tracking to prevent camera-frame heap allocations at 24–30 FPS; resolved cover placeholder flicker and redundant updates in the home-screen player widget; cleared audio focus listeners on module destruction.
+  - Wear OS: Replaced unbounded mutex map in artwork repository with 32 striped locks to prevent memory leaks; fixed un-recycled native bitmaps in cover outline and backdrop rendering; eliminated boxed allocations in palette extraction and IPv4 octet parsing; removed redundant seek bar invalidations during canvas drawing.
+
 ## 3.1.0 — 2026-10-15
 
 ### Added

@@ -5,10 +5,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,8 +92,8 @@ fun TrackActionsDialog(track: TrackEntity?, onDismiss: () -> Unit, onNow: () -> 
     Dialog(showDialog = track != null, onDismissRequest = onDismiss) {
         Alert(title = { Text(track?.title.orEmpty(), maxLines = 2) }) {
             item { ActionChip(Icons.Filled.PlayArrow, stringResource(R.string.play_now)) { onNow(); onDismiss() } }
-            item { ActionChip(Icons.Filled.QueueMusic, stringResource(R.string.play_next)) { onNext(); onDismiss() } }
-            item { ActionChip(Icons.Filled.PlaylistAdd, stringResource(R.string.add_to_queue)) { onLast(); onDismiss() } }
+            item { ActionChip(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.play_next)) { onNext(); onDismiss() } }
+            item { ActionChip(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue)) { onLast(); onDismiss() } }
         }
     }
 }

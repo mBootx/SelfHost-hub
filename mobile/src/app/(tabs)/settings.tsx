@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Music, FolderOpen, Download, HardDriveDownload, Check, Cast, RefreshCw, Sparkles, Server, Activity, ListMusic, Palette, SlidersHorizontal, Car, Watch, ImageUp, Lock } from 'lucide-react-native'
+import { Music, FolderOpen, Download, HardDriveDownload, Check, Cast, RefreshCw, Sparkles, Server, Activity, ListMusic, Palette, SlidersHorizontal, Car, Watch, ImageUp, Lock, Layers } from 'lucide-react-native'
 import { installedVersion } from '@/services/appUpdate'
 import { useIsOwner } from '@/hooks/useIsOwner'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
 import AppearanceSection from '@/components/settings/AppearanceSection'
+import TabAnimationSection from '@/components/settings/TabAnimationSection'
 import PlaybackSection from '@/components/settings/PlaybackSection'
 import CarModeSection from '@/components/settings/CarModeSection'
 import CoverStorageRow from '@/components/settings/CoverStorageRow'
@@ -14,6 +15,7 @@ import AppLockSection from '@/components/settings/AppLockSection'
 import WatchSection from '@/components/settings/WatchSection'
 import WrappedSection from '@/components/settings/WrappedSection'
 import { useUpdateStore } from '@/store/updateStore'
+import { useTabAnimationStore } from '@/store/tabAnimationStore'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { useFileBrowserStore } from '@/store/filebrowserStore'
 import { useDowntifyStore } from '@/store/downtifyStore'
@@ -130,6 +132,7 @@ export default function SettingsTab() {
 
   const activeDownloads = downtifyQueue.filter((q) => q.status === 'downloading' || q.status === 'queued').length
   const accentName = ACCENT_PRESETS.find((p) => p.hex.toLowerCase() === appearance.accent.toLowerCase())?.label ?? 'Perso'
+  const tabAnimationSummary = useTabAnimationStore((s) => s.getSummary())
 
   return (
     <Screen>
@@ -245,6 +248,9 @@ export default function SettingsTab() {
         <GroupLabel>Personnaliser</GroupLabel>
         <SettingsGroup icon={Palette} title="Apparence" summary={`${accentName} · ${BACKGROUNDS[appearance.background].label}`}>
           <AppearanceSection />
+        </SettingsGroup>
+        <SettingsGroup icon={Layers} title="Animations des onglets" summary={tabAnimationSummary}>
+          <TabAnimationSection />
         </SettingsGroup>
         <SettingsGroup icon={SlidersHorizontal} title="Lecture et égaliseur" summary="Fondu enchaîné, volume constant, égaliseur">
           <PlaybackSection />
