@@ -16,6 +16,7 @@
     <string name="volume_mute">Couper le son</string>
     <string name="volume_unmute">Remettre le son</string>
     <string name="seek_bar">Position dans le titre</string>
+    <string name="open_cover">Voir la pochette</string>
     <string name="playing_on">Sur %1$s</string>
     <string name="following_player">Suit la lecture</string>
 

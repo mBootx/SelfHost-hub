@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.Text
+import com.selfhosthub.wear.ui.R
 import com.selfhosthub.wear.ui.common.AmbientPolicy
 import com.selfhosthub.wear.ui.common.AmbientState
 import com.selfhosthub.wear.ui.common.OutlineCover
@@ -91,7 +93,7 @@ fun ClockPage(cover: ImageBitmap?, hasSong: Boolean, time: String, onCoverClick:
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
-            .clickable(onClickLabel = null) { onCoverClick() }
+            .clickable(enabled = hasSong, onClickLabel = stringResource(R.string.open_cover)) { onCoverClick() }
     ) {
         if (hasSong && cover != null) {
             Image(
@@ -145,14 +147,16 @@ fun ClockPage(cover: ImageBitmap?, hasSong: Boolean, time: String, onCoverClick:
             text = time,
             style = TextStyle(
                 color = Color.White,
-                fontSize = 34.sp,
+                fontSize = 44.sp,
                 fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Medium,
-                letterSpacing = (-0.5).sp,
+                fontWeight = FontWeight.Light,
+                letterSpacing = 1.sp,
+                // Digits of one width, so the time does not shift sideways as the minutes change.
+                fontFeatureSettings = "tnum",
                 shadow = Shadow(
                     color = Color.Black.copy(alpha = 0.85f),
                     offset = Offset(0f, 2f),
-                    blurRadius = 8f
+                    blurRadius = 10f
                 )
             ),
             maxLines = 1,

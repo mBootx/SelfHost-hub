@@ -20,6 +20,9 @@ export default function TabAnimationSection() {
   const setSpeed = useTabAnimationStore((s) => s.setSpeed)
   const setCustomDurationMs = useTabAnimationStore((s) => s.setCustomDurationMs)
 
+  // Where the slider is while the finger is on it; the setting is only saved when it lets go.
+  const [dragMs, setDragMs] = useState<number | null>(null)
+
   // Interactive preview state
   const [previewTab, setPreviewTab] = useState<'A' | 'B'>('A')
 
@@ -98,7 +101,7 @@ export default function TabAnimationSection() {
       <View style={[styles.card, animationType === 'none' && styles.dimmed]}>
         <View style={styles.labelRow}>
           <Text style={styles.label}>Vitesse</Text>
-          <Text style={styles.value}>{animationType === 'none' ? 'Désactivée' : `${durationMs} ms`}</Text>
+          <Text style={styles.value}>{animationType === 'none' ? 'Désactivée' : `${dragMs ?? durationMs} ms`}</Text>
         </View>
 
         <View style={styles.presets}>
@@ -122,11 +125,15 @@ export default function TabAnimationSection() {
         </View>
 
         <Slider
-          value={durationMs}
+          value={dragMs ?? durationMs}
           minimumValue={80}
           maximumValue={500}
           step={10}
-          onValueChange={setCustomDurationMs}
+          onValueChange={setDragMs}
+          onSlidingComplete={(ms) => {
+            setDragMs(null)
+            setCustomDurationMs(ms)
+          }}
           disabled={animationType === 'none'}
           minimumTrackTintColor={colors.accent}
           maximumTrackTintColor={colors.hover}

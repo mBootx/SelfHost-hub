@@ -109,4 +109,22 @@ object ControlMath {
     fun volumeAfter(volume: Double, steps: Int, step: Double = 0.04): Double = (volume + steps * step).coerceIn(0.0, 1.0)
 
     fun volumePercent(volume: Double): Int = Math.round(volume.coerceIn(0.0, 1.0) * 100).toInt()
+
+    /** How far round a ring a point `dx`, `dy` from its centre is, from 0 (12 o'clock) to 1, clockwise. */
+    fun ringFraction(dx: Float, dy: Float): Float = (((angleOf(dx, dy) + 90f) % 360f + 360f) % 360f) / 360f
+
+    /**
+     * The same, kept from wrapping while a finger is down: going on past 12 o'clock at either end of the song
+     * stops at that end instead of jumping to the other one (a jump of more than half the ring in one move is
+     * the finger crossing the top, not a real move).
+     */
+    fun ringFractionFrom(previous: Float, raw: Float): Float = when {
+        raw - previous > 0.5f -> 0f
+        previous - raw > 0.5f -> 1f
+        else -> raw
+    }
+
+    /** Whether a touch `distance` from the centre of a seek ring of `radius` (to the middle of its stroke) is on it: a band, not the whole square. */
+    fun onSeekRing(distance: Float, radius: Float, innerSlop: Float, outerSlop: Float): Boolean =
+        distance >= radius - innerSlop && distance <= radius + outerSlop
 }

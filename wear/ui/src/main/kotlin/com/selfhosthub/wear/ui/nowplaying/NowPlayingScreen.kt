@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
@@ -61,7 +60,6 @@ import com.selfhosthub.wear.ui.common.CoverBackdrop
 import com.selfhosthub.wear.ui.common.CoverBox
 import com.selfhosthub.wear.ui.common.CoverLook
 import com.selfhosthub.wear.ui.common.CoverTheme
-import com.selfhosthub.wear.ui.common.coverLookOf
 import com.selfhosthub.wear.ui.common.rememberHaptics
 import com.selfhosthub.wear.ui.theme.WatchColors
 
@@ -125,14 +123,13 @@ fun NowPlayingContent(
             .focusRequester(focus)
             .focusable()
     ) {
-        val effectiveLook = look ?: remember(cover) { cover?.let { coverLookOf(it) } }
-        CoverBackdrop(if (ui.hasSong) effectiveLook else null)
-        CoverTheme(if (ui.hasSong) effectiveLook?.colours else null) {
+        CoverBackdrop(if (ui.hasSong) look else null)
+        CoverTheme(if (ui.hasSong) look?.colours else null) {
             Box(Modifier.fillMaxSize()) {
                 VerticalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
                     when (page) {
                         NowPlayingPage.CLOCK -> ClockPage(cover, ui.hasSong, clock, onCoverClick)
-                        NowPlayingPage.PLAYER -> PlayerPage(ui, cover, actions, onCoverClick)
+                        NowPlayingPage.PLAYER -> PlayerPage(ui, actions, onCoverClick)
                         else -> OptionsPage(ui, actions, liked)
                     }
                 }
@@ -143,8 +140,9 @@ fun NowPlayingContent(
     }
 }
 
+/** The cover is the screen's backdrop now (blurred, behind the pager): this page is title, controls and time. */
 @Composable
-private fun PlayerPage(ui: NowPlayingUi, cover: ImageBitmap?, actions: NowPlayingActions, onCoverClick: () -> Unit) {
+private fun PlayerPage(ui: NowPlayingUi, actions: NowPlayingActions, onCoverClick: () -> Unit) {
     if (!ui.hasSong) {
         NothingPlaying(ui, actions)
         return
@@ -156,14 +154,15 @@ private fun PlayerPage(ui: NowPlayingUi, cover: ImageBitmap?, actions: NowPlayin
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Track Title & Artist (top area, tap opens unblurred art)
+        // Title and artist, tap for the full cover. The round screen is only about 134 dp wide this close to its top
+        // edge, so the sides are padded to keep the text off the bezel.
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .padding(top = 22.dp, start = 26.dp, end = 26.dp)
-                .clickable(onClickLabel = null) { onCoverClick() }
+                .padding(top = 28.dp, start = 40.dp, end = 40.dp)
+                .clickable(onClickLabel = stringResource(R.string.open_cover)) { onCoverClick() }
         ) {
             Text(
                 ui.title.orEmpty(),
