@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.2.1 — 2026-10-19
+
+### Fixed
+- **Watch player: long titles no longer run under the round bezel.** The title and artist are padded to the width the screen really has near its top edge; the title still scrolls. Tapping them (or the clock page) for the full cover now has a spoken label, and the clock page's tap does nothing when no song is playing.
+- **Watch player: the circular seek ring.** It takes touches only on the ring itself (it used to take them in the whole square around it, corners included), sliding past 12 o'clock stops at the end or the start of the song instead of jumping to the other end, and the position you asked for stays on the ring until the PC has moved, instead of snapping back to the old one for a moment.
+- **Watch: the clock is now light, large and set in fixed-width digits**, so it no longer shifts sideways as the minutes change.
+- **Watch: per-cover download locks are back.** 3.2.0 shared 32 locks between all covers, so a cover waiting on a slow or offline server could hold up unrelated ones in a list. The cover blur is also no longer computed on the main thread.
+- **Android: the home-screen widget no longer flashes its placeholder cover** on each play/pause or text change; the placeholder only shows when nothing is playing.
+- **Android: tab bar and tab animation settings.** The active tab's label now fades out as well as in, and the speed slider saves the setting once when released instead of on every tick of the drag.
+
 ## 3.2.0 — 2026-10-16
 
 ### Added

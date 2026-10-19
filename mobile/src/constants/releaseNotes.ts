@@ -9,6 +9,19 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.2.1',
+    items: [
+      {
+        title: 'Montre : lecteur corrigé',
+        text: 'Les longs titres ne passent plus sous le bord rond de l’écran, l’anneau de progression ne saute plus de la fin au début du titre en passant par midi et garde la position demandée jusqu’à ce que le PC l’ait rejointe, et l’heure est plus fine et ne bouge plus d’un chiffre à l’autre.'
+      },
+      {
+        title: 'Widget et onglets',
+        text: 'La pochette du widget ne clignote plus à chaque pause ou changement de titre, le nom de l’onglet actif s’efface en douceur, et le curseur de vitesse des animations n’enregistre qu’une fois relâché.'
+      }
+    ]
+  },
+  {
     version: '3.2.0',
     items: [
       {

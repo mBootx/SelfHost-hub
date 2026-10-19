@@ -29,8 +29,8 @@ android {
         minSdk = 30
         targetSdk = 36
         // Follows the version of the repository (major * 10000 + minor * 100 + patch).
-        versionCode = 30200
-        versionName = "3.2.0"
+        versionCode = 30201
+        versionName = "3.2.1"
     }
 
     signingConfigs {
