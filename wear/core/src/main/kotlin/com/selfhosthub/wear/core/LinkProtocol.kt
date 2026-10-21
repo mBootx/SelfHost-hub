@@ -76,7 +76,8 @@ data class DeviceState(
     val duration: Double,
     val shuffle: Boolean,
     val repeatMode: RepeatMode,
-    val volume: Double
+    val volume: Double,
+    val upNext: List<RemoteSong> = emptyList()
 )
 
 data class DeviceSummary(val deviceId: String, val deviceName: String, val platform: String)
@@ -124,6 +125,9 @@ sealed class PlayerCommand(val action: String, val payload: Map<String, Any?>? =
     data object ToggleShuffle : PlayerCommand("toggleShuffle")
     data class SetRepeatMode(val mode: RepeatMode) : PlayerCommand("setRepeatMode", mapOf("mode" to mode.wire))
 
+    /** Sets the phone's sleep timer (`0` = off, `-1` = end of current track, `> 0` = minutes). */
+    data class SetSleepTimer(val minutes: Int) : PlayerCommand("setSleepTimer", mapOf("minutes" to minutes))
+
     /**
      * Asks the phone to play something from its Navidrome: the whole album or playlist (from the song `songId`, or the
      * position `index`, when given) or one song. `mode` says whether it replaces the queue, goes next, or goes last.
@@ -142,7 +146,14 @@ sealed class PlayerCommand(val action: String, val payload: Map<String, Any?>? =
         )
 }
 
-enum class MediaKind(val wire: String) { SONG("song"), ALBUM("album"), PLAYLIST("playlist") }
+enum class MediaKind(val wire: String) {
+    SONG("song"),
+    ALBUM("album"),
+    PLAYLIST("playlist"),
+    FAVORITES("favorites"),
+    SHUFFLE_ALL("shuffleAll"),
+    RADIO("radio")
+}
 
 enum class PlayMode(val wire: String) { NOW("now"), NEXT("next"), LAST("last") }
 
@@ -211,18 +222,27 @@ object LinkCodec {
         return LinkMessage.Snap(Snapshot(obj.string("phone") ?: devices.firstOrNull()?.deviceName ?: "Téléphone", pc, devices, states))
     }
 
+    private fun parseSong(s: JsonObject): RemoteSong? {
+        val id = s.string("id")?.takeIf { it.isNotEmpty() } ?: return null
+        return RemoteSong(
+            id = id,
+            title = s.string("title") ?: "",
+            artist = s.string("artist") ?: "",
+            album = s.string("album"),
+            albumId = s.string("albumId"),
+            coverArt = s.string("coverArt"),
+            duration = s.double("duration", 0.0)
+        )
+    }
+
     private fun parseState(obj: JsonObject): DeviceState {
-        val song = obj.get("song").asObjectOrNull()?.let { s ->
-            val id = s.string("id") ?: return@let null
-            RemoteSong(
-                id = id,
-                title = s.string("title") ?: "",
-                artist = s.string("artist") ?: "",
-                album = s.string("album"),
-                albumId = s.string("albumId"),
-                coverArt = s.string("coverArt"),
-                duration = s.double("duration", 0.0)
-            )
+        val song = obj.get("song").asObjectOrNull()?.let(::parseSong)
+        val upNext = obj.get("upNext").let { list ->
+            if (list != null && list.isJsonArray) {
+                list.asJsonArray.mapNotNull { it.asObjectOrNull()?.let(::parseSong) }
+            } else {
+                emptyList()
+            }
         }
         return DeviceState(
             song = song,
@@ -231,7 +251,8 @@ object LinkCodec {
             duration = obj.double("duration", song?.duration ?: 0.0).coerceAtLeast(0.0),
             shuffle = obj.bool("shuffle", false),
             repeatMode = RepeatMode.fromWire(obj.string("repeatMode")),
-            volume = obj.double("volume", 1.0).coerceIn(0.0, 1.0)
+            volume = obj.double("volume", 1.0).coerceIn(0.0, 1.0),
+            upNext = upNext
         )
     }
 }

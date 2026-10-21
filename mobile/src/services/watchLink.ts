@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import SelfHostNative, { WatchMessage } from '../../modules/selfhost-native'
 import { describeError, logEvent } from '@/services/diagnostics'
 import { parsePlayMedia, runPlayMedia } from '@/services/playMedia'
-import type { RemoteDeviceState, RemoteDeviceSummary } from '@/services/remoteControl'
+import type { RemoteDeviceState, RemoteDeviceSummary, RemoteSongInfo } from '@/services/remoteControl'
 import { useNavidromeStore } from '@/store/navidromeStore'
 import { applyCommandLocally, currentStatePayload, LOCAL_DEVICE_ID, RemoteStatus, useRemoteStore } from '@/store/remoteStore'
 import { useWatchUpdate } from '@/store/watchUpdateStore'
@@ -77,31 +77,38 @@ const text = (value: unknown, max = 200): string => (typeof value === 'string' ?
 const optionalText = (value: unknown, max = 200): string | undefined => (typeof value === 'string' && value.length > 0 ? value.slice(0, max) : undefined)
 const number = (value: unknown, fallback = 0): number => (typeof value === 'number' && Number.isFinite(value) ? value : fallback)
 
+function cleanSong(song: unknown): RemoteSongInfo | null {
+  if (!song || typeof song !== 'object') return null
+  const s = song as Record<string, unknown>
+  if (typeof s.id !== 'string' || s.id.length === 0) return null
+  const album = optionalText(s.album)
+  const albumId = optionalText(s.albumId)
+  const coverArt = optionalText(s.coverArt)
+  return {
+    id: text(s.id),
+    title: text(s.title),
+    artist: text(s.artist),
+    ...(album ? { album } : {}),
+    ...(albumId ? { albumId } : {}),
+    ...(coverArt ? { coverArt } : {}),
+    duration: number(s.duration)
+  }
+}
+
 /** Only the fields the watch reads, each checked: the state of another device is whatever that device sent. */
 function cleanState(state: RemoteDeviceState): RemoteDeviceState {
-  const song = state.song
-  const album = optionalText(song?.album)
-  const albumId = optionalText(song?.albumId)
-  const coverArt = optionalText(song?.coverArt)
+  const upNext = Array.isArray(state.upNext)
+    ? state.upNext.slice(0, 10).map(cleanSong).filter((s): s is RemoteSongInfo => s !== null)
+    : []
   return {
-    song:
-      song && typeof song.id === 'string' && song.id.length > 0
-        ? {
-            id: text(song.id),
-            title: text(song.title),
-            artist: text(song.artist),
-            ...(album ? { album } : {}),
-            ...(albumId ? { albumId } : {}),
-            ...(coverArt ? { coverArt } : {}),
-            duration: number(song.duration)
-          }
-        : null,
+    song: cleanSong(state.song),
     isPlaying: state.isPlaying === true,
     currentTime: Math.max(0, number(state.currentTime)),
     duration: Math.max(0, number(state.duration)),
     shuffle: state.shuffle === true,
     repeatMode: state.repeatMode === 'all' || state.repeatMode === 'one' ? state.repeatMode : 'off',
-    volume: Math.min(1, Math.max(0, number(state.volume, 1)))
+    volume: Math.min(1, Math.max(0, number(state.volume, 1))),
+    ...(upNext.length > 0 ? { upNext } : {})
   }
 }
 
@@ -168,7 +175,7 @@ export function unchangedForWatch(previous: Pushed | null, next: WatchSnapshot, 
 
 // --- What the watch asks of this phone ---
 
-export const WATCH_ACTIONS = ['toggle', 'play', 'pause', 'next', 'prev', 'seek', 'setVolume', 'toggleShuffle', 'setRepeatMode', 'playMedia'] as const
+export const WATCH_ACTIONS = ['toggle', 'play', 'pause', 'next', 'prev', 'seek', 'setVolume', 'toggleShuffle', 'setRepeatMode', 'playMedia', 'setSleepTimer'] as const
 export type WatchAction = (typeof WATCH_ACTIONS)[number]
 
 export interface WatchCommand {
@@ -188,6 +195,10 @@ function cleanPayload(action: WatchAction, payload: unknown): Record<string, unk
       return body && typeof body.volume === 'number' && Number.isFinite(body.volume) ? { volume: Math.min(1, Math.max(0, body.volume)) } : null
     case 'setRepeatMode':
       return body && (body.mode === 'off' || body.mode === 'all' || body.mode === 'one') ? { mode: body.mode } : null
+    case 'setSleepTimer':
+      return body && typeof body.minutes === 'number' && Number.isInteger(body.minutes) && (body.minutes === -1 || (body.minutes >= 0 && body.minutes <= 720))
+        ? { minutes: body.minutes }
+        : null
     case 'playMedia':
       return body
     default:

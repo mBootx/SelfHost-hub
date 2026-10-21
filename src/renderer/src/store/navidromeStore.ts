@@ -4,9 +4,17 @@ import { seekTo } from '@renderer/services/playbackEngine'
 import { storage } from '@renderer/services/storage'
 import { prefetchCoverArt } from '@renderer/services/imagePrefetch'
 import { ownPlaylists } from '@renderer/services/navidromeAdmin'
+import { findRadioSongs, radioNeedsMore } from '@renderer/services/radio'
 import { ConnectionStatus } from '@renderer/types'
 
 export type RepeatMode = 'off' | 'all' | 'one'
+
+export interface RadioSession {
+  seedId: string
+  seedTitle: string
+}
+
+let extendingRadio = false
 
 /** The queue entries added with "play next": those still ahead of the song playing keep their order. */
 const upNext = new WeakSet<NDSong>()
@@ -62,6 +70,7 @@ interface NavidromeState {
   playbackRate: number
   currentTime: number
   duration: number
+  radio: RadioSession | null
 
   connect: (url: string, username: string, password: string, remember: boolean) => Promise<void>
   restoreSession: () => Promise<void>
@@ -75,6 +84,8 @@ interface NavidromeState {
   playQueue: (songs: NDSong[], startIndex: number) => void
   /** Plays the song at this place in the queue, which stays as it is (its shuffled order too). */
   jumpTo: (index: number) => void
+  startRadio: (seed: NDSong) => Promise<'started' | 'empty'>
+  extendRadio: () => Promise<void>
   addToQueue: (songs: NDSong[]) => void
   /** Says how many songs added the same way will play before it (0: it plays next). */
   playNext: (song: NDSong) => number
@@ -117,6 +128,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
   playbackRate: 1,
   currentTime: 0,
   duration: 0,
+  radio: null,
 
   loadPlaybackPrefs: async () => {
     const [volume, playbackRate] = await Promise.all([
@@ -252,11 +264,12 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
         queue: picked ? [picked, ...rest] : rest,
         queueIndex: 0,
         isPlaying: true,
-        currentTime: 0
+        currentTime: 0,
+        radio: null
       })
       return
     }
-    set({ queue: songs, orderedQueue: null, queueIndex: startIndex, isPlaying: true, currentTime: 0 })
+    set({ queue: songs, orderedQueue: null, queueIndex: startIndex, isPlaying: true, currentTime: 0, radio: null })
   },
 
   jumpTo: (index) => {
@@ -265,6 +278,33 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     // The song already playing starts again: nothing else would reload it.
     if (index === queueIndex) seekTo(0)
     set({ queueIndex: index, currentTime: 0, isPlaying: true })
+    if (get().radio && radioNeedsMore(queue.length, index)) void get().extendRadio()
+  },
+
+  startRadio: async (seed) => {
+    const { client } = get()
+    if (!client) return 'empty'
+    const { songs } = await findRadioSongs(client, seed)
+    if (songs.length === 0) return 'empty'
+    get().playQueue([seed, ...songs], 0)
+    set({ radio: { seedId: seed.id, seedTitle: seed.title } })
+    return 'started'
+  },
+
+  extendRadio: async () => {
+    const { client, radio, queue } = get()
+    if (!client || !radio || extendingRadio) return
+    const seed = queue[queue.length - 1]
+    if (!seed) return
+    extendingRadio = true
+    try {
+      const { songs } = await findRadioSongs(client, seed, { exclude: new Set(queue.map((song) => song.id)) })
+      if (songs.length > 0 && get().radio?.seedId === radio.seedId) get().addToQueue(songs)
+    } catch {
+      // retry on next skip
+    } finally {
+      extendingRadio = false
+    }
   },
 
   // Both of these also extend orderedQueue when shuffle is on, otherwise turning
@@ -376,6 +416,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
       }
     }
     set({ queueIndex: nextIndex, currentTime: 0, isPlaying: true })
+    if (get().radio && radioNeedsMore(queue.length, nextIndex)) void get().extendRadio()
   },
 
   prev: () => {

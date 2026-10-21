@@ -117,5 +117,25 @@
     </plurals>
     <string name="like">J’aime</string>
     <string name="liked">Dans vos favoris</string>
+    <string name="unliked">Retiré des favoris</string>
     <string name="like_failed">Favoris injoignables</string>
+
+    <!-- QoL: Favorites, Shuffle, Radio, Lyrics, Queue, Sleep Timer -->
+    <string name="favorites">Titres aimés</string>
+    <string name="play_favorites">Lire les favoris</string>
+    <string name="shuffle_all">Mix aléatoire</string>
+    <string name="start_radio">Lancer la radio</string>
+    <string name="lyrics">Paroles</string>
+    <string name="lyrics_loading">Recherche des paroles…</string>
+    <string name="lyrics_empty">Aucune parole trouvée pour ce titre</string>
+    <string name="queue">File d\'attente</string>
+    <string name="up_next">À suivre</string>
+    <string name="queue_empty">Aucun titre à suivre</string>
+    <string name="queue_hint">Les prochains titres du téléphone ou du PC s\'affichent ici</string>
+    <string name="sleep_timer">Minuteur de veille</string>
+    <string name="sleep_timer_off">Désactiver</string>
+    <string name="sleep_timer_end_of_track">Fin du titre</string>
+    <string name="sleep_timer_minutes">%1$d min</string>
+    <string name="sleep_timer_set">Minuteur activé</string>
+    <string name="sleep_timer_cancelled">Minuteur désactivé</string>
 </resources>

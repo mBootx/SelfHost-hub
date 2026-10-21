@@ -46,14 +46,18 @@ import com.selfhosthub.wear.core.DowntifySong
 import com.selfhosthub.wear.ui.library.AskedState
 import com.selfhosthub.wear.ui.library.DowntifyUi
 import com.selfhosthub.wear.ui.nowplaying.AmbientClockContent
+import com.selfhosthub.wear.ui.nowplaying.LyricsContent
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingPage
 import com.selfhosthub.wear.ui.nowplaying.AmbientNowPlayingContent
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingActions
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingContent
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingUi
 import com.selfhosthub.wear.ui.nowplaying.OptionsPage
+import com.selfhosthub.wear.ui.nowplaying.QueueContent
 import com.selfhosthub.wear.ui.nowplaying.VolumeContent
 import com.selfhosthub.wear.ui.nowplaying.toNowPlaying
+import com.selfhosthub.wear.data.net.WatchLyricLine
+import com.selfhosthub.wear.data.net.WatchLyrics
 import com.selfhosthub.wear.ui.settings.SettingsActions
 import com.selfhosthub.wear.ui.settings.SettingsContent
 import com.selfhosthub.wear.ui.settings.SettingsUi
@@ -373,6 +377,40 @@ class ScreenshotTest {
     }
 
     @Test fun setup() = shot("setup") { SetupContent() }
+
+    @Test fun lyrics() = shot("lyrics") {
+        val cover = coverBitmap(0xFF1F8A9E.toInt(), 0xFFF2D16B.toInt())
+        LyricsContent(
+            title = "Breezeblocks",
+            artist = "alt-J",
+            lyrics = WatchLyrics(
+                synced = listOf(
+                    WatchLyricLine(10.0, "She may contain the urge to run away"),
+                    WatchLyricLine(16.0, "But hold her down with soggy clothes and breezeblocks"),
+                    WatchLyricLine(24.0, "Cetirizine your fever's gripped me again")
+                ),
+                plain = null
+            ),
+            loading = false,
+            positionSeconds = 18.0,
+            look = coverLookOf(cover)
+        )
+    }
+
+    @Test fun queue() = shot("queue") {
+        QueueContent(
+            graph = null,
+            currentTitle = "Breezeblocks",
+            currentArtist = "alt-J",
+            currentCoverArt = "al-1",
+            upNext = listOf(
+                RemoteSong("t4", "Something Good", "alt-J", "An Awesome Wave", "a1", "al-1", 218.0),
+                RemoteSong("t5", "Dissolve Me", "alt-J", "An Awesome Wave", "a1", "al-1", 239.0)
+            ),
+            onPlay = {},
+            onMore = {}
+        )
+    }
 
     @Test fun fromLinkState() {
         // The model that feeds the screen: the PC playing, as the phone reports it.

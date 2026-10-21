@@ -12,6 +12,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.selfhosthub.wear.core.MediaKind
+import com.selfhosthub.wear.core.PlayMode
 import com.selfhosthub.wear.core.PlayerCommand
 import com.selfhosthub.wear.data.ArtworkSize
 import com.selfhosthub.wear.service.WatchGraph
@@ -50,7 +52,9 @@ fun NowPlayingRoute(
     onDevices: () -> Unit,
     onSettings: () -> Unit,
     onArt: () -> Unit,
-    onVolume: () -> Unit
+    onVolume: () -> Unit,
+    onLyrics: () -> Unit = {},
+    onQueue: () -> Unit = {}
 ) {
     val (_, ui) = rememberNowPlaying(graph, periodMs = 1_000)
     val cover = rememberCover(graph, ui.coverArt, ArtworkSize.MEDIUM)
@@ -61,8 +65,13 @@ fun NowPlayingRoute(
     val lowRes = rememberLowResRotary()
 
     var carried by remember { mutableFloatStateOf(0f) }
-    // The songs liked from the watch this time: the heart stays full for them.
+    // The songs liked in the account (loaded once and updated as the watch stars or unstars a track).
     var liked by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(Unit) {
+        runCatching { graph.api.starredSongs().mapTo( linkedSetOf() ) { it.id } }.getOrNull()?.let { starred ->
+            liked = liked + starred
+        }
+    }
     val context = LocalContext.current
     var overlay by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(overlay) {
@@ -101,12 +110,30 @@ fun NowPlayingRoute(
         onLike = {
             val songId = ui.songId
             if (songId != null) {
+                val wasLiked = songId in liked
                 haptics.confirm()
                 scope.launch {
-                    val ok = runCatching { graph.api.star(songId) }.isSuccess
-                    if (ok) liked = liked + songId
-                    Toast.makeText(context, if (ok) R.string.liked else R.string.like_failed, Toast.LENGTH_SHORT).show()
+                    val ok = runCatching {
+                        if (wasLiked) graph.api.unstar(songId) else graph.api.star(songId)
+                    }.isSuccess
+                    if (ok) liked = if (wasLiked) liked - songId else liked + songId
+                    val msgRes = if (!ok) R.string.like_failed else if (wasLiked) R.string.unliked else R.string.liked
+                    Toast.makeText(context, msgRes, Toast.LENGTH_SHORT).show()
                 }
+            }
+        },
+        onLyrics = onLyrics,
+        onQueue = onQueue,
+        onSleepTimer = { minutes ->
+            val reachable = link.send(PlayerCommand.SetSleepTimer(minutes))
+            val msgRes = if (!reachable) R.string.phone_unreachable else if (minutes == 0) R.string.sleep_timer_cancelled else R.string.sleep_timer_set
+            Toast.makeText(context, msgRes, Toast.LENGTH_SHORT).show()
+        },
+        onRadio = {
+            val songId = ui.songId
+            if (songId != null) {
+                val reachable = link.send(PlayerCommand.PlayMedia(MediaKind.RADIO, songId, mode = PlayMode.NOW))
+                Toast.makeText(context, if (reachable) R.string.sent_to_phone else R.string.phone_unreachable, Toast.LENGTH_SHORT).show()
             }
         }
     )

@@ -119,3 +119,8 @@ export function startPlaybackMemory(): void {
 export function resumePosition(songId: string): number | null {
   return resume?.songId === songId ? resume.seconds : null
 }
+
+/** Sets the starting position for `songId` before its next load (e.g. playback handoff from another device). */
+export function primeResumePosition(songId: string, seconds: number): void {
+  resume = seconds > 0 ? { songId, seconds } : null
+}

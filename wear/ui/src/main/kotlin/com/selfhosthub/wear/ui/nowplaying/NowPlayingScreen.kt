@@ -1,5 +1,6 @@
 package com.selfhosthub.wear.ui.nowplaying
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.basicMarquee
@@ -18,14 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,12 +33,14 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Chip
@@ -78,8 +73,12 @@ class NowPlayingActions(
     val onLibrary: () -> Unit,
     val onDevices: () -> Unit,
     val onSettings: () -> Unit,
-    /** Adds the song playing to the favourites (never takes it out). */
-    val onLike: () -> Unit = {}
+    /** Toggles the song playing in the favourites. */
+    val onLike: () -> Unit = {},
+    val onLyrics: () -> Unit = {},
+    val onQueue: () -> Unit = {},
+    val onSleepTimer: (Int) -> Unit = {},
+    val onRadio: () -> Unit = {}
 )
 
 /**
@@ -161,12 +160,12 @@ private fun PlayerPage(ui: NowPlayingUi, actions: NowPlayingActions, onCoverClic
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .padding(top = 28.dp, start = 40.dp, end = 40.dp)
+                .padding(top = 28.dp, start = 42.dp, end = 42.dp)
                 .clickable(onClickLabel = stringResource(R.string.open_cover)) { onCoverClick() }
         ) {
             Text(
                 ui.title.orEmpty(),
-                style = MaterialTheme.typography.title3,
+                style = MaterialTheme.typography.title3.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
                 color = WatchColors.OnSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
@@ -187,31 +186,33 @@ private fun PlayerPage(ui: NowPlayingUi, actions: NowPlayingActions, onCoverClic
             )
         }
 
-        // Center Transport: Last Song | Circular SeekBar with Center Play/Pause | Next Song
+        // Center Transport: Last Song | Circular SeekBar wrapping Center Play/Pause | Next Song
         Row(
             modifier = Modifier
                 .align(Alignment.Center)
+                .padding(top = 6.dp)
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             TransportButton(
-                icon = Icons.Filled.SkipPrevious,
+                iconRes = R.drawable.ic_spotify_prev,
                 description = stringResource(R.string.previous),
-                size = 38.dp,
-                filled = false
+                buttonSize = 42.dp,
+                iconSize = 24.dp,
+                centerButton = false
             ) {
                 haptics.tap()
                 actions.onPrevious()
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
 
             CircularSeekBar(
                 progress = ui.progress,
                 enabled = ui.connected && ui.duration > 0,
                 contentDescription = stringResource(R.string.seek_bar),
-                modifier = Modifier.size(76.dp),
+                modifier = Modifier.size(68.dp),
                 strokeWidth = 3.5.dp,
                 onPreview = { preview = it },
                 onSeek = { fraction ->
@@ -220,23 +221,25 @@ private fun PlayerPage(ui: NowPlayingUi, actions: NowPlayingActions, onCoverClic
                 }
             ) {
                 TransportButton(
-                    icon = if (ui.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    iconRes = if (ui.isPlaying) R.drawable.ic_spotify_pause else R.drawable.ic_spotify_play,
                     description = stringResource(if (ui.isPlaying) R.string.pause else R.string.play),
-                    size = 52.dp,
-                    filled = true
+                    buttonSize = 61.dp,
+                    iconSize = 26.dp,
+                    centerButton = true
                 ) {
                     haptics.confirm()
                     actions.onToggle()
                 }
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
 
             TransportButton(
-                icon = Icons.Filled.SkipNext,
+                iconRes = R.drawable.ic_spotify_next,
                 description = stringResource(R.string.next),
-                size = 38.dp,
-                filled = false
+                buttonSize = 42.dp,
+                iconSize = 24.dp,
+                centerButton = false
             ) {
                 haptics.tap()
                 actions.onNext()
@@ -247,13 +250,13 @@ private fun PlayerPage(ui: NowPlayingUi, actions: NowPlayingActions, onCoverClic
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 20.dp),
+                .padding(bottom = 18.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "${formatClock(shownPosition)} / ${formatClock(ui.duration)}",
-                style = MaterialTheme.typography.caption3,
+                style = MaterialTheme.typography.caption3.copy(fontFeatureSettings = "tnum"),
                 color = MaterialTheme.colors.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
@@ -265,27 +268,50 @@ private fun PlayerPage(ui: NowPlayingUi, actions: NowPlayingActions, onCoverClic
 private fun NothingPlaying(ui: NowPlayingUi, actions: NowPlayingActions) {
     val haptics = rememberHaptics()
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 26.dp, vertical = 28.dp),
+        Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Filled.MusicNote, contentDescription = null, tint = WatchColors.OnSurfaceMuted, modifier = Modifier.size(30.dp))
-        Spacer(Modifier.height(4.dp))
-        Text(stringResource(R.string.nothing_playing), style = MaterialTheme.typography.title3, textAlign = TextAlign.Center)
+        Box(
+            Modifier
+                .size(40.dp)
+                .background(Color.White.copy(alpha = 0.08f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_spotify_library),
+                contentDescription = null,
+                tint = WatchColors.Accent,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(R.string.nothing_playing),
+            style = MaterialTheme.typography.title3.copy(fontWeight = FontWeight.Bold),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(2.dp))
         Text(
             ui.statusLine ?: stringResource(R.string.nothing_playing_hint),
             style = MaterialTheme.typography.caption2,
             color = if (ui.statusLine != null) WatchColors.Warning else WatchColors.OnSurfaceMuted,
             textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp))
         Chip(
             onClick = {
                 haptics.tap()
                 actions.onLibrary()
             },
             label = { Text(stringResource(R.string.library), maxLines = 1) },
-            icon = { Icon(Icons.Filled.LibraryMusic, contentDescription = null, modifier = Modifier.size(20.dp)) },
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_spotify_library),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+            },
             colors = ChipDefaults.primaryChipColors(),
             modifier = Modifier.fillMaxWidth().height(40.dp)
         )
@@ -293,14 +319,33 @@ private fun NothingPlaying(ui: NowPlayingUi, actions: NowPlayingActions) {
 }
 
 @Composable
-private fun TransportButton(icon: ImageVector, description: String, size: Dp, filled: Boolean, onClick: () -> Unit) {
+private fun TransportButton(
+    @DrawableRes iconRes: Int,
+    description: String,
+    buttonSize: Dp,
+    iconSize: Dp,
+    centerButton: Boolean,
+    onClick: () -> Unit
+) {
     Button(
         onClick = onClick,
-        modifier = Modifier.size(size),
-        colors = if (filled) ButtonDefaults.primaryButtonColors() else ButtonDefaults.iconButtonColors(),
+        modifier = Modifier.size(buttonSize),
+        colors = if (centerButton) {
+            ButtonDefaults.buttonColors(
+                backgroundColor = Color.White.copy(alpha = 0.10f),
+                contentColor = Color.White
+            )
+        } else {
+            ButtonDefaults.iconButtonColors(contentColor = WatchColors.OnSurface)
+        },
         shape = CircleShape
     ) {
-        Icon(icon, contentDescription = description, modifier = Modifier.size(size * 0.55f), tint = if (filled) MaterialTheme.colors.onPrimary else WatchColors.OnSurface)
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = description,
+            modifier = Modifier.size(iconSize),
+            tint = Color.White
+        )
     }
 }
 
@@ -310,14 +355,27 @@ private fun VolumeOverlay(percent: Int, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize().background(Color(0xE6000000)), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(
             progress = percent / 100f,
-            modifier = Modifier.fillMaxSize().padding(3.dp),
+            modifier = Modifier.fillMaxSize().padding(4.dp),
             indicatorColor = MaterialTheme.colors.primary,
-            trackColor = Color(0xFF333333),
-            strokeWidth = 6.dp
+            trackColor = Color.White.copy(alpha = 0.14f),
+            strokeWidth = 5.dp
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = MaterialTheme.colors.primary, modifier = Modifier.size(22.dp))
-            Text(stringResource(R.string.volume_percent, percent), style = MaterialTheme.typography.display2)
+            Icon(
+                painter = painterResource(volumeIconRes(percent / 100.0)),
+                contentDescription = null,
+                tint = MaterialTheme.colors.primary,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(R.string.volume_percent, percent),
+                style = MaterialTheme.typography.display2.copy(
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFeatureSettings = "tnum"
+                )
+            )
         }
     }
 }

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Switch, StyleSheet, Alert } from 'react-native'
 import { useNavigation } from 'expo-router'
-import { Laptop, Smartphone, Play, Pause, SkipBack, SkipForward, Cast } from 'lucide-react-native'
+import { Laptop, Smartphone, Play, Pause, SkipBack, SkipForward, Cast, ArrowLeftRight } from 'lucide-react-native'
 import { useRemoteStore, LOCAL_DEVICE_ID } from '@/store/remoteStore'
+import { useNavidromeStore } from '@/store/navidromeStore'
+import { useToastStore } from '@/store/toastStore'
 import { EmptyState } from '@/components/Screen'
 import { colors, radius, spacing } from '@/constants/theme'
 
@@ -32,6 +34,10 @@ export default function DevicesScreen() {
   const unpair = useRemoteStore((s) => s.unpair)
   const selectDevice = useRemoteStore((s) => s.selectDevice)
   const sendCommand = useRemoteStore((s) => s.sendCommand)
+  const handoffToHere = useRemoteStore((s) => s.handoffToHere)
+  const handoffToDevice = useRemoteStore((s) => s.handoffToDevice)
+  const hasLocalSong = useNavidromeStore((s) => s.queue.length > 0)
+  const showToast = useToastStore((s) => s.show)
 
   const [nameDraft, setNameDraft] = useState(deviceName)
   const [manualIp, setManualIp] = useState('')
@@ -200,27 +206,55 @@ export default function DevicesScreen() {
                 const state = devices[d.deviceId]
                 const isSelected = selectedDeviceId === d.deviceId
                 return (
-                  <Pressable
-                    key={d.deviceId}
-                    style={[styles.deviceRow, isSelected && styles.deviceRowActive]}
-                    onPress={() => selectDevice(d.deviceId)}
-                  >
-                    {d.platform === 'desktop' ? (
-                      <Laptop size={18} color={isSelected ? colors.accent : colors.textSecondary} />
-                    ) : (
-                      <Smartphone size={18} color={isSelected ? colors.accent : colors.textSecondary} />
-                    )}
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={[styles.deviceName, isSelected && styles.deviceNameActive]} numberOfLines={1}>
-                        {d.deviceName}
-                      </Text>
-                      {state?.song && (
-                        <Text style={styles.deviceSubtitle} numberOfLines={1}>
-                          {state.song.title} · {state.song.artist}
-                        </Text>
+                  <View key={d.deviceId} style={[styles.deviceCard, isSelected && styles.deviceRowActive]}>
+                    <Pressable style={styles.deviceRowInner} onPress={() => selectDevice(d.deviceId)}>
+                      {d.platform === 'desktop' ? (
+                        <Laptop size={18} color={isSelected ? colors.accent : colors.textSecondary} />
+                      ) : (
+                        <Smartphone size={18} color={isSelected ? colors.accent : colors.textSecondary} />
                       )}
-                    </View>
-                  </Pressable>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.deviceName, isSelected && styles.deviceNameActive]} numberOfLines={1}>
+                          {d.deviceName}
+                        </Text>
+                        {state?.song && (
+                          <Text style={styles.deviceSubtitle} numberOfLines={1}>
+                            {state.song.title} · {state.song.artist}
+                          </Text>
+                        )}
+                      </View>
+                    </Pressable>
+                    {(state?.song || hasLocalSong) && (
+                      <View style={styles.handoffRow}>
+                        {state?.song && (
+                          <Pressable
+                            style={({ pressed }) => [styles.handoffChip, styles.handoffChipPrimary, pressed && styles.pressed]}
+                            onPress={() => {
+                              if (handoffToHere(d.deviceId)) showToast(`Lecture reprise depuis ${d.deviceName}`)
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Reprendre la lecture de ${d.deviceName} sur ce téléphone`}
+                          >
+                            <ArrowLeftRight size={13} color={colors.accent} />
+                            <Text style={[styles.handoffChipText, { color: colors.accent }]}>Reprendre sur ce téléphone</Text>
+                          </Pressable>
+                        )}
+                        {hasLocalSong && (
+                          <Pressable
+                            style={({ pressed }) => [styles.handoffChip, pressed && styles.pressed]}
+                            onPress={() => {
+                              if (handoffToDevice(d.deviceId)) showToast(`Lecture transférée vers ${d.deviceName}`)
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Transférer la lecture vers ${d.deviceName}`}
+                          >
+                            <Cast size={13} color={colors.textSecondary} />
+                            <Text style={styles.handoffChipText}>Transférer vers {d.deviceName}</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    )}
+                  </View>
                 )
               })}
             </View>
@@ -323,6 +357,40 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.sm
+  },
+  deviceCard: {
+    backgroundColor: colors.elevated,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.sm
+  },
+  deviceRowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md
+  },
+  handoffRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs
+  },
+  handoffChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.hover,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6
+  },
+  handoffChipPrimary: {
+    backgroundColor: 'rgba(29, 185, 84, 0.14)'
+  },
+  handoffChipText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700'
   },
   deviceRowActive: { borderWidth: 1, borderColor: colors.accent },
   deviceName: { color: colors.text, fontSize: 14, fontWeight: '600' },

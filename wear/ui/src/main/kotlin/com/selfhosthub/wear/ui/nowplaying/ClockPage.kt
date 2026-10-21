@@ -1,7 +1,6 @@
 package com.selfhosthub.wear.ui.nowplaying
 
 import android.text.format.DateFormat
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,25 +10,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -42,6 +35,7 @@ import androidx.wear.compose.material.Text
 import com.selfhosthub.wear.ui.R
 import com.selfhosthub.wear.ui.common.AmbientPolicy
 import com.selfhosthub.wear.ui.common.AmbientState
+import com.selfhosthub.wear.ui.common.CoverBox
 import com.selfhosthub.wear.ui.common.OutlineCover
 import com.selfhosthub.wear.ui.theme.WatchColors
 import java.util.Date
@@ -80,89 +74,46 @@ fun rememberClockText(): String {
 }
 
 /**
- * The page above the player: the cover of the song shown in fullscreen, and the time in the bottom right corner
- * with modern typography. A tap anywhere triggers the cover action.
+ * The page above the player: the cover of the song as a rounded thumbnail over the blurred cover backdrop, and the
+ * time below it in fixed-width digits. A tap on the cover opens it full screen, as on the player.
  */
 @Composable
 fun ClockPage(cover: ImageBitmap?, hasSong: Boolean, time: String, onCoverClick: () -> Unit, modifier: Modifier = Modifier) {
-    val isRound = LocalConfiguration.current.isScreenRound
-    val endPadding = if (isRound) 32.dp else 16.dp
-    val bottomPadding = if (isRound) 26.dp else 14.dp
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .clickable(enabled = hasSong, onClickLabel = stringResource(R.string.open_cover)) { onCoverClick() }
+    Column(
+        modifier = modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        if (hasSong && cover != null) {
-            Image(
-                bitmap = cover,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+        if (hasSong) {
+            CoverBox(
+                cover,
+                Modifier
+                    .size(84.dp)
+                    .clickable(onClickLabel = stringResource(R.string.open_cover)) { onCoverClick() },
+                RoundedCornerShape(16.dp)
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0.35f to Color.Transparent,
-                            0.70f to Color.Black.copy(alpha = 0.35f),
-                            1.0f to Color.Black.copy(alpha = 0.70f)
-                        )
-                    )
-            )
-        } else if (hasSong) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(WatchColors.SurfaceRaised),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Filled.MusicNote,
-                    contentDescription = null,
-                    tint = WatchColors.OnSurfaceMuted,
-                    modifier = Modifier.size(48.dp)
-                )
-            }
+            Spacer(Modifier.height(10.dp))
         } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Filled.MusicNote,
-                    contentDescription = null,
-                    tint = WatchColors.OnSurfaceMuted.copy(alpha = 0.5f),
-                    modifier = Modifier.size(36.dp)
-                )
-            }
+            Icon(
+                Icons.Filled.MusicNote,
+                contentDescription = null,
+                tint = WatchColors.OnSurfaceMuted,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(Modifier.height(8.dp))
         }
-
         Text(
             text = time,
             style = TextStyle(
-                color = Color.White,
-                fontSize = 44.sp,
+                color = WatchColors.OnSurface,
+                fontSize = if (hasSong) 36.sp else 42.sp,
                 fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Light,
-                letterSpacing = 1.sp,
+                fontWeight = if (hasSong) FontWeight.SemiBold else FontWeight.Light,
+                letterSpacing = 0.5.sp,
                 // Digits of one width, so the time does not shift sideways as the minutes change.
-                fontFeatureSettings = "tnum",
-                shadow = Shadow(
-                    color = Color.Black.copy(alpha = 0.85f),
-                    offset = Offset(0f, 2f),
-                    blurRadius = 10f
-                )
+                fontFeatureSettings = "tnum"
             ),
-            maxLines = 1,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = endPadding, bottom = bottomPadding)
+            maxLines = 1
         )
     }
 }

@@ -1,5 +1,6 @@
 package com.selfhosthub.wear.ui.nowplaying
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -10,14 +11,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeDown
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,19 +28,21 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Icon
@@ -60,10 +58,11 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /** The icon of a volume: crossed out at 0, one wave up to half, two above. */
-internal fun volumeIcon(volume: Double): ImageVector = when {
-    volume <= 0.0 -> Icons.AutoMirrored.Filled.VolumeOff
-    volume < 0.5 -> Icons.AutoMirrored.Filled.VolumeDown
-    else -> Icons.AutoMirrored.Filled.VolumeUp
+@DrawableRes
+internal fun volumeIconRes(volume: Double): Int = when {
+    volume <= 0.0 -> R.drawable.ic_spotify_volume_off
+    volume < 0.5 -> R.drawable.ic_spotify_volume_low
+    else -> R.drawable.ic_spotify_volume_high
 }
 
 /**
@@ -107,7 +106,7 @@ fun VolumeContent(
         CoverTheme(look?.colours) {
             VolumeRing(shown, enabled, label, onChange, Modifier.fillMaxSize())
             Column(
-                Modifier.widthIn(max = 130.dp),
+                Modifier.widthIn(max = 136.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -115,24 +114,32 @@ fun VolumeContent(
                 Button(
                     onClick = onMute,
                     enabled = enabled,
-                    modifier = Modifier.size(40.dp),
-                    colors = if (muted) ButtonDefaults.primaryButtonColors() else ButtonDefaults.secondaryButtonColors(),
+                    modifier = Modifier.size(46.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = if (muted) WatchColors.Danger.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.12f),
+                        contentColor = if (muted) WatchColors.Danger else WatchColors.OnSurface
+                    ),
                     shape = CircleShape
                 ) {
                     Icon(
-                        volumeIcon(shown),
+                        painter = painterResource(volumeIconRes(shown)),
                         contentDescription = stringResource(if (muted) R.string.volume_unmute else R.string.volume_mute),
                         modifier = Modifier.size(22.dp),
-                        tint = if (muted) MaterialTheme.colors.onPrimary else WatchColors.OnSurface
+                        tint = if (muted) WatchColors.Danger else WatchColors.OnSurface
                     )
                 }
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     stringResource(R.string.volume_percent, percent),
-                    style = MaterialTheme.typography.display2,
+                    style = MaterialTheme.typography.display2.copy(
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFeatureSettings = "tnum"
+                    ),
                     color = WatchColors.OnSurface,
                     maxLines = 1
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
                     caption ?: label,
                     style = MaterialTheme.typography.caption2,
@@ -153,9 +160,9 @@ private fun VolumeRing(volume: Double, enabled: Boolean, label: String, onChange
     val current by rememberUpdatedState(volume)
     val currentOnChange by rememberUpdatedState(onChange)
     val density = LocalDensity.current
-    val stroke = with(density) { 8.dp.toPx() }
-    val inset = with(density) { 10.dp.toPx() }
-    val handle = with(density) { 8.dp.toPx() }
+    val stroke = with(density) { 5.dp.toPx() }
+    val inset = with(density) { 9.dp.toPx() }
+    val handle = with(density) { 5.5.dp.toPx() }
     val accent = MaterialTheme.colors.primary
 
     Canvas(
@@ -204,7 +211,7 @@ private fun VolumeRing(volume: Double, enabled: Boolean, label: String, onChange
         val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
         val arcSize = Size(diameter, diameter)
         val style = Stroke(width = stroke, cap = StrokeCap.Round)
-        drawArc(Color.White.copy(alpha = 0.16f), ControlMath.ARC_START, ControlMath.ARC_SWEEP, false, topLeft, arcSize, style = style)
+        drawArc(Color.White.copy(alpha = 0.14f), ControlMath.ARC_START, ControlMath.ARC_SWEEP, false, topLeft, arcSize, style = style)
         val sweep = ControlMath.ARC_SWEEP * volume.toFloat()
         if (sweep > 0f) drawArc(if (enabled) accent else Color(0xFF666666), ControlMath.ARC_START, sweep, false, topLeft, arcSize, style = style)
         if (enabled) {

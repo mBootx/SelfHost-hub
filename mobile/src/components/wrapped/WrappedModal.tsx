@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Modal, View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
+import { Modal, View, Text, Pressable, ScrollView, Share, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ChevronLeft, ChevronRight, Headphones, MicVocal, Play, X } from 'lucide-react-native'
+import { ChevronLeft, ChevronRight, Disc3, Flame, Headphones, MicVocal, Play, Share2, X } from 'lucide-react-native'
 import CoverImage from '@/components/CoverImage'
 import Backdrop from '@/components/nowplaying/Backdrop'
 import { useCoverPalette } from '@/hooks/useCoverPalette'
@@ -13,12 +13,14 @@ import {
   DAY_LETTERS,
   DAY_NAMES,
   durationLabel,
+  formatWrappedShare,
   shiftWeek,
   songOf,
   summarize,
   weekKey,
   weekLabel,
   weekRange,
+  type AlbumStat,
   type ArtistStat,
   type SongStat,
   type WeeklyWrapped
@@ -160,6 +162,24 @@ function ArtistRow({ artist, rank, client, look }: { artist: ArtistStat; rank: n
   )
 }
 
+function AlbumRow({ album, rank, client, look }: { album: AlbumStat; rank: number; client: NavidromeClient | null; look: Look }) {
+  const minutes = Math.round(album.seconds / 60)
+  return (
+    <View style={styles.row} accessible accessibilityLabel={`Album numéro ${rank} : ${album.name}, ${album.artist}, ${durationLabel(minutes)}`}>
+      <Text style={[styles.rank, rank === 1 && { color: look.accent }]}>{rank}</Text>
+      <CoverImage uri={coverUrl(client, album, 160)} style={styles.rowCover} icon={Disc3} iconSize={18} />
+      <View style={styles.rowText}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {album.name}
+        </Text>
+        <Text style={styles.rowMeta} numberOfLines={1}>
+          {album.artist} · {durationLabel(minutes)}
+        </Text>
+      </View>
+    </View>
+  )
+}
+
 /**
  * The weekly Wrapped: minutes listened, the days, the top songs and artists of a week on this phone, in the colours
  * of the week's favourite song. It pops up by itself every Monday from 10:00 for the week just ended
@@ -258,6 +278,14 @@ export default function WrappedModal() {
                   <Text style={[styles.chipText, { color: look.accent }]}>{change}</Text>
                 </View>
               )}
+              {summary.streakWeeks > 1 && (
+                <View style={styles.streakBadge}>
+                  <Flame size={14} color={look.accent} />
+                  <Text style={styles.streakText}>
+                    {summary.streakWeeks} semaines d&apos;écoute de suite · {summary.activeDays}/7 jours actifs
+                  </Text>
+                </View>
+              )}
             </View>
 
             <DayChart summary={summary} look={look} />
@@ -281,6 +309,15 @@ export default function WrappedModal() {
               </View>
             )}
 
+            {summary.topAlbums.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Top albums</Text>
+                {summary.topAlbums.map((album, i) => (
+                  <AlbumRow key={album.albumId || `${album.name}-${album.artist}`} album={album} rank={i + 1} client={client} look={look} />
+                ))}
+              </View>
+            )}
+
             <View style={styles.stats}>
               <View style={styles.stat}>
                 <Text style={styles.statNumber}>{summary.songCount.toLocaleString('fr-FR')}</Text>
@@ -290,6 +327,12 @@ export default function WrappedModal() {
                 <Text style={styles.statNumber}>{summary.artistCount.toLocaleString('fr-FR')}</Text>
                 <Text style={styles.statLabel}>{summary.artistCount > 1 ? 'artistes' : 'artiste'}</Text>
               </View>
+              {summary.albumCount > 0 && (
+                <View style={styles.stat}>
+                  <Text style={styles.statNumber}>{summary.albumCount.toLocaleString('fr-FR')}</Text>
+                  <Text style={styles.statLabel}>{summary.albumCount > 1 ? 'albums' : 'album'}</Text>
+                </View>
+              )}
               <View style={styles.stat}>
                 <Text style={styles.statNumber}>{summary.plays.toLocaleString('fr-FR')}</Text>
                 <Text style={styles.statLabel}>{summary.plays > 1 ? 'écoutes' : 'écoute'}</Text>
@@ -307,6 +350,18 @@ export default function WrappedModal() {
                 <Text style={[styles.playText, { color: look.onAccent }]}>Écouter le top de la semaine</Text>
               </Pressable>
             )}
+
+            <Pressable
+              style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}
+              onPress={() => {
+                void Share.share({ message: formatWrappedShare(summary) }).catch(() => {})
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Partager ce récap"
+            >
+              <Share2 size={17} color="#fff" />
+              <Text style={styles.shareText}>Partager ce récap</Text>
+            </Pressable>
           </ScrollView>
         )}
       </View>
@@ -331,6 +386,17 @@ const styles = StyleSheet.create({
   heroSub: { color: TEXT_SECONDARY, fontSize: 14, marginTop: spacing.xs },
   chip: { marginTop: spacing.md, borderWidth: 1, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6 },
   chipText: { fontSize: 12, fontWeight: '700' },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+    backgroundColor: SOFT,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6
+  },
+  streakText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   section: { marginTop: spacing.xl },
   sectionTitle: { color: '#fff', fontSize: 20, fontWeight: '800', letterSpacing: -0.3, marginBottom: spacing.md },
   chart: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.sm },
@@ -368,6 +434,17 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl
   },
   playText: { fontSize: 15, fontWeight: '800' },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: SOFT,
+    paddingVertical: spacing.md,
+    marginTop: spacing.md
+  },
+  shareText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, gap: spacing.md },
   emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: SOFT, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { color: '#fff', fontSize: 17, fontWeight: '700', textAlign: 'center' },

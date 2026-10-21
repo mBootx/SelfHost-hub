@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.3.0 — 2026-10-21
+
+### Added
+- **Watch: Synced Lyrics (LRC) & Up-Next Queue.** Open *Paroles* from the watch options page to view time-synced LRC lyrics (via LRCLIB with Navidrome fallback) that auto-scroll with the active line and support tap-to-seek, or open *File d'attente* to browse and jump to upcoming tracks in the phone or PC queue.
+- **Watch: Library Quick-Rows, Two-Way Favorites, Song Radio & Sleep Timer.** Added *Titres aimés* and *Mix aléatoire* at the top of the watch library, two-way star/unstar toggling with live liked state in options, *Lancer la radio* from any track or the options sheet, and a *Minuteur de veille* picker (`15`, `30`, `45`, `60` min, or end of track) controlling the phone's sleep timer.
+- **Desktop & Watch: Infinite Song Radio.** Start a continuous radio queue seeded from any track (*Lancer la radio* in the desktop context menu and on the watch), automatically extending as the queue nears its end.
+- **Seamless Playback Handoff (PC ↔ Phone).** Transfer or pull the active playback session (current track, upcoming queue, exact seek position, shuffle, and repeat mode) between Desktop and Phone in one tap from the Devices view.
+- **Phone: Auto-Download Liked Tracks & Enhanced Weekly Wrapped.** Toggle *Garder les titres aimés hors ligne* under Storage settings to keep starred tracks cached on Wi-Fi automatically, and view Top Albums, consecutive listening week streaks, active days, and a native share card in Weekly Wrapped.
+
 ## 3.2.1 — 2026-10-19
 
 ### Fixed

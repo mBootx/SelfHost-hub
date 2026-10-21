@@ -30,11 +30,59 @@ class CoverLook(val blurred: ImageBitmap, val colours: CoverColors)
 
 /** The side of the copy the colours are read from. */
 private const val SAMPLE = 32
+private const val BLUR_SIZE = 64
+private const val BLUR_RADIUS = 7
 
 /**
- * Works out the look of a cover: its colours from a small copy, and a blur made by shrinking it to a few pixels and
- * stretching it back with smoothing, which costs next to nothing and works on every Wear OS version (a real blur
- * effect needs Android 12).
+ * Three passes of a horizontal + vertical box filter on a 64x64 ARGB buffer, which converges to a smooth Gaussian blur
+ * with no blocky bilinear grid lines and runs in well under a millisecond on any Wear OS version.
+ */
+private fun boxBlur(src: IntArray, dst: IntArray, w: Int, h: Int, radius: Int) {
+    val div = 2 * radius + 1
+    for (y in 0 until h) {
+        val row = y * w
+        var rSum = 0
+        var gSum = 0
+        var bSum = 0
+        for (i in -radius..radius) {
+            val p = src[row + i.coerceIn(0, w - 1)]
+            rSum += (p ushr 16) and 0xFF
+            gSum += (p ushr 8) and 0xFF
+            bSum += p and 0xFF
+        }
+        for (x in 0 until w) {
+            dst[row + x] = (0xFF shl 24) or ((rSum / div) shl 16) or ((gSum / div) shl 8) or (bSum / div)
+            val outPx = src[row + (x - radius).coerceIn(0, w - 1)]
+            val inPx = src[row + (x + radius + 1).coerceIn(0, w - 1)]
+            rSum += ((inPx ushr 16) and 0xFF) - ((outPx ushr 16) and 0xFF)
+            gSum += ((inPx ushr 8) and 0xFF) - ((outPx ushr 8) and 0xFF)
+            bSum += (inPx and 0xFF) - (outPx and 0xFF)
+        }
+    }
+    for (x in 0 until w) {
+        var rSum = 0
+        var gSum = 0
+        var bSum = 0
+        for (i in -radius..radius) {
+            val p = dst[i.coerceIn(0, h - 1) * w + x]
+            rSum += (p ushr 16) and 0xFF
+            gSum += (p ushr 8) and 0xFF
+            bSum += p and 0xFF
+        }
+        for (y in 0 until h) {
+            src[y * w + x] = (0xFF shl 24) or ((rSum / div) shl 16) or ((gSum / div) shl 8) or (bSum / div)
+            val outPx = dst[(y - radius).coerceIn(0, h - 1) * w + x]
+            val inPx = dst[(y + radius + 1).coerceIn(0, h - 1) * w + x]
+            rSum += ((inPx ushr 16) and 0xFF) - ((outPx ushr 16) and 0xFF)
+            gSum += ((inPx ushr 8) and 0xFF) - ((outPx ushr 8) and 0xFF)
+            bSum += (inPx and 0xFF) - (outPx and 0xFF)
+        }
+    }
+}
+
+/**
+ * Works out the look of a cover: its colours from a small copy, and a smooth Gaussian-like blur made by running three
+ * separable box-blur passes on a 64x64 copy, which costs under a millisecond and works on every Wear OS version.
  */
 fun coverLookOf(image: ImageBitmap): CoverLook? {
     val bitmap = image.asAndroidBitmap()
@@ -44,9 +92,13 @@ fun coverLookOf(image: ImageBitmap): CoverLook? {
     sample.getPixels(pixels, 0, SAMPLE, 0, 0, SAMPLE, SAMPLE)
     if (sample !== bitmap) sample.recycle()
     val colours = CoverPalette.from(pixels) ?: return null
-    val tiny = Bitmap.createScaledBitmap(bitmap, 10, 10, true)
-    val blurred = Bitmap.createScaledBitmap(tiny, 80, 80, true)
-    if (tiny !== bitmap) tiny.recycle()
+    val scaled = Bitmap.createScaledBitmap(bitmap, BLUR_SIZE, BLUR_SIZE, true)
+    val buf = IntArray(BLUR_SIZE * BLUR_SIZE)
+    val tmp = IntArray(BLUR_SIZE * BLUR_SIZE)
+    scaled.getPixels(buf, 0, BLUR_SIZE, 0, 0, BLUR_SIZE, BLUR_SIZE)
+    if (scaled !== bitmap) scaled.recycle()
+    repeat(3) { boxBlur(buf, tmp, BLUR_SIZE, BLUR_SIZE, BLUR_RADIUS) }
+    val blurred = Bitmap.createBitmap(buf, BLUR_SIZE, BLUR_SIZE, Bitmap.Config.ARGB_8888)
     return CoverLook(blurred.asImageBitmap(), colours)
 }
 

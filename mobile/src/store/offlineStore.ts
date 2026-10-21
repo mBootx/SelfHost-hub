@@ -39,6 +39,8 @@ interface OfflineState {
   loaded: boolean
   /** The playlists kept on the phone (id -> name): the songs added to them later are downloaded too. */
   keptPlaylists: Record<string, string>
+  /** Whether starred/liked tracks are automatically downloaded on Wi-Fi. */
+  keepFavorites: boolean
 
   loadFromDisk: () => Promise<void>
   isOffline: (id: string) => boolean
@@ -50,6 +52,8 @@ interface OfflineState {
   removeOffline: (id: string) => Promise<void>
   /** Keeps a playlist on the phone, or stops (the songs already downloaded stay). */
   setKeptPlaylist: (playlistId: string, name: string, keep: boolean) => void
+  /** Keeps all starred tracks on the phone, or stops. */
+  setKeepFavorites: (keep: boolean) => void
 }
 
 const offlineDir = new Directory(Paths.document, 'offline-music')
@@ -63,6 +67,7 @@ async function persist(tracks: Record<string, OfflineTrack>): Promise<void> {
 }
 
 const KEPT_KEY = 'navidrome.keptPlaylists'
+const KEEP_FAVORITES_KEY = 'navidrome.keepFavorites'
 
 /** How much room the downloaded songs take on the phone, in bytes. */
 export function offlineBytes(tracks: Record<string, OfflineTrack>): number {
@@ -162,14 +167,21 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
   errors: {},
   loaded: false,
   keptPlaylists: {},
+  keepFavorites: false,
 
   loadFromDisk: async () => {
     if (get().loaded) return
-    const [saved, kept] = await Promise.all([
+    const [saved, kept, keepFavorites] = await Promise.all([
       storage.loadPref<Record<string, OfflineTrack>>('navidrome.offlineTracks'),
-      storage.loadPref<Record<string, string>>(KEPT_KEY).catch(() => null)
+      storage.loadPref<Record<string, string>>(KEPT_KEY).catch(() => null),
+      storage.loadPref<boolean>(KEEP_FAVORITES_KEY).catch(() => false)
     ])
-    set({ tracks: saved || {}, keptPlaylists: kept && typeof kept === 'object' ? kept : {}, loaded: true })
+    set({
+      tracks: saved || {},
+      keptPlaylists: kept && typeof kept === 'object' ? kept : {},
+      keepFavorites: !!keepFavorites,
+      loaded: true
+    })
   },
 
   isOffline: (id) => !!get().tracks[id],
@@ -231,6 +243,11 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
       storage.savePref(KEPT_KEY, keptPlaylists).catch(() => {})
       return { keptPlaylists }
     })
+  },
+
+  setKeepFavorites: (keep) => {
+    set({ keepFavorites: keep })
+    storage.savePref(KEEP_FAVORITES_KEY, keep).catch(() => {})
   },
 
   removeOffline: async (id) => {

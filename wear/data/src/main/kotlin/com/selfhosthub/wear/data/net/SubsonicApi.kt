@@ -70,6 +70,41 @@ data class PingInfo(val version: String?, val latencyMs: Long)
 /** A song someone is playing right now on any of their devices, as the server sees it. */
 data class NowPlayingEntry(val song: ApiSong, val username: String, val minutesAgo: Int, val playerName: String?)
 
+/** One line of timestamped LRC lyrics (`timeSeconds` from the start of the track). */
+data class WatchLyricLine(val timeSeconds: Double, val text: String)
+
+/** Synced or plain lyrics for a track, fetched from LRCLIB or Navidrome's `getLyrics`. */
+data class WatchLyrics(val synced: List<WatchLyricLine>?, val plain: String?)
+
+object LrcParser {
+    private val STAMP = Regex("""\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?]""")
+
+    fun parse(lrc: String): List<WatchLyricLine> {
+        val out = mutableListOf<WatchLyricLine>()
+        for (raw in lrc.lineSequence()) {
+            val matches = STAMP.findAll(raw).toList()
+            if (matches.isEmpty()) continue
+            val text = raw.replace(STAMP, "").trim()
+            for (match in matches) {
+                val min = match.groupValues[1].toIntOrNull() ?: continue
+                val sec = match.groupValues[2].toIntOrNull() ?: continue
+                val fracStr = match.groupValues[3]
+                val frac = if (fracStr.isNotEmpty()) fracStr.padEnd(3, '0').take(3).toIntOrNull()?.div(1000.0) ?: 0.0 else 0.0
+                out += WatchLyricLine(min * 60.0 + sec + frac, text)
+            }
+        }
+        return out.sortedBy { it.timeSeconds }
+    }
+
+    fun activeIndex(lines: List<WatchLyricLine>, positionSeconds: Double): Int {
+        var index = -1
+        for (i in lines.indices) {
+            if (lines[i].timeSeconds <= positionSeconds) index = i else break
+        }
+        return index
+    }
+}
+
 /**
  * The part of the Subsonic API (as Navidrome serves it) that the watch uses. Every call signs itself with the
  * current login, so a login that changes (the phone sent another one) is picked up by the next request.
@@ -153,6 +188,75 @@ class SubsonicApi(
     /** Adds a song to the favourites (Navidrome's "starred"). */
     suspend fun star(id: String) {
         call("star", "id" to id)
+    }
+
+    /** Removes a song from the favourites (Navidrome's "unstar"). */
+    suspend fun unstar(id: String) {
+        call("unstar", "id" to id)
+    }
+
+    /** The songs in the signed-in account's favourites (`getStarred2`). */
+    suspend fun starredSongs(): List<ApiSong> =
+        call("getStarred2").objectOrNull("starred2").children("song").mapNotNull { it.toSong() }
+
+    /**
+     * Looks up synced or plain lyrics for a track: tries LRCLIB first (synced LRC), then falls back to Navidrome's
+     * `getLyrics`. Returns null when neither has lyrics for the track.
+     */
+    suspend fun lyrics(artist: String, title: String, album: String? = null, duration: Int = 0): WatchLyrics? {
+        if (artist.isBlank() && title.isBlank()) return null
+        lrclibLyrics(artist, title, album, duration)?.let { return it }
+        val raw = runCatching {
+            call("getLyrics", "artist" to artist, "title" to title).objectOrNull("lyrics")?.string("value")?.trim()
+        }.getOrNull()
+        if (!raw.isNullOrEmpty()) {
+            val synced = LrcParser.parse(raw).takeIf { it.isNotEmpty() }
+            return WatchLyrics(synced, if (synced == null) raw else null)
+        }
+        return null
+    }
+
+    private suspend fun lrclibLyrics(artist: String, title: String, album: String?, duration: Int): WatchLyrics? {
+        if (album != null && duration > 0) {
+            val exactUrl = "https://lrclib.net/api/get".toHttpUrlOrNull()?.newBuilder()
+                ?.addQueryParameter("artist_name", artist)
+                ?.addQueryParameter("track_name", title)
+                ?.addQueryParameter("album_name", album)
+                ?.addQueryParameter("duration", duration.toString())
+                ?.build()
+            if (exactUrl != null) {
+                val reply = runCatching {
+                    execute(Request.Builder().url(exactUrl).header("User-Agent", "SelfHostHub/1.0.0").build())
+                }.getOrNull()
+                if (reply != null && reply.isSuccessful) {
+                    parseLrclibRecord(runCatching { JsonParser.parseString(reply.text).objectOrNull() }.getOrNull())?.let { return it }
+                }
+            }
+        }
+        val searchUrl = "https://lrclib.net/api/search".toHttpUrlOrNull()?.newBuilder()
+            ?.addQueryParameter("track_name", title)
+            ?.addQueryParameter("artist_name", artist)
+            ?.build() ?: return null
+        val reply = runCatching {
+            execute(Request.Builder().url(searchUrl).header("User-Agent", "SelfHostHub/1.0.0").build())
+        }.getOrNull() ?: return null
+        if (!reply.isSuccessful) return null
+        val arr = runCatching { JsonParser.parseString(reply.text) }.getOrNull()
+        if (arr == null || !arr.isJsonArray) return null
+        val records = arr.asJsonArray.mapNotNull { it.objectOrNull() }
+        val best = records.firstOrNull { !it.string("syncedLyrics").isNullOrBlank() } ?: records.firstOrNull() ?: return null
+        return parseLrclibRecord(best)
+    }
+
+    private fun parseLrclibRecord(obj: JsonObject?): WatchLyrics? {
+        if (obj == null) return null
+        if (obj.get("instrumental")?.let { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean && it.asBoolean } == true) {
+            return WatchLyrics(null, "♪ Instrumental ♪")
+        }
+        val synced = obj.string("syncedLyrics")?.let { LrcParser.parse(it) }?.takeIf { it.isNotEmpty() }
+        val plain = obj.string("plainLyrics")?.trim()?.ifEmpty { null }
+        if (synced == null && plain == null) return null
+        return WatchLyrics(synced, plain)
     }
 
     /** A cover, resized by the server to `size` pixels square. */

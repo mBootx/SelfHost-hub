@@ -120,6 +120,9 @@ export default function Player(): JSX.Element {
   const selectedDeviceId = useRemoteStore((s) => s.selectedDeviceId)
   const selectDevice = useRemoteStore((s) => s.selectDevice)
   const sendCommand = useRemoteStore((s) => s.sendCommand)
+  const handoffToHere = useRemoteStore((s) => s.handoffToHere)
+  const handoffToDevice = useRemoteStore((s) => s.handoffToDevice)
+  const remoteDevices = useRemoteStore((s) => s.devices)
   const remoteDevice = useRemoteStore((s) =>
     s.selectedDeviceId !== LOCAL_DEVICE_ID ? s.devices[s.selectedDeviceId] : undefined
   )
@@ -516,7 +519,7 @@ export default function Player(): JSX.Element {
                 <Cast className="h-4 w-4" />
               </button>
               {showDevices && (
-                <div className="absolute bottom-full right-0 z-10 mb-2 w-56 animate-fade-in rounded-lg border border-surface-border bg-surface-elevated p-1.5 shadow-xl">
+                <div className="absolute bottom-full right-0 z-10 mb-2 w-64 animate-fade-in rounded-lg border border-surface-border bg-surface-elevated p-1.5 shadow-xl">
                   <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                     Lire sur
                   </p>
@@ -534,21 +537,56 @@ export default function Player(): JSX.Element {
                   </button>
                   {deviceList
                     .filter((d) => d.deviceId !== 'hub')
-                    .map((d) => (
-                      <button
-                        key={d.deviceId}
-                        onClick={() => {
-                          selectDevice(d.deviceId)
-                          setShowDevices(false)
-                        }}
-                        className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${
-                          selectedDeviceId === d.deviceId ? 'text-accent' : 'text-gray-300 hover:bg-surface-hover'
-                        }`}
-                      >
-                        <Smartphone className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{d.deviceName}</span>
-                      </button>
-                    ))}
+                    .map((d) => {
+                      const dState = remoteDevices[d.deviceId]
+                      return (
+                        <div key={d.deviceId} className="space-y-1">
+                          <button
+                            onClick={() => {
+                              selectDevice(d.deviceId)
+                              setShowDevices(false)
+                            }}
+                            className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${
+                              selectedDeviceId === d.deviceId ? 'text-accent' : 'text-gray-300 hover:bg-surface-hover'
+                            }`}
+                          >
+                            <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <span className="block truncate">{d.deviceName}</span>
+                              {dState?.song && (
+                                <span className="block truncate text-[11px] text-gray-500">
+                                  {dState.song.title} · {dState.song.artist}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                          <div className="flex gap-1 px-2 pb-1">
+                            {dState?.song && (
+                              <button
+                                onClick={() => {
+                                  if (handoffToHere(d.deviceId)) showToast(`Lecture reprise depuis ${d.deviceName}`)
+                                  setShowDevices(false)
+                                }}
+                                className="rounded bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent/25"
+                              >
+                                Reprendre ici
+                              </button>
+                            )}
+                            {localSong && (
+                              <button
+                                onClick={() => {
+                                  if (handoffToDevice(d.deviceId)) showToast(`Lecture transférée vers ${d.deviceName}`)
+                                  setShowDevices(false)
+                                }}
+                                className="rounded bg-surface-hover px-2 py-0.5 text-[11px] font-semibold text-gray-300 hover:text-white"
+                              >
+                                Transférer là-bas
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
                   {deviceList.filter((d) => d.deviceId !== 'hub').length === 0 && (
                     <p className="px-2 py-1.5 text-xs text-gray-500">Aucun autre appareil connecté.</p>
                   )}

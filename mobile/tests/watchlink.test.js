@@ -215,6 +215,8 @@ test('every action the watch may send is read, with its payload checked', () => 
   ok({ action: 'setVolume', payload: { volume: 0.64 } }, { action: 'setVolume', payload: { volume: 0.64 } })
   ok({ action: 'setVolume', payload: { volume: 7 } }, { action: 'setVolume', payload: { volume: 1 } })
   ok({ action: 'setRepeatMode', payload: { mode: 'one' } }, { action: 'setRepeatMode', payload: { mode: 'one' } })
+  ok({ action: 'setSleepTimer', payload: { minutes: 30 } }, { action: 'setSleepTimer', payload: { minutes: 30 } })
+  ok({ action: 'setSleepTimer', payload: { minutes: -1 } }, { action: 'setSleepTimer', payload: { minutes: -1 } })
   ok({ action: 'playMedia', payload: { kind: 'album', id: 'al-1' } }, { action: 'playMedia', payload: { kind: 'album', id: 'al-1' } })
 })
 

@@ -52,6 +52,9 @@ test('a valid request is read, with the mode defaulting to "now"', () => {
   assert.deepStrictEqual(media.parsePlayMedia({ kind: 'album', id: 'al-1' }), { kind: 'album', id: 'al-1', mode: 'now' })
   assert.deepStrictEqual(media.parsePlayMedia({ kind: 'playlist', id: 'pl-1', index: 3, mode: 'last' }), { kind: 'playlist', id: 'pl-1', index: 3, mode: 'last' })
   assert.deepStrictEqual(media.parsePlayMedia({ kind: 'song', id: 's1', songId: 's1', mode: 'next' }), { kind: 'song', id: 's1', songId: 's1', mode: 'next' })
+  assert.deepStrictEqual(media.parsePlayMedia({ kind: 'favorites', id: 'all' }), { kind: 'favorites', id: 'all', mode: 'now' })
+  assert.deepStrictEqual(media.parsePlayMedia({ kind: 'shuffleAll', id: 'all' }), { kind: 'shuffleAll', id: 'all', mode: 'now' })
+  assert.deepStrictEqual(media.parsePlayMedia({ kind: 'radio', id: 's1' }), { kind: 'radio', id: 's1', mode: 'now' })
 })
 
 test('anything else is refused: the payload comes off the network', () => {

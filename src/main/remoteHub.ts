@@ -28,7 +28,7 @@ const HUB_DEVICE_ID = 'hub'
 const HELLO_TIMEOUT_MS = 10_000
 const MAX_MESSAGE_BYTES = 64 * 1024
 /** What a phone may ask a player to do; anything else is ignored. */
-const COMMANDS = new Set(['toggle', 'play', 'pause', 'next', 'prev', 'seek', 'setVolume', 'toggleShuffle', 'setRepeatMode'])
+const COMMANDS = new Set(['toggle', 'play', 'pause', 'next', 'prev', 'seek', 'setVolume', 'toggleShuffle', 'setRepeatMode', 'handoff'])
 
 export interface Pairing {
   /** Names this PC to phones that were paired with it (not a secret). */

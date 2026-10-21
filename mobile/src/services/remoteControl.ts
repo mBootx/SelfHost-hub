@@ -68,6 +68,7 @@ export interface RemoteDeviceState {
   shuffle: boolean
   repeatMode: 'off' | 'all' | 'one'
   volume: number
+  upNext?: RemoteSongInfo[]
 }
 
 export interface RemoteDeviceSummary {

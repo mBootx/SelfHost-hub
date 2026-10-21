@@ -212,7 +212,7 @@ fun CircularSeekBar(
             val stroke = Stroke(width = strokePx, cap = StrokeCap.Round)
 
             // The whole ring, faint, and the elapsed part of the song over it.
-            drawArc(Color.White.copy(alpha = 0.22f), startAngle = -90f, sweepAngle = 360f, useCenter = false, topLeft = topLeft, size = arcSize, style = stroke)
+            drawArc(Color.White.copy(alpha = 0.20f), startAngle = -90f, sweepAngle = 360f, useCenter = false, topLeft = topLeft, size = arcSize, style = stroke)
             if (shown > 0f) {
                 drawArc(accent, startAngle = -90f, sweepAngle = shown * 360f, useCenter = false, topLeft = topLeft, size = arcSize, style = stroke)
                 if (enabled) {
@@ -222,7 +222,7 @@ fun CircularSeekBar(
                         size.width / 2f + diameter / 2f * cos(angle).toFloat(),
                         size.height / 2f + diameter / 2f * sin(angle).toFloat()
                     )
-                    drawCircle(Color.White, radius = if (dragging != null) strokePx * 1.5f else strokePx, center = handle)
+                    drawCircle(Color.White, radius = if (dragging != null) strokePx * 1.35f else strokePx * 0.85f, center = handle)
                 }
             }
         }

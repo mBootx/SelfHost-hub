@@ -1,5 +1,6 @@
 package com.selfhosthub.wear.ui.nowplaying
 
+import com.selfhosthub.wear.core.RemoteSong
 import com.selfhosthub.wear.core.RepeatMode
 import com.selfhosthub.wear.core.progressFraction
 import com.selfhosthub.wear.service.link.LinkStatus
@@ -24,7 +25,8 @@ data class NowPlayingUi(
     val shuffle: Boolean = false,
     val repeat: RepeatMode = RepeatMode.OFF,
     /** 0 to 1, as the players report it. */
-    val volume: Double = 1.0
+    val volume: Double = 1.0,
+    val upNext: List<RemoteSong> = emptyList()
 ) {
     val hasSong: Boolean get() = title != null
     val connected: Boolean get() = status == LinkStatus.CONNECTED
@@ -52,7 +54,8 @@ fun LinkUiState.toNowPlaying(now: Long): NowPlayingUi {
         duration = (player?.duration?.takeIf { it > 0 } ?: song?.duration) ?: 0.0,
         shuffle = player?.shuffle == true,
         repeat = player?.repeatMode ?: RepeatMode.OFF,
-        volume = player?.volume ?: 1.0
+        volume = player?.volume ?: 1.0,
+        upNext = player?.upNext.orEmpty()
     )
 }
 

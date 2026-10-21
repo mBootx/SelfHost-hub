@@ -9,6 +9,15 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.3.0',
+    items: [
+      {
+        title: 'Lancer la radio et transfert de lecture (PC ↔ Téléphone)',
+        text: "Lancez une radio infinie à partir de n'importe quel titre via le menu contextuel, et transférez ou reprenez la lecture en cours (file d'attente et position exacte) entre votre PC et votre téléphone."
+      }
+    ]
+  },
+  {
     version: '3.0.0',
     items: [
       {

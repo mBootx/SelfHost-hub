@@ -22,15 +22,23 @@ async function unmetered(): Promise<boolean> {
   return state?.type === Network.NetworkStateType.WIFI || state?.type === Network.NetworkStateType.ETHERNET
 }
 
-/** Downloads the songs the kept playlists don't have on the phone yet. `force`: now, on any network. */
+/** Downloads the songs the kept playlists (and starred favorites, when enabled) don't have on the phone yet. `force`: now, on any network. */
 export async function syncKeptPlaylists(force = false): Promise<void> {
   const { client, status } = useNavidromeStore.getState()
-  const kept = useOfflineStore.getState().keptPlaylists
-  if (!client || status !== 'connected' || running || Object.keys(kept).length === 0) return
+  const { keptPlaylists: kept, keepFavorites } = useOfflineStore.getState()
+  if (!client || status !== 'connected' || running || (Object.keys(kept).length === 0 && !keepFavorites)) return
   if (!force && (Date.now() - lastRun < MIN_GAP_MS || !(await unmetered()))) return
   running = true
   lastRun = Date.now()
   try {
+    if (keepFavorites) {
+      try {
+        const { songs } = await client.getStarred()
+        await useOfflineStore.getState().downloadTracks(songs, client, { quiet: true, label: 'Titres aimés' })
+      } catch (err) {
+        logEvent('music', `Titres aimés gardés : ${describeError(err)}`, 'warn')
+      }
+    }
     for (const [id, name] of Object.entries(kept)) {
       try {
         const { playlist, songs } = await client.getPlaylist(id)

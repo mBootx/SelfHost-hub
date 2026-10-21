@@ -9,6 +9,23 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.3.0',
+    items: [
+      {
+        title: 'Montre : paroles, file d’attente, favoris, radio et minuteur',
+        text: 'Nouvel écran de paroles synchronisées (LRC) avec saut tactile, vue de la file d’attente, accès rapide « Titres aimés » et « Mix aléatoire », lancement de radio à partir d’un titre et minuteur de veille pilotable depuis la montre.'
+      },
+      {
+        title: 'Transfert de lecture instantané (PC ↔ Téléphone)',
+        text: 'Reprenez la lecture en cours (titre, file d’attente et position exacte) sur votre téléphone ou transférez-la vers votre PC en un geste depuis l’écran Appareils.'
+      },
+      {
+        title: 'Favoris hors ligne et récap enrichi',
+        text: 'Option pour garder automatiquement tous vos titres aimés hors ligne en Wi-Fi, et récap hebdomadaire enrichi avec le top albums, la série de semaines consécutives et le partage.'
+      }
+    ]
+  },
+  {
     version: '3.2.1',
     items: [
       {

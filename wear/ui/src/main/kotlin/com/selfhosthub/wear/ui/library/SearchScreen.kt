@@ -6,12 +6,14 @@ import android.widget.Toast
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassTop
@@ -24,9 +26,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material.Chip
@@ -47,6 +53,7 @@ import com.selfhosthub.wear.service.link.DowntifySearch
 import kotlinx.coroutines.launch
 import com.selfhosthub.wear.ui.R
 import com.selfhosthub.wear.ui.common.rememberHaptics
+import com.selfhosthub.wear.ui.theme.WatchColors
 
 private const val QUERY_KEY = "query"
 
@@ -82,10 +89,20 @@ private fun androidx.wear.compose.foundation.lazy.ScalingLazyListScope.downtifyS
         DowntifyUi.Idle -> item {
             Chip(
                 onClick = { haptics.tap(); onSearch() },
-                label = { Text(stringResource(R.string.downtify_search, query), maxLines = 1) },
-                icon = { Icon(Icons.Filled.CloudDownload, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                colors = ChipDefaults.secondaryChipColors(),
-                modifier = Modifier.fillMaxWidth().height(44.dp)
+                label = { Text(stringResource(R.string.downtify_search, query), maxLines = 1, fontWeight = FontWeight.Medium) },
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_spotify_download),
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                        tint = WatchColors.Accent
+                    )
+                },
+                colors = ChipDefaults.chipColors(
+                    backgroundColor = Color(0xFF18191C),
+                    contentColor = WatchColors.OnSurface
+                ),
+                modifier = Modifier.fillMaxWidth().height(46.dp)
             )
         }
         DowntifyUi.Searching -> item { Loading() }
@@ -98,7 +115,7 @@ private fun androidx.wear.compose.foundation.lazy.ScalingLazyListScope.downtifyS
                 val status = asked[song.id]
                 Chip(
                     onClick = { if (status == null || status == AskedState.FAILED) { haptics.confirm(); onDownload(song) } },
-                    label = { Text(song.title, maxLines = 1) },
+                    label = { Text(song.title, maxLines = 1, fontWeight = FontWeight.Medium) },
                     secondaryLabel = {
                         Text(
                             when (status) {
@@ -111,18 +128,27 @@ private fun androidx.wear.compose.foundation.lazy.ScalingLazyListScope.downtifyS
                         )
                     },
                     icon = {
-                        Icon(
-                            when (status) {
-                                AskedState.ASKING -> Icons.Filled.HourglassTop
-                                AskedState.ASKED -> Icons.Filled.Check
-                                AskedState.FAILED -> Icons.Filled.ErrorOutline
-                                null -> Icons.Filled.CloudDownload
-                            },
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
+                        when (status) {
+                            AskedState.ASKING -> Icon(Icons.Filled.HourglassTop, contentDescription = null, modifier = Modifier.size(20.dp))
+                            AskedState.ASKED -> Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                            AskedState.FAILED -> Icon(Icons.Filled.ErrorOutline, contentDescription = null, modifier = Modifier.size(20.dp), tint = WatchColors.Danger)
+                            null -> Icon(
+                                painter = painterResource(R.drawable.ic_spotify_download),
+                                contentDescription = null,
+                                modifier = Modifier.size(19.dp),
+                                tint = WatchColors.Accent
+                            )
+                        }
+                    },
+                    colors = if (status == AskedState.ASKED) {
+                        ChipDefaults.primaryChipColors()
+                    } else {
+                        ChipDefaults.chipColors(
+                            backgroundColor = Color(0xFF18191C),
+                            contentColor = WatchColors.OnSurface,
+                            secondaryContentColor = WatchColors.OnSurfaceMuted
                         )
                     },
-                    colors = if (status == AskedState.ASKED) ChipDefaults.primaryChipColors() else ChipDefaults.secondaryChipColors(),
                     modifier = Modifier.fillMaxWidth().height(52.dp)
                 )
             }
@@ -155,10 +181,27 @@ fun SearchContent(
         item {
             Chip(
                 onClick = { haptics.tap(); onEdit() },
-                label = { Text(query.ifEmpty { stringResource(R.string.search_hint) }, maxLines = 1) },
-                icon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                colors = ChipDefaults.secondaryChipColors(),
-                modifier = Modifier.fillMaxWidth().height(44.dp)
+                label = { Text(query.ifEmpty { stringResource(R.string.search_hint) }, maxLines = 1, fontWeight = FontWeight.Medium) },
+                icon = {
+                    Box(
+                        Modifier
+                            .size(28.dp)
+                            .background(WatchColors.Accent.copy(alpha = 0.16f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_spotify_search),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = WatchColors.Accent
+                        )
+                    }
+                },
+                colors = ChipDefaults.chipColors(
+                    backgroundColor = Color(0xFF18191C),
+                    contentColor = WatchColors.OnSurface
+                ),
+                modifier = Modifier.fillMaxWidth().height(46.dp)
             )
         }
         if (searching) item { Loading() }
@@ -276,7 +319,8 @@ fun SearchRoute(graph: WatchGraph, onArtist: (ArtistEntity) -> Unit, onAlbum: (A
             }
         },
         onNext = { more?.let { sender.playSong(it.id, PlayMode.NEXT) } },
-        onLast = { more?.let { sender.playSong(it.id, PlayMode.LAST) } }
+        onLast = { more?.let { sender.playSong(it.id, PlayMode.LAST) } },
+        onRadio = { more?.let { sender.startRadio(it.id) } }
     )
     sender.Host()
 }

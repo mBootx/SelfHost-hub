@@ -137,6 +137,30 @@ test('top artists: by time heard, songs of one artist together, with the picture
   assert.strictEqual(wrapped.artistCount, 3, 'Zoé, heard 20 s, is not counted')
 })
 
+test('top albums, listening streak, active days, and share card formatting', () => {
+  const ledger = ledgerOf({
+    '2026-09-21': { s0: { plays: 2, seconds: 600 } },
+    '2026-09-28': { s1: { plays: 3, seconds: 900 } },
+    '2026-10-05': {
+      a1: { plays: 2, seconds: 400, album: 'Discovery', albumId: 'al-disc', artist: 'Daft Punk', day: 0 },
+      a2: { plays: 3, seconds: 500, album: 'Discovery', albumId: 'al-disc', artist: 'Daft Punk', day: 2 },
+      b1: { plays: 1, seconds: 350, album: 'Homework', albumId: 'al-hw', artist: 'Daft Punk', day: 5 }
+    }
+  })
+  const wrapped = m.summarize(ledger, '2026-10-05')
+  assert.strictEqual(wrapped.streakWeeks, 3)
+  assert.strictEqual(wrapped.activeDays, 3)
+  assert.strictEqual(wrapped.albumCount, 2)
+  assert.deepStrictEqual(wrapped.topAlbums.map((al) => [al.name, al.seconds, al.plays]), [
+    ['Discovery', 900, 5],
+    ['Homework', 350, 1]
+  ])
+  const shareText = m.formatWrappedShare(wrapped)
+  assert.ok(shareText.includes('5 – 11 octobre'))
+  assert.ok(shareText.includes('3 semaines consécutives'))
+  assert.ok(shareText.includes('Album n°1 : Discovery'))
+})
+
 test('the days, the busiest one, and the change from the week before', () => {
   const ledger = ledgerOf({
     '2026-09-28': { p: { plays: 2, seconds: 3000 } },

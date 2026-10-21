@@ -43,6 +43,15 @@ export interface ArtistStat {
   albumId?: string
 }
 
+export interface AlbumStat {
+  name: string
+  artist: string
+  albumId?: string
+  coverArt?: string
+  seconds: number
+  plays: number
+}
+
 export interface WeeklyWrapped {
   week: string
   /** Monday 00:00 and the next Monday 00:00, local time. */
@@ -55,10 +64,16 @@ export interface WeeklyWrapped {
   days: number[]
   /** The day with the most listening (0 = Monday), null for an empty week. */
   busiestDay: number | null
+  /** Days in the week with listening > 0 (0..7). */
+  activeDays: number
+  /** Consecutive weeks ending at `week` with significant listening. */
+  streakWeeks: number
   topSongs: SongStat[]
   topArtists: ArtistStat[]
+  topAlbums: AlbumStat[]
   songCount: number
   artistCount: number
+  albumCount: number
   plays: number
 }
 
@@ -243,6 +258,11 @@ function artistKey(song: SongStat): string {
   return song.artistId || song.artist.trim().toLowerCase()
 }
 
+function albumKey(song: SongStat): string | null {
+  if (!song.album || !song.album.trim()) return null
+  return song.albumId || `${song.album.trim().toLowerCase()}::${artistKey(song)}`
+}
+
 /** The Wrapped of `week`, or null when nothing was recorded that week. */
 export function summarize(ledger: Ledger, week: string): WeeklyWrapped | null {
   const log = ledger[week]
@@ -260,19 +280,44 @@ export function summarize(ledger: Ledger, week: string): WeeklyWrapped | null {
 
   // Artists: by time heard, which says more than a count of songs of very different lengths.
   const artists = new Map<string, ArtistStat & { best: number }>()
+  const albums = new Map<string, AlbumStat & { best: number }>()
   for (const song of songs) {
     const key = artistKey(song)
     const artist = artists.get(key)
     if (!artist) {
       artists.set(key, { name: song.artist, artistId: song.artistId, seconds: song.seconds, plays: song.plays, coverArt: song.coverArt, albumId: song.albumId, best: song.seconds })
-      continue
+    } else {
+      artist.seconds += song.seconds
+      artist.plays += song.plays
+      if (song.seconds > artist.best) {
+        artist.best = song.seconds
+        artist.coverArt = song.coverArt
+        artist.albumId = song.albumId
+      }
     }
-    artist.seconds += song.seconds
-    artist.plays += song.plays
-    if (song.seconds > artist.best) {
-      artist.best = song.seconds
-      artist.coverArt = song.coverArt
-      artist.albumId = song.albumId
+
+    const aKey = albumKey(song)
+    if (aKey && song.album) {
+      const album = albums.get(aKey)
+      if (!album) {
+        albums.set(aKey, {
+          name: song.album,
+          artist: song.artist,
+          albumId: song.albumId,
+          coverArt: song.coverArt,
+          seconds: song.seconds,
+          plays: song.plays,
+          best: song.seconds
+        })
+      } else {
+        album.seconds += song.seconds
+        album.plays += song.plays
+        if (song.seconds > album.best) {
+          album.best = song.seconds
+          album.coverArt = song.coverArt || album.coverArt
+          album.albumId = song.albumId || album.albumId
+        }
+      }
     }
   }
   const topArtists = [...artists.values()]
@@ -280,6 +325,21 @@ export function summarize(ledger: Ledger, week: string): WeeklyWrapped | null {
     .sort((a, b) => b.seconds - a.seconds || b.plays - a.plays || byTitle(a, b))
     .slice(0, TOP)
     .map(({ best: _best, ...artist }) => artist)
+
+  const topAlbums = [...albums.values()]
+    .filter((album) => album.seconds >= MIN_ARTIST_SECONDS)
+    .sort((a, b) => b.seconds - a.seconds || b.plays - a.plays || byTitle(a, b))
+    .slice(0, TOP)
+    .map(({ best: _best, ...album }) => album)
+
+  let streakWeeks = totalSeconds(log) > 0 ? 1 : 0
+  if (streakWeeks > 0) {
+    let cursor = shiftWeek(week, -1)
+    while (totalSeconds(ledger[cursor]) >= MIN_WRAPPED_SECONDS) {
+      streakWeeks++
+      cursor = shiftWeek(cursor, -1)
+    }
+  }
 
   const days = log.days.map((seconds) => Math.round(seconds / 60))
   const most = Math.max(...log.days)
@@ -291,12 +351,43 @@ export function summarize(ledger: Ledger, week: string): WeeklyWrapped | null {
     previousMinutes: previous ? Math.round(totalSeconds(previous) / 60) : null,
     days,
     busiestDay: most > 0 ? log.days.indexOf(most) : null,
+    activeDays: log.days.filter((seconds) => seconds > 0).length,
+    streakWeeks,
     topSongs,
     topArtists,
+    topAlbums,
     songCount: songs.filter((song) => song.seconds >= MIN_ARTIST_SECONDS || song.plays > 0).length,
     artistCount: [...artists.values()].filter((artist) => artist.seconds >= MIN_ARTIST_SECONDS).length,
+    albumCount: [...albums.values()].filter((album) => album.seconds >= MIN_ARTIST_SECONDS).length,
     plays: songs.reduce((sum, song) => sum + song.plays, 0)
   }
+}
+
+/** A compact French text card of the week's Wrapped, ready for the system share sheet. */
+export function formatWrappedShare(summary: WeeklyWrapped): string {
+  const lines: string[] = [
+    `🎧 Mon récap musical (${weekLabel(summary.week)})`,
+    `⏱️ ${durationLabel(summary.minutes)} d'écoute · ${summary.plays} ${summary.plays > 1 ? 'écoutes' : 'écoute'}`
+  ]
+  if (summary.streakWeeks > 1) {
+    lines.push(`🔥 Série de ${summary.streakWeeks} semaines consécutives`)
+  }
+  if (summary.topSongs.length > 0) {
+    lines.push('', '🏆 Top titres :')
+    summary.topSongs.slice(0, 3).forEach((s, i) => {
+      lines.push(`${i + 1}. ${s.title} – ${s.artist} (${s.plays}×)`)
+    })
+  }
+  if (summary.topArtists.length > 0) {
+    lines.push('', '🎤 Top artistes :')
+    summary.topArtists.slice(0, 3).forEach((a, i) => {
+      lines.push(`${i + 1}. ${a.name} (${durationLabel(Math.round(a.seconds / 60))})`)
+    })
+  }
+  if (summary.topAlbums.length > 0) {
+    lines.push('', `💿 Album n°1 : ${summary.topAlbums[0].name} – ${summary.topAlbums[0].artist}`)
+  }
+  return lines.join('\n')
 }
 
 /** "+18 %", "−40 %", or null when there is nothing to compare with. */
