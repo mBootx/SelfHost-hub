@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Alert, Switch } from 'react-native'
 import { useLocalSearchParams, useNavigation } from 'expo-router'
-import { Play, HardDriveDownload, ListMusic, Trash2 } from 'lucide-react-native'
+import { Play, HardDriveDownload, ListMusic, Trash2, CloudOff } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
-import { useOfflineStore } from '@/store/offlineStore'
+import { OFFLINE_PLAYLIST_ID, offlinePlaylist, offlineTrackToSong, useOfflineStore } from '@/store/offlineStore'
 import { useToastStore } from '@/store/toastStore'
 import { NDPlaylist, NDSong } from '@/services/navidrome'
 import { prefetchCoverArt } from '@/services/imagePrefetch'
@@ -38,22 +38,37 @@ export default function PlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const navigation = useNavigation()
   const client = useNavidromeStore((s) => s.client)
+  const status = useNavidromeStore((s) => s.status)
   const playQueue = useNavidromeStore((s) => s.playQueue)
   const currentSongId = useNavidromeStore((s) => s.queue[s.queueIndex]?.id)
   const isPlaying = useNavidromeStore((s) => s.isPlaying)
+  const offlineTracks = useOfflineStore((s) => s.tracks)
   const downloadTracks = useOfflineStore((s) => s.downloadTracks)
   const kept = useOfflineStore((s) => (id ? id in s.keptPlaylists : false))
   const setKeptPlaylist = useOfflineStore((s) => s.setKeptPlaylist)
+  const cachePlaylist = useOfflineStore((s) => s.cachePlaylist)
+  const removeCachedPlaylist = useOfflineStore((s) => s.removeCachedPlaylist)
   const removeFromPlaylist = useNavidromeStore((s) => s.removeFromPlaylist)
   const deletePlaylist = useNavidromeStore((s) => s.deletePlaylist)
   const showToast = useToastStore((s) => s.show)
+  const isOfflinePlaylist = id === OFFLINE_PLAYLIST_ID
 
-  const [playlist, setPlaylist] = useState<NDPlaylist | null>(null)
-  const [entries, setEntries] = useState<Entry[]>([])
+  const [playlist, setPlaylist] = useState<NDPlaylist | null>(() => {
+    if (id === OFFLINE_PLAYLIST_ID) return offlinePlaylist(useOfflineStore.getState().tracks)
+    return id ? useOfflineStore.getState().playlistCache[id]?.playlist ?? null : null
+  })
+  const [entries, setEntries] = useState<Entry[]>(() => {
+    if (id === OFFLINE_PLAYLIST_ID) {
+      return Object.values(useOfflineStore.getState().tracks).map((t, i) => ({ key: `${i}:${t.id}`, song: offlineTrackToSong(t) }))
+    }
+    const cached = id ? useOfflineStore.getState().playlistCache[id]?.songs : undefined
+    return cached ? cached.map((song, i) => ({ key: `${i}:${song.id}`, song })) : []
+  })
   const poolSongs = useMemo(() => entries.map((e) => e.song), [entries])
   useSelectionPool(poolSongs)
   const [removing, setRemoving] = useState<ReadonlySet<string>>(new Set())
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !playlist)
+  const [usingCached, setUsingCached] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [sortMode, setSortMode] = useState<SortMode>('default')
@@ -99,6 +114,7 @@ export default function PlaylistScreen() {
     if (!id || !client) return
     const name = playlist?.name ?? 'Playlist'
     setKeptPlaylist(id, name, keep)
+    if (playlist) cachePlaylist(id, playlist, entries.map((e) => e.song))
     if (keep) void downloadTracks(entries.map((e) => e.song), client, { label: name })
     else showToast('Les titres déjà téléchargés restent sur le téléphone')
   }
@@ -133,6 +149,7 @@ export default function PlaylistScreen() {
         onPress: async () => {
           try {
             await deletePlaylist(id)
+            removeCachedPlaylist(id)
             showToast(`Playlist « ${playlist.name} » supprimée`)
             navigation.goBack()
           } catch (err: any) {
@@ -144,9 +161,34 @@ export default function PlaylistScreen() {
   }
 
   useEffect(() => {
-    if (!client || !id) return
+    if (id !== OFFLINE_PLAYLIST_ID) return
+    const pl = offlinePlaylist(offlineTracks)
+    const loaded = Object.values(offlineTracks).map((t, i) => ({ key: `${i}:${t.id}`, song: offlineTrackToSong(t) }))
+    serverEntries.current = loaded
+    setPlaylist(pl)
+    setEntries(loaded)
+    setLoading(false)
+    setError(null)
+    navigation.setOptions({ title: pl.name })
+  }, [id, offlineTracks, navigation])
+
+  useEffect(() => {
+    if (!id || id === OFFLINE_PLAYLIST_ID) return
+    const cached = useOfflineStore.getState().playlistCache[id]
+    if (cached && !playlist) {
+      const loaded = cached.songs.map((song, i) => ({ key: `${i}:${song.id}`, song }))
+      serverEntries.current = loaded
+      setPlaylist(cached.playlist)
+      setEntries(loaded)
+      setLoading(false)
+      navigation.setOptions({ title: cached.playlist.name || 'Playlist' })
+    }
+    if (!client) {
+      setLoading(false)
+      return
+    }
     let cancelled = false
-    setLoading(true)
+    if (!cached) setLoading(true)
     client
       .getPlaylist(id)
       .then((res) => {
@@ -156,7 +198,9 @@ export default function PlaylistScreen() {
         setPlaylist(res.playlist)
         setEntries(loaded)
         setError(null)
+        setUsingCached(false)
         navigation.setOptions({ title: res.playlist?.name || 'Playlist' })
+        if (res.playlist) useOfflineStore.getState().cachePlaylist(id, res.playlist, res.songs)
         prefetchCoverArt(client, res.songs.map((s) => s.coverArt || s.albumId), 100)
         // Kept on the phone: what was added since is fetched now that it is open.
         if (id in useOfflineStore.getState().keptPlaylists) {
@@ -164,7 +208,13 @@ export default function PlaylistScreen() {
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Playlist introuvable')
+        if (cancelled) return
+        if (cached || entries.length > 0) {
+          setUsingCached(true)
+          setError(null)
+        } else {
+          setError(err instanceof Error ? err.message : 'Playlist introuvable')
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -174,7 +224,7 @@ export default function PlaylistScreen() {
     }
   }, [id, client, attempt])
 
-  if (!client) return <View style={styles.container} />
+  if (!client && !isOfflinePlaylist && !playlist) return <View style={styles.container} />
   if (loading) {
     return (
       <View style={styles.center}>
@@ -196,6 +246,19 @@ export default function PlaylistScreen() {
   const firstSong = entries[0]?.song
   const coverId = playlist?.coverArt || firstSong?.coverArt || firstSong?.albumId
   const songs = displayEntries.map((e) => e.song)
+  const offlineCount = useMemo(() => songs.filter((s) => s.id in offlineTracks).length, [songs, offlineTracks])
+
+  function handlePlayFrom(startIndex: number): void {
+    if (songs.length === 0) return
+    if ((status !== 'connected' || usingCached) && offlineCount > 0 && offlineCount < songs.length) {
+      const picked = songs[startIndex]
+      const playable = songs.filter((s) => s.id in offlineTracks)
+      const idx = picked ? Math.max(0, playable.findIndex((s) => s.id === picked.id)) : 0
+      playQueue(playable, idx)
+      return
+    }
+    playQueue(songs, startIndex)
+  }
 
   if (reordering) {
     return (
@@ -244,7 +307,7 @@ export default function PlaylistScreen() {
       ListHeaderComponent={
         <View style={styles.header}>
           <CoverImage
-            uri={coverId ? client.coverArtUrl(coverId, 600) : null}
+            uri={coverId && client ? client.coverArtUrl(coverId, 600) : null}
             style={styles.cover}
             icon={ListMusic}
             iconSize={40}
@@ -253,11 +316,22 @@ export default function PlaylistScreen() {
           <Text style={styles.name} numberOfLines={2}>
             {playlist?.name}
           </Text>
-          <Text style={styles.meta}>{plural(displayEntries.length, 'titre', 'titres')}</Text>
+          <Text style={styles.meta}>
+            {plural(displayEntries.length, 'titre', 'titres')}
+            {!isOfflinePlaylist && offlineCount > 0 ? ` · ${offlineCount} hors ligne` : ''}
+          </Text>
+          {usingCached && (
+            <View style={styles.cachedNotice}>
+              <CloudOff size={14} color={colors.warning} />
+              <Text style={styles.cachedNoticeText}>
+                Version enregistrée sur le téléphone{offlineCount < songs.length ? ` (${offlineCount}/${songs.length} téléchargés)` : ''}
+              </Text>
+            </View>
+          )}
           <View style={styles.actions}>
             <Pressable
               style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}
-              onPress={() => playQueue(songs, 0)}
+              onPress={() => handlePlayFrom(0)}
               accessibilityRole="button"
               accessibilityLabel="Lire la playlist"
             >
@@ -265,36 +339,45 @@ export default function PlaylistScreen() {
               <Text style={styles.playButtonText}>Lecture</Text>
             </Pressable>
             <SelectButton />
-            <Pressable
-              style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
-              onPress={() => downloadTracks(songs, client)}
-              accessibilityRole="button"
-              accessibilityLabel="Télécharger pour l'écoute hors ligne"
-            >
-              <HardDriveDownload size={16} color={colors.textSecondary} />
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
-              onPress={confirmDelete}
-              accessibilityRole="button"
-              accessibilityLabel="Supprimer la playlist"
-            >
-              <Trash2 size={16} color={colors.danger} />
-            </Pressable>
+            {!isOfflinePlaylist && client && (
+              <>
+                <Pressable
+                  style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+                  onPress={() => {
+                    if (id && playlist) cachePlaylist(id, playlist, songs)
+                    void downloadTracks(songs, client)
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Télécharger pour l'écoute hors ligne"
+                >
+                  <HardDriveDownload size={16} color={colors.textSecondary} />
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+                  onPress={confirmDelete}
+                  accessibilityRole="button"
+                  accessibilityLabel="Supprimer la playlist"
+                >
+                  <Trash2 size={16} color={colors.danger} />
+                </Pressable>
+              </>
+            )}
           </View>
-          <View style={styles.keepRow}>
-            <View style={styles.keepText}>
-              <Text style={styles.keepTitle}>Garder sur le téléphone</Text>
-              <Text style={styles.keepHint}>Les titres ajoutés plus tard se téléchargent tout seuls, en Wi-Fi.</Text>
+          {!isOfflinePlaylist && (
+            <View style={styles.keepRow}>
+              <View style={styles.keepText}>
+                <Text style={styles.keepTitle}>Garder sur le téléphone</Text>
+                <Text style={styles.keepHint}>Les titres ajoutés plus tard se téléchargent tout seuls, en Wi-Fi.</Text>
+              </View>
+              <Switch
+                value={kept}
+                onValueChange={toggleKept}
+                trackColor={{ false: colors.hover, true: colors.accent }}
+                thumbColor="#fff"
+                accessibilityLabel="Garder la playlist sur le téléphone"
+              />
             </View>
-            <Switch
-              value={kept}
-              onValueChange={toggleKept}
-              trackColor={{ false: colors.hover, true: colors.accent }}
-              thumbColor="#fff"
-              accessibilityLabel="Garder la playlist sur le téléphone"
-            />
-          </View>
+          )}
           <View style={styles.sortRow}>
             {SORT_OPTIONS.map((opt) => (
               <Pressable
@@ -305,7 +388,7 @@ export default function PlaylistScreen() {
                 <Text style={[styles.sortPillText, sortMode === opt.key && styles.sortPillTextActive]}>{opt.label}</Text>
               </Pressable>
             ))}
-            {entries.length > 1 && (
+            {!isOfflinePlaylist && !usingCached && entries.length > 1 && (
               <Pressable
                 onPress={() => {
                   setSortMode('default')
@@ -329,8 +412,8 @@ export default function PlaylistScreen() {
           client={client}
           isCurrent={item.song.id === currentSongId}
           isPlaying={isPlaying}
-          onPress={() => playQueue(songs, index)}
-          onRemove={() => handleRemove(item.key)}
+          onPress={() => handlePlayFrom(index)}
+          onRemove={isOfflinePlaylist || usingCached ? undefined : () => handleRemove(item.key)}
         />
       )}
     />
@@ -355,6 +438,17 @@ const styles = StyleSheet.create({
   },
   name: { color: colors.text, fontSize: 22, fontWeight: '800', textAlign: 'center', letterSpacing: -0.4 },
   meta: { color: colors.textSecondary, fontSize: 13, marginTop: spacing.xs },
+  cachedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+    backgroundColor: colors.elevated,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5
+  },
+  cachedNoticeText: { color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, alignItems: 'center' },
   pressed: { opacity: 0.6 },
   playButton: {

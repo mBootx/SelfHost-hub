@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Play, ListMusic, HardDriveDownload, X, Trash2, GripVertical } from 'lucide-react'
+import { Play, ListMusic, HardDriveDownload, X, Trash2, GripVertical, WifiOff } from 'lucide-react'
 import { NavidromeClient, NDPlaylist, NDSong } from '@renderer/services/navidrome'
 import { prefetchCoverArt } from '@renderer/services/imagePrefetch'
 import { plural } from '@renderer/services/plural'
 import LoadFailed from './LoadFailed'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
-import { useOfflineStore } from '@renderer/store/offlineStore'
+import { OFFLINE_PLAYLIST_ID, offlinePlaylist, offlineTrackToSong, useOfflineStore } from '@renderer/store/offlineStore'
 import { useToastStore } from '@renderer/store/toastStore'
 import ConfirmModal from '@renderer/components/ConfirmModal'
 import TrackThumbnail from './TrackThumbnail'
@@ -13,7 +13,7 @@ import { useTrackMenu } from './useTrackMenu'
 import OfflineButton from './OfflineButton'
 
 interface Props {
-  client: NavidromeClient
+  client: NavidromeClient | null
   playlistId: string
   onDeleted: () => void
 }
@@ -34,9 +34,18 @@ function formatDuration(sec: number): string {
 }
 
 export default function PlaylistView({ client, playlistId, onDeleted }: Props): JSX.Element {
-  const [playlist, setPlaylist] = useState<NDPlaylist | null>(null)
-  const [songs, setSongs] = useState<NDSong[]>([])
-  const [loading, setLoading] = useState(true)
+  const isOfflinePlaylist = playlistId === OFFLINE_PLAYLIST_ID
+  const status = useNavidromeStore((s) => s.status)
+  const isServerOffline = status === 'error' || status === 'unavailable' || !client
+  const offlineTracks = useOfflineStore((s) => s.tracks)
+  const cachePlaylist = useOfflineStore((s) => s.cachePlaylist)
+  const removeCachedPlaylist = useOfflineStore((s) => s.removeCachedPlaylist)
+  const cachedEntry = useOfflineStore((s) => (playlistId && !isOfflinePlaylist ? s.playlistCache[playlistId] : undefined))
+
+  const [playlist, setPlaylist] = useState<NDPlaylist | null>(() => cachedEntry?.playlist ?? null)
+  const [songs, setSongs] = useState<NDSong[]>(() => cachedEntry?.songs ?? [])
+  const [loading, setLoading] = useState(!isOfflinePlaylist && !cachedEntry)
+  const [usingCache, setUsingCache] = useState(false)
   const playQueue = useNavidromeStore((s) => s.playQueue)
   const trackMenu = useTrackMenu()
   const currentSongId = useNavidromeStore((s) => s.queue[s.queueIndex]?.id)
@@ -52,11 +61,11 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
   const [dragFrom, setDragFrom] = useState<number | null>(null)
   const [dragOver, setDragOver] = useState<number | null>(null)
   const [savingOrder, setSavingOrder] = useState(false)
-  const canReorder = sortMode === 'default' && removingIndex === null && !savingOrder
+  const canReorder = !isOfflinePlaylist && !isServerOffline && !usingCache && sortMode === 'default' && removingIndex === null && !savingOrder
 
   /** A song dropped at another place: shown at once, then the whole order is saved; put back if the server refuses. */
   async function handleMove(from: number, to: number): Promise<void> {
-    if (from === to) return
+    if (from === to || !client) return
     const before = songs
     const next = [...songs]
     const [moved] = next.splice(from, 1)
@@ -65,6 +74,7 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
     setSavingOrder(true)
     try {
       await client.replacePlaylistSongs(playlistId, next.map((s) => s.id))
+      if (playlist) cachePlaylist(playlistId, playlist, next)
     } catch (err) {
       setSongs(before)
       showToast(`Ordre non enregistré : ${err instanceof Error && err.message ? err.message : 'erreur inconnue'}`)
@@ -76,6 +86,7 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
   async function handleDeletePlaylist(): Promise<void> {
     try {
       await deletePlaylist(playlistId)
+      removeCachedPlaylist(playlistId)
       showToast(`Playlist « ${playlist?.name} » supprimée`)
       onDeleted()
     } catch (err: any) {
@@ -86,6 +97,16 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
 
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    if (!isOfflinePlaylist) return
+    const list = Object.values(offlineTracks).map(offlineTrackToSong)
+    setPlaylist(offlinePlaylist(offlineTracks))
+    setSongs(list)
+    setLoading(false)
+    setError(null)
+    setUsingCache(false)
+  }, [isOfflinePlaylist, offlineTracks])
 
   // Sorting only changes what's displayed - removal still has to address the
   // song by its real position in the server's playlist, so each row keeps its
@@ -99,27 +120,71 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
   }, [songs, sortMode])
 
   useEffect(() => {
+    if (isOfflinePlaylist) return
     let cancelled = false
-    setLoading(true)
+    const cached = useOfflineStore.getState().playlistCache[playlistId]
+    if (cached) {
+      setPlaylist(cached.playlist)
+      setSongs(cached.songs)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     setError(null)
+    if (!client) {
+      if (cached) {
+        setUsingCache(true)
+        setLoading(false)
+      } else {
+        setError('Serveur Navidrome injoignable et cette playlist n’est pas en cache hors ligne.')
+        setLoading(false)
+      }
+      return
+    }
     client
       .getPlaylist(playlistId)
       .then((res) => {
         if (cancelled) return
         setPlaylist(res.playlist)
         setSongs(res.songs)
+        setUsingCache(false)
         setLoading(false)
+        cachePlaylist(playlistId, res.playlist, res.songs)
         prefetchCoverArt(client, res.songs.map((s) => s.coverArt), 80)
       })
       .catch((err) => {
         if (cancelled) return
+        const fallback = useOfflineStore.getState().playlistCache[playlistId]
+        if (fallback) {
+          setPlaylist(fallback.playlist)
+          setSongs(fallback.songs)
+          setUsingCache(true)
+          setError(null)
+          setLoading(false)
+          return
+        }
         setError(err instanceof Error ? err.message : 'Playlist introuvable')
         setLoading(false)
       })
     return () => {
       cancelled = true
     }
-  }, [playlistId, attempt])
+  }, [playlistId, isOfflinePlaylist, client, attempt, cachePlaylist])
+
+  function playFromList(list: NDSong[], startIndex: number): void {
+    if (isServerOffline || usingCache) {
+      const playable = list.filter((s) => !!offlineTracks[s.id])
+      if (playable.length === 0) {
+        showToast('Aucun titre de cette playlist n’est téléchargé hors ligne.')
+        return
+      }
+      const target = list[startIndex]
+      const nextIndex = target ? Math.max(0, playable.findIndex((s) => s.id === target.id)) : 0
+      playQueue(playable, nextIndex)
+      return
+    }
+    playQueue(list, startIndex)
+  }
 
   async function handleRemove(index: number): Promise<void> {
     setRemovingIndex(index)
@@ -140,7 +205,7 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
   return (
     <div className="animate-fade-in p-6">
       <div className="mb-6 flex items-end gap-5">
-        {playlist?.coverArt ? (
+        {playlist?.coverArt && client ? (
           <img src={client.coverArtUrl(playlist.coverArt, 300)} alt="" className="h-40 w-40 rounded object-cover shadow-2xl" />
         ) : (
           <div className="flex h-40 w-40 items-center justify-center rounded bg-surface-hover">
@@ -148,30 +213,48 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
           </div>
         )}
         <div>
-          <p className="text-xs uppercase tracking-wide text-gray-400">Playlist</p>
+          <p className="text-xs uppercase tracking-wide text-gray-400">
+            {isOfflinePlaylist ? 'Bibliothèque locale' : 'Playlist'}
+          </p>
           <h1 className="text-3xl font-bold">{playlist?.name}</h1>
-          <p className="mt-1 text-sm text-gray-400">{plural(songs.length, 'titre', 'titres')}</p>
+          <p className="mt-1 text-sm text-gray-400">
+            {plural(songs.length, 'titre', 'titres')}
+            {(isServerOffline || usingCache) && !isOfflinePlaylist ? ' · hors ligne' : ''}
+          </p>
+          {(isServerOffline || usingCache) && (
+            <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent">
+              <WifiOff className="h-3.5 w-3.5" />
+              <span>Hors ligne · {songs.filter((s) => !!offlineTracks[s.id]).length}/{songs.length} téléchargés</span>
+            </div>
+          )}
           <div className="mt-4 flex items-center gap-3">
             <button
-              onClick={() => playQueue(songs, 0)}
+              onClick={() => playFromList(songs, 0)}
               className="flex items-center gap-2 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-black transition-colors hover:bg-accent-hover"
             >
               <Play className="h-4 w-4" /> Lecture
             </button>
-            <button
-              onClick={() => downloadTracks(songs, client)}
-              title="Télécharger la playlist pour écoute hors ligne"
-              className="flex items-center gap-2 rounded-full border border-surface-border px-4 py-2 text-sm text-gray-300 transition-colors hover:border-accent hover:text-accent"
-            >
-              <HardDriveDownload className="h-4 w-4" /> Hors ligne
-            </button>
-            <button
-              onClick={() => setConfirmingDelete(true)}
-              title="Supprimer la playlist"
-              className="flex items-center gap-2 rounded-full border border-surface-border px-4 py-2 text-sm text-gray-300 transition-colors hover:border-red-500 hover:text-red-400"
-            >
-              <Trash2 className="h-4 w-4" /> Supprimer
-            </button>
+            {!isOfflinePlaylist && client && !isServerOffline && (
+              <button
+                onClick={() => {
+                  if (playlist) cachePlaylist(playlistId, playlist, songs)
+                  downloadTracks(songs, client)
+                }}
+                title="Télécharger la playlist pour écoute hors ligne"
+                className="flex items-center gap-2 rounded-full border border-surface-border px-4 py-2 text-sm text-gray-300 transition-colors hover:border-accent hover:text-accent"
+              >
+                <HardDriveDownload className="h-4 w-4" /> Hors ligne
+              </button>
+            )}
+            {!isOfflinePlaylist && !isServerOffline && (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                title="Supprimer la playlist"
+                className="flex items-center gap-2 rounded-full border border-surface-border px-4 py-2 text-sm text-gray-300 transition-colors hover:border-red-500 hover:text-red-400"
+              >
+                <Trash2 className="h-4 w-4" /> Supprimer
+              </button>
+            )}
             <select
               value={sortMode}
               onChange={(e) => setSortMode(e.target.value as SortMode)}
@@ -212,7 +295,7 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
                 setDragFrom(null)
                 setDragOver(null)
               }}
-              onDoubleClick={() => playQueue(displaySongs.map((d) => d.song), i)}
+              onDoubleClick={() => playFromList(displaySongs.map((d) => d.song), i)}
               onContextMenu={(e) => trackMenu.onContextMenu(e, song)}
               className={`group cursor-default rounded transition-colors hover:bg-surface-hover ${
                 dragOver === originalIndex && dragFrom !== null && dragFrom !== originalIndex
@@ -231,10 +314,10 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
               </td>
               <td className="w-12 py-1.5 pl-2">
                 <TrackThumbnail
-                  coverUrl={song.coverArt ? client.coverArtUrl(song.coverArt, 80) : null}
+                  coverUrl={song.coverArt && client ? client.coverArtUrl(song.coverArt, 80) : null}
                   isCurrent={song.id === currentSongId}
                   isPlaying={isPlaying}
-                  onPlay={() => playQueue(displaySongs.map((d) => d.song), i)}
+                  onPlay={() => playFromList(displaySongs.map((d) => d.song), i)}
                 />
               </td>
               <td className="py-2">
@@ -246,15 +329,17 @@ export default function PlaylistView({ client, playlistId, onDeleted }: Props): 
                 <OfflineButton song={song} client={client} />
               </td>
               <td className="w-8 py-2 pr-2 text-right">
-                <button
-                  onClick={() => handleRemove(originalIndex)}
-                  // All rows wait: a second removal sent before the first lands would target a stale index.
-                  disabled={removingIndex !== null}
-                  title="Retirer de la playlist"
-                  className="rounded p-1 text-gray-500 opacity-0 transition-opacity hover:text-red-400 disabled:opacity-60 group-hover:opacity-100"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                {!isOfflinePlaylist && !isServerOffline && !usingCache && (
+                  <button
+                    onClick={() => handleRemove(originalIndex)}
+                    // All rows wait: a second removal sent before the first lands would target a stale index.
+                    disabled={removingIndex !== null}
+                    title="Retirer de la playlist"
+                    className="rounded p-1 text-gray-500 opacity-0 transition-opacity hover:text-red-400 disabled:opacity-60 group-hover:opacity-100"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </td>
             </tr>
           ))}

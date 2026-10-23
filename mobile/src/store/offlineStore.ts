@@ -1,11 +1,13 @@
 import { create } from 'zustand'
 import { File, Directory, Paths } from 'expo-file-system'
-import { fileExtension, NavidromeClient, NDSong } from '@/services/navidrome'
+import { fileExtension, NavidromeClient, NDPlaylist, NDSong } from '@/services/navidrome'
 import { storage } from '@/services/storage'
 import { SONG_COVER_SIZES, storeCover } from '@/services/coverStore'
 import { describeError, logEvent } from '@/services/diagnostics'
 import { plural } from '@/services/plural'
 import { useToastStore } from '@/store/toastStore'
+
+export const OFFLINE_PLAYLIST_ID = '__offline__'
 
 export interface OfflineTrack {
   id: string
@@ -17,6 +19,11 @@ export interface OfflineTrack {
   filename: string
   /** The file's size in bytes (songs downloaded before 2.7.1 don't have it: their file is measured). */
   size?: number
+}
+
+export interface CachedPlaylist {
+  playlist: NDPlaylist
+  songs: NDSong[]
 }
 
 export interface DownloadOptions {
@@ -39,6 +46,8 @@ interface OfflineState {
   loaded: boolean
   /** The playlists kept on the phone (id -> name): the songs added to them later are downloaded too. */
   keptPlaylists: Record<string, string>
+  /** Cached playlist metadata and track lists so playlists can be browsed and played when the server is unreachable. */
+  playlistCache: Record<string, CachedPlaylist>
   /** Whether starred/liked tracks are automatically downloaded on Wi-Fi. */
   keepFavorites: boolean
 
@@ -52,6 +61,9 @@ interface OfflineState {
   removeOffline: (id: string) => Promise<void>
   /** Keeps a playlist on the phone, or stops (the songs already downloaded stay). */
   setKeptPlaylist: (playlistId: string, name: string, keep: boolean) => void
+  /** Saves a playlist's metadata and songs on disk so it stays accessible offline. */
+  cachePlaylist: (playlistId: string, playlist: NDPlaylist, songs: NDSong[]) => void
+  removeCachedPlaylist: (playlistId: string) => void
   /** Keeps all starred tracks on the phone, or stops. */
   setKeepFavorites: (keep: boolean) => void
 }
@@ -67,7 +79,31 @@ async function persist(tracks: Record<string, OfflineTrack>): Promise<void> {
 }
 
 const KEPT_KEY = 'navidrome.keptPlaylists'
+const PLAYLIST_CACHE_KEY = 'navidrome.cachedPlaylists'
 const KEEP_FAVORITES_KEY = 'navidrome.keepFavorites'
+
+/** Virtual playlist representing all songs downloaded to the phone. */
+export function offlinePlaylist(tracks: Record<string, OfflineTrack>): NDPlaylist {
+  const list = Object.values(tracks)
+  return {
+    id: OFFLINE_PLAYLIST_ID,
+    name: 'Titres téléchargés',
+    songCount: list.length,
+    duration: list.reduce((sum, t) => sum + (t.duration || 0), 0),
+    coverArt: list[0]?.coverArt
+  }
+}
+
+export function offlineTrackToSong(track: OfflineTrack): NDSong {
+  return {
+    id: track.id,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    coverArt: track.coverArt,
+    duration: track.duration
+  }
+}
 
 /** How much room the downloaded songs take on the phone, in bytes. */
 export function offlineBytes(tracks: Record<string, OfflineTrack>): number {
@@ -167,18 +203,21 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
   errors: {},
   loaded: false,
   keptPlaylists: {},
+  playlistCache: {},
   keepFavorites: false,
 
   loadFromDisk: async () => {
     if (get().loaded) return
-    const [saved, kept, keepFavorites] = await Promise.all([
+    const [saved, kept, playlistCache, keepFavorites] = await Promise.all([
       storage.loadPref<Record<string, OfflineTrack>>('navidrome.offlineTracks'),
       storage.loadPref<Record<string, string>>(KEPT_KEY).catch(() => null),
+      storage.loadPref<Record<string, CachedPlaylist>>(PLAYLIST_CACHE_KEY).catch(() => null),
       storage.loadPref<boolean>(KEEP_FAVORITES_KEY).catch(() => false)
     ])
     set({
       tracks: saved || {},
       keptPlaylists: kept && typeof kept === 'object' ? kept : {},
+      playlistCache: playlistCache && typeof playlistCache === 'object' ? playlistCache : {},
       keepFavorites: !!keepFavorites,
       loaded: true
     })
@@ -242,6 +281,30 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
       else delete keptPlaylists[playlistId]
       storage.savePref(KEPT_KEY, keptPlaylists).catch(() => {})
       return { keptPlaylists }
+    })
+  },
+
+  cachePlaylist: (playlistId, playlist, songs) => {
+    if (!playlistId || playlistId === OFFLINE_PLAYLIST_ID) return
+    set((s) => {
+      const playlistCache = {
+        ...s.playlistCache,
+        [playlistId]: {
+          playlist: { ...playlist, songCount: songs.length },
+          songs
+        }
+      }
+      storage.savePref(PLAYLIST_CACHE_KEY, playlistCache).catch(() => {})
+      return { playlistCache }
+    })
+  },
+
+  removeCachedPlaylist: (playlistId) => {
+    set((s) => {
+      if (!(playlistId in s.playlistCache)) return s
+      const { [playlistId]: _removed, ...playlistCache } = s.playlistCache
+      storage.savePref(PLAYLIST_CACHE_KEY, playlistCache).catch(() => {})
+      return { playlistCache }
     })
   },
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.4.0 — 2026-10-23
+
+### Added
+- **Offline Playlists & Library Access Without Server Connection (Phone & Desktop).** When Navidrome or the internet is unreachable, the app no longer blocks on the *"Navidrome injoignable"* screen when offline tracks or cached playlists exist. Instead, it opens with a non-intrusive offline status bar, lists your downloaded/cached playlists and a built-in *Titres téléchargés* playlist, and plays local tracks directly from disk.
+- **Instant Local Search Refresh After Downtify Downloads (Phone & Desktop).** Completing a Downtify download (or pulling to refresh / clicking *Actualiser* on Search) now automatically triggers a Navidrome library scan (`startScan`), probes multi-word (`Artist + Title`) and downloaded song titles, and immediately promotes the newly downloaded song into your playable local library results.
+
 ## 3.3.0 — 2026-10-21
 
 ### Added

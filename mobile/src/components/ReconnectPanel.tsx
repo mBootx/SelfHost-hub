@@ -12,6 +12,8 @@ interface Props {
   onRetry: () => Promise<void>
   /** Shows the login form, to sign in to another server or account. */
   onSwitch: () => void
+  /** Opens the screen in offline mode without waiting for the server. */
+  onOffline?: () => void
   hint?: string
 }
 
@@ -20,7 +22,7 @@ interface Props {
  * which looked as if the account had been forgotten, this says so and offers to try again. The app also tries again
  * on its own when the network comes back.
  */
-export default function ReconnectPanel({ service, error, onRetry, onSwitch, hint }: Props) {
+export default function ReconnectPanel({ service, error, onRetry, onSwitch, onOffline, hint }: Props) {
   const [retrying, setRetrying] = useState(false)
 
   async function retry(): Promise<void> {
@@ -49,6 +51,16 @@ export default function ReconnectPanel({ service, error, onRetry, onSwitch, hint
       >
         {retrying ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonText}>Réessayer</Text>}
       </Pressable>
+      {onOffline && (
+        <Pressable
+          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+          onPress={onOffline}
+          accessibilityRole="button"
+          accessibilityLabel="Accéder aux playlists et titres hors ligne"
+        >
+          <Text style={styles.secondaryButtonText}>Accéder aux playlists hors ligne</Text>
+        </Pressable>
+      )}
       <Pressable onPress={onSwitch} hitSlop={8} accessibilityRole="button" style={styles.switch}>
         <Text style={styles.switchText}>Se connecter à un autre serveur ou compte</Text>
       </Pressable>
@@ -80,6 +92,18 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md
   },
   buttonText: { color: '#000', fontWeight: '700', fontSize: 14 },
+  secondaryButton: {
+    marginTop: spacing.xs,
+    minWidth: 160,
+    alignItems: 'center',
+    backgroundColor: colors.elevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md
+  },
+  secondaryButtonText: { color: colors.text, fontWeight: '700', fontSize: 13 },
   pressed: { opacity: 0.6 },
   switch: { marginTop: spacing.sm, paddingVertical: spacing.sm },
   switchText: { color: colors.textSecondary, fontSize: 13, textDecorationLine: 'underline' }

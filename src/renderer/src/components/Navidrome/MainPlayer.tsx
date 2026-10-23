@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import { Search, Home, Users, Disc3, ListMusic, Heart, LogOut, PanelRight, Download, Sparkles, Plus, FolderOpen, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search, Home, Users, Disc3, ListMusic, Heart, LogOut, PanelRight, Download, Sparkles, Plus, FolderOpen, Trash2, WifiOff, RefreshCw } from 'lucide-react'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
+import { OFFLINE_PLAYLIST_ID, offlinePlaylist, useOfflineStore } from '@renderer/store/offlineStore'
 import { useDowntifyStore } from '@renderer/store/downtifyStore'
 import { useHistoryStore } from '@renderer/store/historyStore'
 import { useToastStore } from '@renderer/store/toastStore'
@@ -9,6 +10,7 @@ import { DowntifySong } from '@renderer/services/downtify'
 import { fetchLyrics, LyricsResult } from '@renderer/services/lyrics'
 import { findArtwork, loadArtworkOverrides } from '@renderer/services/artwork'
 import { prefetchCoverArt } from '@renderer/services/imagePrefetch'
+import { scanLibrary } from '@renderer/services/libraryScan'
 import { seekTo } from '@renderer/services/playbackEngine'
 import { plural } from '@renderer/services/plural'
 import ArtistView from './ArtistView'
@@ -16,7 +18,6 @@ import AlbumView from './AlbumView'
 import PlaylistView from './PlaylistView'
 import NewPlaylistPrompt from './NewPlaylistPrompt'
 import LyricsPanel from './LyricsPanel'
-import ServiceUnavailable from '@renderer/components/ServiceUnavailable'
 import ContextMenu from '@renderer/components/ContextMenu'
 import ConfirmModal from '@renderer/components/ConfirmModal'
 import SearchResultsList from '@renderer/components/Downtify/SearchResultsList'
@@ -104,8 +105,30 @@ export default function MainPlayer(): JSX.Element {
 
   const downtifyClient = useDowntifyStore((s) => s.client)
   const downtifyStatus = useDowntifyStore((s) => s.status)
+  const lastCompletedAt = useDowntifyStore((s) => s.lastCompletedAt)
+  const loadLibrary = useNavidromeStore((s) => s.loadLibrary)
+  const offlineTracks = useOfflineStore((s) => s.tracks)
+  const playlistCache = useOfflineStore((s) => s.playlistCache)
+  const isOffline = status === 'unavailable' || status === 'error'
 
-  const [section, setSection] = useState<Section>('home')
+  const allPlaylists = useMemo(() => {
+    const byId = new Map<string, NDPlaylist>()
+    for (const p of playlists) byId.set(p.id, p)
+    for (const entry of Object.values(playlistCache)) {
+      if (!byId.has(entry.playlist.id)) byId.set(entry.playlist.id, entry.playlist)
+    }
+    const list = Array.from(byId.values())
+    if (Object.keys(offlineTracks).length > 0) {
+      return [offlinePlaylist(offlineTracks), ...list]
+    }
+    return list
+  }, [playlists, playlistCache, offlineTracks])
+
+  const [section, setSection] = useState<Section>(() => (isOffline ? 'playlists' : 'home'))
+
+  useEffect(() => {
+    if (isOffline && section === 'home') setSection('playlists')
+  }, [isOffline, section])
   const [favorites, setFavorites] = useState<{ artists: NDArtist[]; albums: NDAlbum[]; songs: NDSong[] }>({
     artists: [],
     albums: [],
@@ -119,7 +142,10 @@ export default function MainPlayer(): JSX.Element {
     songs: []
   })
   const [downtifyResults, setDowntifyResults] = useState<DowntifySong[]>([])
+  const downtifyResultsRef = useRef<DowntifySong[]>([])
+  downtifyResultsRef.current = downtifyResults
   const [downtifySearching, setDowntifySearching] = useState(false)
+  const [refreshingSearch, setRefreshingSearch] = useState(false)
   // Why the library could not be searched (the server out of reach): not the same as finding nothing.
   const [searchError, setSearchError] = useState<string | null>(null)
   const [searchDone, setSearchDone] = useState(false)
@@ -268,6 +294,56 @@ export default function MainPlayer(): JSX.Element {
   const searchTicket = useRef(0)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  async function executeSearch(term: string, localOnly = false): Promise<void> {
+    if (!client) return
+    const mine = ++searchTicket.current
+    if (!localOnly) {
+      setDowntifySearching(downtifyStatus === 'connected' && !!downtifyClient)
+    }
+    const currentDownloadableIds = new Set(downtifyResultsRef.current.map((s) => s.song_id))
+    const dtState = useDowntifyStore.getState()
+    const doneSongs = [
+      ...dtState.completedSongs,
+      ...dtState.queue.filter((q) => q.status === 'done').map((q) => q.song)
+    ].filter((s) => currentDownloadableIds.has(s.song_id))
+    const doneTitles = Array.from(new Set(doneSongs.map((s) => s.name))).filter(
+      (name) => name && name.toLowerCase() !== term.toLowerCase()
+    )
+
+    const [local, remote, ...extraLocals] = await Promise.allSettled([
+      client.search(term),
+      !localOnly && downtifyStatus === 'connected' && downtifyClient
+        ? downtifyClient.searchSongs(term)
+        : Promise.resolve(downtifyResultsRef.current),
+      ...doneTitles.slice(0, 3).map((title) => client.search(title))
+    ])
+    if (searchTicket.current !== mine) return
+    const baseLocal = local.status === 'fulfilled' ? local.value : { artists: [], albums: [], songs: [] }
+    const songMap = new Map<string, NDSong>()
+    for (const s of baseLocal.songs) songMap.set(s.id, s)
+    for (const extra of extraLocals) {
+      if (extra.status === 'fulfilled') {
+        for (const s of extra.value.songs) {
+          if (!songMap.has(s.id)) songMap.set(s.id, s)
+        }
+      }
+    }
+    const localResults = {
+      artists: baseLocal.artists,
+      albums: baseLocal.albums,
+      songs: Array.from(songMap.values())
+    }
+    setSearchResults(localResults)
+    setSearchError(local.status === 'rejected' ? (local.reason instanceof Error ? local.reason.message : 'Serveur injoignable') : null)
+    setSearchDone(true)
+    if (!localOnly) {
+      setDowntifyResults(remote.status === 'fulfilled' ? remote.value.slice(0, 8) : [])
+      setDowntifySearching(false)
+    }
+    prefetchCoverArt(client, localResults.albums.map((a) => a.coverArt), 300)
+    prefetchCoverArt(client, localResults.songs.map((s) => s.coverArt || s.albumId), 80)
+  }
+
   function handleSearch(q: string): void {
     setSearchQuery(q)
     if (searchTimer.current) clearTimeout(searchTimer.current)
@@ -292,42 +368,36 @@ export default function MainPlayer(): JSX.Element {
     setSelectedArtist(null)
     setSelectedPlaylist(null)
     setSearchDone(false)
-    const mine = ++searchTicket.current
-    setDowntifySearching(downtifyStatus === 'connected' && !!downtifyClient)
 
-    searchTimer.current = setTimeout(async () => {
-      // Library and Downtify are searched together; allSettled so a sleeping
-      // Downtify box never costs us the Navidrome results.
-      const [local, remote] = await Promise.allSettled([
-        client.search(term),
-        downtifyStatus === 'connected' && downtifyClient
-          ? downtifyClient.searchSongs(term)
-          : Promise.resolve([] as DowntifySong[])
-      ])
-      if (searchTicket.current !== mine) return
-      const localResults = local.status === 'fulfilled' ? local.value : { artists: [], albums: [], songs: [] }
-      setSearchResults(localResults)
-      setSearchError(local.status === 'rejected' ? (local.reason instanceof Error ? local.reason.message : 'Serveur injoignable') : null)
-      setSearchDone(true)
-      setDowntifyResults(remote.status === 'fulfilled' ? remote.value.slice(0, 8) : [])
-      setDowntifySearching(false)
-      prefetchCoverArt(client, localResults.albums.map((a) => a.coverArt), 300)
-      prefetchCoverArt(client, localResults.songs.map((s) => s.coverArt || s.albumId), 80)
+    searchTimer.current = setTimeout(() => {
+      void executeSearch(term, false)
     }, SEARCH_DEBOUNCE_MS)
   }
+
+  async function handleRefreshSearch(): Promise<void> {
+    const term = searchQuery.trim()
+    if (!client || term.length < 2) return
+    setRefreshingSearch(true)
+    try {
+      await scanLibrary().catch(() => loadLibrary())
+      await executeSearch(term, downtifyResultsRef.current.length > 0)
+    } finally {
+      setRefreshingSearch(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!lastCompletedAt || !client) return
+    const term = searchQuery.trim()
+    if (term.length >= 2) {
+      void executeSearch(term, downtifyResultsRef.current.length > 0)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastCompletedAt])
 
   useEffect(() => () => {
     if (searchTimer.current) clearTimeout(searchTimer.current)
   }, [])
-
-  if (status === 'unavailable' || status === 'error') {
-    return (
-      <ServiceUnavailable
-        serviceName="Navidrome"
-        onRetry={() => restoreSession()}
-      />
-    )
-  }
 
   const navItems: { key: Section; label: string; icon: typeof Home }[] = [
     { key: 'home', label: 'Accueil', icon: Home },
@@ -341,7 +411,7 @@ export default function MainPlayer(): JSX.Element {
     if (selectedAlbum && client) return <AlbumView client={client} albumId={selectedAlbum} />
     if (selectedArtist && client)
       return <ArtistView client={client} artistId={selectedArtist} onSelectAlbum={setSelectedAlbum} />
-    if (selectedPlaylist && client) {
+    if (selectedPlaylist) {
       return <PlaylistView client={client} playlistId={selectedPlaylist} onDeleted={() => setSelectedPlaylist(null)} />
     }
 
@@ -349,6 +419,20 @@ export default function MainPlayer(): JSX.Element {
       const nothing = searchResults.artists.length === 0 && searchResults.albums.length === 0 && searchResults.songs.length === 0
       return (
         <div className="animate-fade-in space-y-8 p-6">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-400">
+              Résultats pour « {searchQuery.trim()} »
+            </p>
+            <button
+              onClick={() => void handleRefreshSearch()}
+              disabled={refreshingSearch}
+              title="Scanner la bibliothèque et actualiser les résultats"
+              className="flex items-center gap-1.5 rounded-full border border-surface-border px-3 py-1 text-xs text-gray-300 transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshingSearch ? 'animate-spin text-accent' : ''}`} />
+              Actualiser
+            </button>
+          </div>
           {searchDone && searchError && <p className="text-sm text-red-400">Recherche impossible : {searchError}</p>}
           {searchDone && !searchError && nothing && downtifyResults.length === 0 && !downtifySearching && (
             <p className="text-sm text-gray-400">Aucun résultat pour « {searchQuery.trim()} ».</p>
@@ -453,47 +537,58 @@ export default function MainPlayer(): JSX.Element {
     if (section === 'playlists') {
       return (
         <div className="animate-fade-in p-6">
-          {isOwner && (
+          {isOwner && !isOffline && (
             <button onClick={() => navigate('/server')} className="mb-4 text-xs text-gray-400 underline hover:text-white">
               Playlists de tous les comptes : à qui elles sont, modifiables ou non (page Serveur)
             </button>
           )}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          <button
-            onClick={() => setShowNewPlaylist(true)}
-            className="lazy-tile group rounded-md p-3 text-left hover:bg-surface-hover"
-          >
-            <div className="mb-3 flex aspect-square w-full items-center justify-center rounded border-2 border-dashed border-surface-border text-gray-500 transition-colors group-hover:border-accent group-hover:text-accent">
-              <Plus className="h-8 w-8" />
-            </div>
-            <p className="truncate text-sm font-medium">Nouvelle playlist</p>
-          </button>
-          {playlists.map((p) => (
+          {!isOffline && (
             <button
-              key={p.id}
-              onClick={() => setSelectedPlaylist(p.id)}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                setPlaylistMenu({ x: e.clientX, y: e.clientY, playlist: p })
-              }}
-              className="lazy-tile rounded-md p-3 text-left hover:bg-surface-hover"
+              onClick={() => setShowNewPlaylist(true)}
+              className="lazy-tile group rounded-md p-3 text-left hover:bg-surface-hover"
             >
-              {p.coverArt && client ? (
-                <img
-                  src={client.coverArtUrl(p.coverArt, 300)}
-                  alt=""
-                  loading="lazy"
-                  className="mb-3 aspect-square w-full rounded object-cover shadow"
-                />
-              ) : (
-                <div className="mb-3 flex aspect-square w-full items-center justify-center rounded bg-surface-hover">
-                  <ListMusic className="h-8 w-8 text-gray-500" />
-                </div>
-              )}
-              <p className="truncate text-sm font-medium">{p.name}</p>
-              <p className="text-xs text-gray-400">{plural(p.songCount, 'titre', 'titres')}</p>
+              <div className="mb-3 flex aspect-square w-full items-center justify-center rounded border-2 border-dashed border-surface-border text-gray-500 transition-colors group-hover:border-accent group-hover:text-accent">
+                <Plus className="h-8 w-8" />
+              </div>
+              <p className="truncate text-sm font-medium">Nouvelle playlist</p>
             </button>
-          ))}
+          )}
+          {allPlaylists.map((p) => {
+            const isLocalOffline = p.id === OFFLINE_PLAYLIST_ID
+            const isCached = isLocalOffline || !!playlistCache[p.id]
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelectedPlaylist(p.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  if (!isLocalOffline) {
+                    setPlaylistMenu({ x: e.clientX, y: e.clientY, playlist: p })
+                  }
+                }}
+                className="lazy-tile rounded-md p-3 text-left hover:bg-surface-hover"
+              >
+                {p.coverArt && client ? (
+                  <img
+                    src={client.coverArtUrl(p.coverArt, 300)}
+                    alt=""
+                    loading="lazy"
+                    className="mb-3 aspect-square w-full rounded object-cover shadow"
+                  />
+                ) : (
+                  <div className="mb-3 flex aspect-square w-full items-center justify-center rounded bg-surface-hover">
+                    <ListMusic className="h-8 w-8 text-gray-500" />
+                  </div>
+                )}
+                <p className="truncate text-sm font-medium">{p.name}</p>
+                <p className="text-xs text-gray-400">
+                  {plural(p.songCount, 'titre', 'titres')}
+                  {isLocalOffline ? ' · hors ligne' : isCached ? ' · en cache' : ''}
+                </p>
+              </button>
+            )
+          })}
         </div>
         </div>
       )
@@ -600,6 +695,20 @@ export default function MainPlayer(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col">
+      {isOffline && (
+        <div className="flex items-center justify-between border-b border-surface-border bg-surface-elevated px-6 py-2 text-xs">
+          <div className="flex items-center gap-2 text-gray-300">
+            <WifiOff className="h-4 w-4 text-accent" />
+            <span className="font-medium">Hors ligne · Playlists et titres téléchargés disponibles</span>
+          </div>
+          <button
+            onClick={() => restoreSession()}
+            className="flex items-center gap-1.5 rounded-full border border-surface-border px-3 py-1 text-xs font-semibold text-accent transition-colors hover:border-accent"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Réessayer
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between border-b border-surface-border px-6 py-3">
         <div className="flex w-96 items-center gap-2 rounded-full bg-surface-hover px-4 py-2">
           <Search className="h-4 w-4 text-gray-400" />

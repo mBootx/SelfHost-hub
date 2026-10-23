@@ -185,8 +185,9 @@ export default function Player(): JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (!localSong || !client) return
-    const src = getOfflineUrl(localSong.id) || client.streamUrl(localSong.id)
+    if (!localSong) return
+    const src = getOfflineUrl(localSong.id) || (client ? client.streamUrl(localSong.id) : null)
+    if (!src) return
     // A track restored from the last session picks up where it stopped. It was recorded in the
     // history when it first played, so it isn't recorded again.
     const resumeAt = resumePosition(localSong.id)
@@ -196,10 +197,10 @@ export default function Player(): JSX.Element {
   }, [localSong?.id])
 
   useEffect(() => {
-    if (!client) return
-    getAudioEngine().setNext(
-      localNextSong ? { id: localNextSong.id, src: getOfflineUrl(localNextSong.id) || client.streamUrl(localNextSong.id) } : null
-    )
+    const nextSrc = localNextSong
+      ? getOfflineUrl(localNextSong.id) || (client ? client.streamUrl(localNextSong.id) : null)
+      : null
+    getAudioEngine().setNext(localNextSong && nextSrc ? { id: localNextSong.id, src: nextSrc } : null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localNextSong?.id, client])
 

@@ -9,6 +9,15 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.4.0',
+    items: [
+      {
+        title: 'Playlists hors ligne et recherche actualisée après téléchargement',
+        text: "Accédez directement à vos playlists en cache et à « Titres téléchargés » même lorsque le serveur Navidrome est injoignable, et retrouvez immédiatement vos titres téléchargés via Downtify dans les résultats locaux après actualisation."
+      }
+    ]
+  },
+  {
     version: '3.3.0',
     items: [
       {

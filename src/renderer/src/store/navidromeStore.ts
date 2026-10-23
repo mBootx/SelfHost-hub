@@ -171,6 +171,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
       // Each account has its own playlists: those of the others (public ones, or all of them for an admin) stay out.
       const playlists = ownPlaylists(allPlaylists, get().username)
       set({ recentAlbums, artists, playlists, libraryLoaded: true })
+      storage.savePref('navidrome.playlistsList', playlists).catch(() => {})
       // Every section that renders these lists uses one fixed size each, so a
       // single prefetch per list covers Home, the dedicated section and
       // Favorites/search wherever they reuse the same data.
@@ -501,6 +502,13 @@ async function restoreSaved(): Promise<void> {
     // downloaded to this computer still play. The music screen says the server is unreachable and tries again. A
     // rejected password leaves no client: the login form is shown.
     if (!isUnreachable(err)) set({ client: null })
-    else if (!get().client) set({ client: new NavidromeClient({ url: conn.url, username: conn.username, password }), username: conn.username })
+    else {
+      const cachedPlaylists = await storage.loadPref<NDPlaylist[]>('navidrome.playlistsList').catch(() => null)
+      set({
+        client: get().client ?? new NavidromeClient({ url: conn.url, username: conn.username, password }),
+        username: conn.username,
+        ...(Array.isArray(cachedPlaylists) && cachedPlaylists.length > 0 ? { playlists: cachedPlaylists } : {})
+      })
+    }
   }
 }

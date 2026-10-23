@@ -42,6 +42,7 @@ export async function syncKeptPlaylists(force = false): Promise<void> {
     for (const [id, name] of Object.entries(kept)) {
       try {
         const { playlist, songs } = await client.getPlaylist(id)
+        if (playlist) useOfflineStore.getState().cachePlaylist(id, playlist, songs)
         await useOfflineStore.getState().downloadTracks(songs, client, { quiet: true, label: playlist?.name || name })
       } catch (err) {
         // A playlist deleted since (Subsonic error 70) is not kept any more.

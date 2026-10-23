@@ -9,6 +9,19 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.4.0',
+    items: [
+      {
+        title: 'Playlists hors ligne sans connexion au serveur',
+        text: 'Lorsque Navidrome ou Internet est coupé, l’application s’ouvre directement sur vos playlists téléchargées, vos favoris en cache et la playlist « Titres téléchargés » au lieu de bloquer sur l’écran de reconnexion.'
+      },
+      {
+        title: 'Recherche mise à jour après téléchargement Downtify',
+        text: 'Dès qu’un téléchargement Downtify se termine ou que vous rafraîchissez la recherche, Navidrome scanne automatiquement le nouveau fichier et l’affiche immédiatement parmi vos titres locaux prêts à être écoutés.'
+      }
+    ]
+  },
+  {
     version: '3.3.0',
     items: [
       {

@@ -1,6 +1,8 @@
 import { create } from 'zustand'
-import { fileExtension, NavidromeClient, NDSong, playableOriginal } from '@renderer/services/navidrome'
+import { fileExtension, NavidromeClient, NDPlaylist, NDSong, playableOriginal } from '@renderer/services/navidrome'
 import { storage } from '@renderer/services/storage'
+
+export const OFFLINE_PLAYLIST_ID = '__offline__'
 
 export interface OfflineTrack {
   id: string
@@ -12,6 +14,11 @@ export interface OfflineTrack {
   filename: string
 }
 
+export interface CachedPlaylist {
+  playlist: NDPlaylist
+  songs: NDSong[]
+}
+
 export interface OfflineProgress {
   loaded: number
   total: number
@@ -20,6 +27,7 @@ export interface OfflineProgress {
 
 interface OfflineState {
   tracks: Record<string, OfflineTrack>
+  playlistCache: Record<string, CachedPlaylist>
   downloading: Record<string, OfflineProgress>
   errors: Record<string, string>
   loaded: boolean
@@ -30,7 +38,33 @@ interface OfflineState {
   downloadTrack: (song: NDSong, client: NavidromeClient) => Promise<void>
   downloadTracks: (songs: NDSong[], client: NavidromeClient) => Promise<void>
   removeOffline: (id: string) => Promise<void>
+  cachePlaylist: (playlistId: string, playlist: NDPlaylist, songs: NDSong[]) => void
+  removeCachedPlaylist: (playlistId: string) => void
   dismissError: (id: string) => void
+}
+
+const PLAYLIST_CACHE_KEY = 'navidrome.cachedPlaylists'
+
+export function offlinePlaylist(tracks: Record<string, OfflineTrack>): NDPlaylist {
+  const list = Object.values(tracks)
+  return {
+    id: OFFLINE_PLAYLIST_ID,
+    name: 'Titres téléchargés',
+    songCount: list.length,
+    duration: list.reduce((sum, t) => sum + (t.duration || 0), 0),
+    coverArt: list[0]?.coverArt
+  }
+}
+
+export function offlineTrackToSong(track: OfflineTrack): NDSong {
+  return {
+    id: track.id,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    coverArt: track.coverArt,
+    duration: track.duration
+  }
 }
 
 function offlineFileUrl(filename: string): string {
@@ -44,14 +78,22 @@ async function persist(tracks: Record<string, OfflineTrack>): Promise<void> {
 
 export const useOfflineStore = create<OfflineState>((set, get) => ({
   tracks: {},
+  playlistCache: {},
   downloading: {},
   errors: {},
   loaded: false,
 
   loadFromDisk: async () => {
     if (get().loaded) return
-    const saved = await storage.loadPref<Record<string, OfflineTrack>>('navidrome.offlineTracks')
-    set({ tracks: saved || {}, loaded: true })
+    const [saved, playlistCache] = await Promise.all([
+      storage.loadPref<Record<string, OfflineTrack>>('navidrome.offlineTracks'),
+      storage.loadPref<Record<string, CachedPlaylist>>(PLAYLIST_CACHE_KEY).catch(() => null)
+    ])
+    set({
+      tracks: saved || {},
+      playlistCache: playlistCache && typeof playlistCache === 'object' ? playlistCache : {},
+      loaded: true
+    })
   },
 
   isOffline: (id) => !!get().tracks[id],
@@ -119,6 +161,30 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
       const { [id]: _removed, ...tracks } = s.tracks
       persist(tracks)
       return { tracks }
+    })
+  },
+
+  cachePlaylist: (playlistId, playlist, songs) => {
+    if (!playlistId || playlistId === OFFLINE_PLAYLIST_ID) return
+    set((s) => {
+      const playlistCache = {
+        ...s.playlistCache,
+        [playlistId]: {
+          playlist: { ...playlist, songCount: songs.length },
+          songs
+        }
+      }
+      storage.savePref(PLAYLIST_CACHE_KEY, playlistCache).catch(() => {})
+      return { playlistCache }
+    })
+  },
+
+  removeCachedPlaylist: (playlistId) => {
+    set((s) => {
+      if (!(playlistId in s.playlistCache)) return s
+      const { [playlistId]: _removed, ...playlistCache } = s.playlistCache
+      storage.savePref(PLAYLIST_CACHE_KEY, playlistCache).catch(() => {})
+      return { playlistCache }
     })
   },
 

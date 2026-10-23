@@ -124,12 +124,17 @@ export default function PlaybackController(): null {
   // Also re-run when the client first appears: a queue restored from the last session is in place
   // before Navidrome has reconnected.
   useEffect(() => {
-    if (!song || !client) return
+    if (!song) return
+    const localUri = getOfflineUri(song.id)
+    if (!localUri && !client) return
     // A track restored from the last session picks up where it stopped. It was recorded in the
     // history when it first played, so it isn't recorded again.
     const resumeAt = resumePosition(song.id)
-    const source = getOfflineUri(song.id) || client.streamUrl(song.id, bitrate)
-    engine.load(song.id, source, useNavidromeStore.getState().isPlaying, resumeAt ?? 0, gain, nowPlayingInfo(song, client, artworkOverride))
+    const source = localUri || client!.streamUrl(song.id, bitrate)
+    const info: NowPlayingInfo = client
+      ? nowPlayingInfo(song, client, artworkOverride)
+      : { title: song.title, artist: song.artist, album: song.album, artworkUrl: artworkOverride }
+    engine.load(song.id, source, useNavidromeStore.getState().isPlaying, resumeAt ?? 0, gain, info)
     if (resumeAt === null) recordHistory(song)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [song?.id, !!client])
