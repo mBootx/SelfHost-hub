@@ -9,6 +9,23 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.6.0',
+    items: [
+      {
+        title: 'Synchronisation façon Spotify Connect et reprise hors ligne',
+        text: 'Actualisation automatique toutes les 5 s entre vos appareils, bascule en un clic depuis le lecteur (« Écoute sur … ») et reprise d’une session fermée depuis le serveur Hub.'
+      },
+      {
+        title: 'Rétrospective (Wrapped) sur PC',
+        text: 'Retrouvez votre historique synchronisé (jour, semaine, mois, année ou période libre), le graphique interactif, les meilleurs albums et l’export en image.'
+      },
+      {
+        title: 'Downtify via le Hub et confort audio',
+        text: 'Bascule automatique sur le proxy Downtify du serveur Hub hors du réseau local, normalisation ReplayGain et fondu de sortie sur le minuteur de veille.'
+      }
+    ]
+  },
+  {
     version: '3.5.0',
     items: [
       {

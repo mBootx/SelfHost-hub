@@ -18,6 +18,7 @@ import {
   Smartphone,
   GripVertical,
   Maximize2,
+  Moon,
   X
 } from 'lucide-react'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
@@ -33,6 +34,13 @@ import { plural } from '@renderer/services/plural'
 import { useScrub } from '@renderer/hooks/useScrub'
 
 const SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.75]
+const SLEEP_PRESETS = [15, 30, 45, 60]
+
+function formatSleepRemaining(ms: number): string {
+  const safeMs = Math.max(0, ms)
+  if (safeMs < 60_000) return `${Math.max(1, Math.ceil(safeMs / 1000))} s`
+  return `${Math.ceil(safeMs / 60_000)} min`
+}
 
 function formatTime(sec: number): string {
   if (!isFinite(sec) || sec < 0) sec = 0
@@ -118,7 +126,7 @@ export default function Player(): JSX.Element {
   const remoteRunning = useRemoteStore((s) => s.running)
   const deviceList = useRemoteStore((s) => s.deviceList)
   const selectedDeviceId = useRemoteStore((s) => s.selectedDeviceId)
-  const selectDevice = useRemoteStore((s) => s.selectDevice)
+  const switchOutput = useRemoteStore((s) => s.switchOutput)
   const sendCommand = useRemoteStore((s) => s.sendCommand)
   const handoffToHere = useRemoteStore((s) => s.handoffToHere)
   const handoffToDevice = useRemoteStore((s) => s.handoffToDevice)
@@ -127,14 +135,26 @@ export default function Player(): JSX.Element {
     s.selectedDeviceId !== LOCAL_DEVICE_ID ? s.devices[s.selectedDeviceId] : undefined
   )
   const isRemote = selectedDeviceId !== LOCAL_DEVICE_ID
+  const activeDeviceName = isRemote
+    ? deviceList.find((d) => d.deviceId === selectedDeviceId)?.deviceName ?? 'Appareil'
+    : null
 
   const crossfadeSeconds = useAudioSettingsStore((s) => s.crossfadeSeconds)
   const gapless = useAudioSettingsStore((s) => s.gapless)
+  const normalize = useAudioSettingsStore((s) => s.normalize)
   const eqEnabled = useAudioSettingsStore((s) => s.eqEnabled)
   const eqGains = useAudioSettingsStore((s) => s.eqGains)
 
+  const sleepTimerEndAt = useNavidromeStore((s) => s.sleepTimerEndAt)
+  const sleepEndOfTrack = useNavidromeStore((s) => s.sleepEndOfTrack)
+  const setSleepTimer = useNavidromeStore((s) => s.setSleepTimer)
+  const cancelSleepTimer = useNavidromeStore((s) => s.cancelSleepTimer)
+
   const [showQueue, setShowQueue] = useState(false)
   const [showDevices, setShowDevices] = useState(false)
+  const [showSleep, setShowSleep] = useState(false)
+  const [sleepNow, setSleepNow] = useState(() => Date.now())
+  const sleepMenuRef = useRef<HTMLDivElement>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -162,7 +182,12 @@ export default function Player(): JSX.Element {
     engine.setHandlers({
       onProgress: (currentTime, duration) => useNavidromeStore.getState().setProgress(currentTime, duration),
       onTrackEnd: () => {
-        const { repeatMode, queue, next } = useNavidromeStore.getState()
+        const { repeatMode, queue, next, sleepEndOfTrack, cancelSleepTimer } = useNavidromeStore.getState()
+        if (sleepEndOfTrack) {
+          cancelSleepTimer()
+          useNavidromeStore.setState({ isPlaying: false })
+          return
+        }
         // A one-song queue on repeat-all "advances" to the same index, which reloads nothing.
         if (repeatMode === 'one' || (repeatMode === 'all' && queue.length === 1)) engine.restart()
         else next()
@@ -224,6 +249,35 @@ export default function Player(): JSX.Element {
   useEffect(() => {
     getAudioEngine().setEqualizer(eqEnabled, eqGains)
   }, [eqEnabled, eqGains])
+
+  useEffect(() => {
+    getAudioEngine().applyNormalize(localSong, localNextSong, normalize)
+  }, [localSong, localNextSong, normalize])
+
+  useEffect(() => {
+    if (sleepTimerEndAt === null) return
+    setSleepNow(Date.now())
+    const timer = setInterval(() => setSleepNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [sleepTimerEndAt])
+
+  useEffect(() => {
+    if (!showSleep) return
+    function onPointerDown(e: MouseEvent): void {
+      if (sleepMenuRef.current && !sleepMenuRef.current.contains(e.target as Node)) {
+        setShowSleep(false)
+      }
+    }
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setShowSleep(false)
+    }
+    window.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [showSleep])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -508,11 +562,26 @@ export default function Player(): JSX.Element {
         </div>
 
         <div className="flex items-center justify-end gap-3">
-          {remoteRunning && (
-            <div className="relative">
+          {remoteRunning && (() => {
+            const otherDevices = deviceList.filter((d) => d.deviceId !== 'hub')
+            const playingRemote = otherDevices.find(
+              (d) => remoteDevices[d.deviceId]?.isPlaying && remoteDevices[d.deviceId]?.song
+            )
+            return (
+            <div className="relative flex items-center gap-1.5">
+              {isRemote && activeDeviceName && (
+                <button
+                  onClick={() => setShowDevices((v) => !v)}
+                  title={`Écoute sur ${activeDeviceName}`}
+                  className="hidden items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent transition-colors hover:bg-accent/25 xl:flex"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                  <span className="max-w-[130px] truncate">Écoute sur {activeDeviceName}</span>
+                </button>
+              )}
               <button
                 onClick={() => setShowDevices((v) => !v)}
-                title="Appareils"
+                title={isRemote && activeDeviceName ? `Écoute sur ${activeDeviceName}` : 'Appareils'}
                 className={`rounded-full p-1.5 transition-colors ${
                   isRemote || showDevices ? 'bg-surface-hover text-accent' : 'text-gray-400 hover:text-white'
                 }`}
@@ -520,40 +589,75 @@ export default function Player(): JSX.Element {
                 <Cast className="h-4 w-4" />
               </button>
               {showDevices && (
-                <div className="absolute bottom-full right-0 z-10 mb-2 w-64 animate-fade-in rounded-lg border border-surface-border bg-surface-elevated p-1.5 shadow-xl">
+                <div className="absolute bottom-full right-0 z-10 mb-2 w-72 animate-fade-in rounded-lg border border-surface-border bg-surface-elevated p-1.5 shadow-xl">
                   <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                    Lire sur
+                    {isRemote && activeDeviceName ? `Écoute sur ${activeDeviceName}` : 'Écoute sur cet ordinateur'}
                   </p>
                   <button
                     onClick={() => {
-                      selectDevice(LOCAL_DEVICE_ID)
+                      const source = playingRemote
+                      if (switchOutput(LOCAL_DEVICE_ID) && source) showToast(`Lecture reprise depuis ${source.deviceName}`)
                       setShowDevices(false)
                     }}
                     className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${
-                      selectedDeviceId === LOCAL_DEVICE_ID ? 'text-accent' : 'text-gray-300 hover:bg-surface-hover'
+                      selectedDeviceId === LOCAL_DEVICE_ID ? 'bg-accent/10 text-accent' : 'text-gray-300 hover:bg-surface-hover'
                     }`}
                   >
                     <Laptop className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">Cet ordinateur</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="truncate">Cet ordinateur</span>
+                        {localIsPlaying && localSong && (
+                          <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+                            En cours de lecture
+                          </span>
+                        )}
+                        {selectedDeviceId === LOCAL_DEVICE_ID && (
+                          <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold text-gray-200">
+                            Contrôlé
+                          </span>
+                        )}
+                      </div>
+                      {selectedDeviceId !== LOCAL_DEVICE_ID && playingRemote && (
+                        <span className="block text-[10px] font-semibold text-accent">Passer l&apos;écoute ici</span>
+                      )}
+                    </div>
                   </button>
-                  {deviceList
-                    .filter((d) => d.deviceId !== 'hub')
-                    .map((d) => {
+                  {otherDevices.map((d) => {
                       const dState = remoteDevices[d.deviceId]
+                      const isSelected = selectedDeviceId === d.deviceId
+                      const isPlayingHere = !!(dState?.isPlaying && dState?.song)
                       return (
                         <div key={d.deviceId} className="space-y-1">
                           <button
                             onClick={() => {
-                              selectDevice(d.deviceId)
+                              const hadLocalPlaying = localIsPlaying && !!localSong
+                              if (switchOutput(d.deviceId) && hadLocalPlaying) showToast(`Lecture transférée vers ${d.deviceName}`)
                               setShowDevices(false)
                             }}
                             className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${
-                              selectedDeviceId === d.deviceId ? 'text-accent' : 'text-gray-300 hover:bg-surface-hover'
+                              isSelected ? 'bg-accent/10 text-accent' : 'text-gray-300 hover:bg-surface-hover'
                             }`}
                           >
-                            <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                            {d.platform === 'desktop' ? (
+                              <Laptop className="h-3.5 w-3.5 shrink-0" />
+                            ) : (
+                              <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                            )}
                             <div className="min-w-0 flex-1">
-                              <span className="block truncate">{d.deviceName}</span>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="truncate">{d.deviceName}</span>
+                                {isPlayingHere && (
+                                  <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+                                    En cours de lecture
+                                  </span>
+                                )}
+                                {isSelected && (
+                                  <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold text-gray-200">
+                                    Contrôlé
+                                  </span>
+                                )}
+                              </div>
                               {dState?.song && (
                                 <span className="block truncate text-[11px] text-gray-500">
                                   {dState.song.title} · {dState.song.artist}
@@ -570,10 +674,10 @@ export default function Player(): JSX.Element {
                                 }}
                                 className="rounded bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent/25"
                               >
-                                Reprendre ici
+                                Passer l&apos;écoute ici
                               </button>
                             )}
-                            {localSong && (
+                            {localSong && !localIsPlaying && (
                               <button
                                 onClick={() => {
                                   if (handoffToDevice(d.deviceId)) showToast(`Lecture transférée vers ${d.deviceName}`)
@@ -588,13 +692,14 @@ export default function Player(): JSX.Element {
                         </div>
                       )
                     })}
-                  {deviceList.filter((d) => d.deviceId !== 'hub').length === 0 && (
+                  {otherDevices.length === 0 && (
                     <p className="px-2 py-1.5 text-xs text-gray-500">Aucun autre appareil connecté.</p>
                   )}
                 </div>
               )}
             </div>
-          )}
+            )
+          })()}
           {!isRemote && (
             <button
               onClick={handleCycleSpeed}
@@ -605,6 +710,88 @@ export default function Player(): JSX.Element {
             >
               {localPlaybackRate}x
             </button>
+          )}
+          {!isRemote && (
+            <div ref={sleepMenuRef} className="relative">
+              {(() => {
+                const sleepRemainingMs = sleepTimerEndAt !== null ? Math.max(0, sleepTimerEndAt - sleepNow) : null
+                const sleepActive = sleepRemainingMs !== null || sleepEndOfTrack
+                const sleepLabel =
+                  sleepRemainingMs !== null
+                    ? formatSleepRemaining(sleepRemainingMs)
+                    : sleepEndOfTrack
+                      ? 'Fin du titre'
+                      : null
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowDevices(false)
+                        setShowSleep((v) => !v)
+                      }}
+                      title={sleepLabel ? `Minuteur de veille · ${sleepLabel}` : 'Minuteur de veille'}
+                      aria-label={sleepLabel ? `Minuteur de veille actif : ${sleepLabel}` : 'Minuteur de veille'}
+                      aria-expanded={showSleep}
+                      className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold transition-colors ${
+                        sleepActive || showSleep ? 'bg-surface-hover text-accent' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <Moon className="h-4 w-4 shrink-0" />
+                      {sleepLabel && <span className="tabular-nums">{sleepLabel}</span>}
+                    </button>
+                    {showSleep && (
+                      <div className="absolute bottom-full right-0 z-10 mb-2 w-48 animate-fade-in rounded-lg border border-surface-border bg-surface-elevated p-1.5 shadow-xl">
+                        <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                          {sleepRemainingMs !== null
+                            ? `Veille · ${formatSleepRemaining(sleepRemainingMs)}`
+                            : sleepEndOfTrack
+                              ? 'Veille · Fin du titre'
+                              : 'Minuteur de veille'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            cancelSleepTimer()
+                            setShowSleep(false)
+                          }}
+                          className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm transition-colors ${
+                            !sleepActive ? 'text-accent' : 'text-gray-300 hover:bg-surface-hover'
+                          }`}
+                        >
+                          <span>Désactivé</span>
+                        </button>
+                        {SLEEP_PRESETS.map((minutes) => (
+                          <button
+                            key={minutes}
+                            type="button"
+                            onClick={() => {
+                              setSleepTimer(minutes)
+                              setShowSleep(false)
+                            }}
+                            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm text-gray-300 transition-colors hover:bg-surface-hover hover:text-white"
+                          >
+                            <span>{minutes} min</span>
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSleepTimer('endOfTrack')
+                            setShowSleep(false)
+                          }}
+                          className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm transition-colors ${
+                            sleepEndOfTrack ? 'text-accent' : 'text-gray-300 hover:bg-surface-hover'
+                          }`}
+                        >
+                          <span>Fin du titre</span>
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
           )}
           <button
             onClick={() => useUIStore.getState().openBigPicture()}

@@ -52,6 +52,9 @@ class SelfHostNativeModule : Module() {
 
   // A share that arrived while the app was already running, kept until JS asks for it.
   private var pendingShare: Intent? = null
+  // True once JS has attached its widget listener and consumed any launch-time widget action.
+  @Volatile
+  private var widgetListening: Boolean = false
 
   // The car mode's light sensor, while it is listening.
   private var lightSensor: CarScreen.LightSensor? = null
@@ -333,12 +336,17 @@ class SelfHostNativeModule : Module() {
     }
 
     // The home-screen widget shows what JS saves here (the song playing); its buttons come back as onWidgetAction.
-    Function("updateWidget") { title: String, artist: String, coverUrl: String, playing: Boolean ->
+    Function("updateWidget") { title: String, artist: String, coverUrl: String, playing: Boolean, isStarred: Boolean? ->
       val context = appContext.reactContext ?: return@Function false
-      PlayerWidgetProvider.save(context, title, artist, coverUrl, playing)
+      PlayerWidgetProvider.save(context, title, artist, coverUrl, playing, isStarred ?: false)
       // Drawing the widget talks to the launcher: not on the JS thread.
       mainHandler.post { PlayerWidgetProvider.refresh(context) }
       true
+    }
+
+    Function("consumePendingWidgetAction") { ->
+      widgetListening = true
+      PlayerWidgetProvider.consumePendingAction()
     }
 
     OnNewIntent { intent ->
@@ -425,6 +433,8 @@ class SelfHostNativeModule : Module() {
       promise.reject("E_WATCH", e.message ?: "Envoi impossible", e)
     }
   }
+
+  fun hasWidgetListener(): Boolean = widgetListening
 
   /** A widget button was pressed: the app's JavaScript does what the same button on the player would. */
   fun widgetAction(name: String) {

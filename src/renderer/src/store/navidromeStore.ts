@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { isUnreachable, NavidromeClient, NDAlbum, NDArtist, NDPlaylist, NDSong } from '@renderer/services/navidrome'
-import { seekTo } from '@renderer/services/playbackEngine'
+import { getAudioEngine, seekTo } from '@renderer/services/playbackEngine'
 import { storage } from '@renderer/services/storage'
 import { prefetchCoverArt } from '@renderer/services/imagePrefetch'
 import { ownPlaylists } from '@renderer/services/navidromeAdmin'
@@ -8,6 +8,23 @@ import { findRadioSongs, radioNeedsMore } from '@renderer/services/radio'
 import { ConnectionStatus } from '@renderer/types'
 
 export type RepeatMode = 'off' | 'all' | 'one'
+
+const SLEEP_FADE_MS = 10_000
+let sleepInterval: ReturnType<typeof setInterval> | null = null
+let sleepResetTimeout: ReturnType<typeof setTimeout> | null = null
+let sleepFadeStarted = false
+
+function clearSleepTimers(): void {
+  if (sleepInterval) {
+    clearInterval(sleepInterval)
+    sleepInterval = null
+  }
+  if (sleepResetTimeout) {
+    clearTimeout(sleepResetTimeout)
+    sleepResetTimeout = null
+  }
+  sleepFadeStarted = false
+}
 
 export interface RadioSession {
   seedId: string
@@ -71,6 +88,8 @@ interface NavidromeState {
   currentTime: number
   duration: number
   radio: RadioSession | null
+  sleepTimerEndAt: number | null
+  sleepEndOfTrack: boolean
 
   connect: (url: string, username: string, password: string, remember: boolean) => Promise<void>
   restoreSession: () => Promise<void>
@@ -102,6 +121,8 @@ interface NavidromeState {
   setVolume: (v: number) => void
   setPlaybackRate: (rate: number) => void
   setProgress: (currentTime: number, duration: number) => void
+  setSleepTimer: (minutes: number | 'endOfTrack' | null) => void
+  cancelSleepTimer: () => void
   currentSong: () => NDSong | null
 }
 
@@ -129,6 +150,8 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
   currentTime: 0,
   duration: 0,
   radio: null,
+  sleepTimerEndAt: null,
+  sleepEndOfTrack: false,
 
   loadPlaybackPrefs: async () => {
     const [volume, playbackRate] = await Promise.all([
@@ -225,6 +248,7 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
   },
 
   logout: async () => {
+    get().cancelSleepTimer()
     await storage.clearConnection('navidrome')
     await storage.clearSecret('navidrome', 'password')
     set({
@@ -478,6 +502,63 @@ export const useNavidromeStore = create<NavidromeState>((set, get) => ({
     storage.savePref('navidrome.playbackRate', rate)
   },
   setProgress: (currentTime, duration) => set({ currentTime, duration }),
+
+  setSleepTimer: (minutes) => {
+    if (minutes === null) {
+      get().cancelSleepTimer()
+      return
+    }
+    if (minutes === 'endOfTrack') {
+      clearSleepTimers()
+      const engine = getAudioEngine()
+      engine.resetSleepFade()
+      engine.setStopAfterTrack(true)
+      set({ sleepTimerEndAt: null, sleepEndOfTrack: true })
+      return
+    }
+    if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
+      get().cancelSleepTimer()
+      return
+    }
+    clearSleepTimers()
+    const engine = getAudioEngine()
+    engine.setStopAfterTrack(false)
+    engine.resetSleepFade()
+    const durationMs = Math.max(1000, Math.round(minutes * 60_000))
+    const endAt = Date.now() + durationMs
+    set({ sleepTimerEndAt: endAt, sleepEndOfTrack: false })
+    if (durationMs <= SLEEP_FADE_MS) {
+      sleepFadeStarted = true
+      engine.fadeMasterOut(durationMs)
+    }
+    sleepInterval = setInterval(() => {
+      const remaining = endAt - Date.now()
+      if (remaining <= 0) {
+        clearSleepTimers()
+        engine.pause()
+        set({ isPlaying: false, sleepTimerEndAt: null, sleepEndOfTrack: false })
+        sleepResetTimeout = setTimeout(() => {
+          sleepResetTimeout = null
+          engine.resetSleepFade()
+        }, 100)
+        return
+      }
+      if (!sleepFadeStarted && remaining <= SLEEP_FADE_MS) {
+        sleepFadeStarted = true
+        engine.fadeMasterOut(remaining)
+      }
+    }, 250)
+  },
+
+  cancelSleepTimer: () => {
+    clearSleepTimers()
+    const engine = getAudioEngine()
+    engine.setStopAfterTrack(false)
+    engine.resetSleepFade()
+    if (get().sleepTimerEndAt !== null || get().sleepEndOfTrack) {
+      set({ sleepTimerEndAt: null, sleepEndOfTrack: false })
+    }
+  },
 
   currentSong: () => {
     const { queue, queueIndex } = get()

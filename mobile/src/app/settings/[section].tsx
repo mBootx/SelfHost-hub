@@ -227,15 +227,75 @@ function AppearancePage() {
   )
 }
 
+function ChipPicker<T extends number>({
+  title,
+  hint,
+  options,
+  value,
+  onSelect
+}: {
+  title: string
+  hint: string
+  options: readonly { label: string; value: T }[]
+  value: T
+  onSelect: (value: T) => void
+}) {
+  return (
+    <View style={styles.pickerBlock}>
+      <Text style={styles.pickerTitle}>{title}</Text>
+      <View style={styles.chips}>
+        {options.map((opt) => {
+          const selected = value === opt.value
+          return (
+            <Pressable
+              key={opt.value}
+              onPress={() => onSelect(opt.value)}
+              style={[styles.chip, selected && styles.chipSelected]}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`${title} : ${opt.label}`}
+            >
+              <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{opt.label}</Text>
+            </Pressable>
+          )
+        })}
+      </View>
+      <Text style={styles.rowMeta}>{hint}</Text>
+    </View>
+  )
+}
+
+const CACHE_LIMIT_OPTIONS = [
+  { label: 'Illimité', value: 0 },
+  { label: '512 Mo', value: 512 },
+  { label: '1 Go', value: 1024 },
+  { label: '2 Go', value: 2048 },
+  { label: '5 Go', value: 5120 },
+  { label: '10 Go', value: 10240 }
+] as const
+
+const PRE_CACHE_OPTIONS = [
+  { label: 'Désactivé', value: 0 },
+  { label: '3 titres', value: 3 },
+  { label: '5 titres', value: 5 },
+  { label: '10 titres', value: 10 }
+] as const
+
 function StoragePage() {
   const offlineTracks = useOfflineStore((s) => s.tracks)
   const removeOffline = useOfflineStore((s) => s.removeOffline)
   const keepFavorites = useOfflineStore((s) => s.keepFavorites)
   const setKeepFavorites = useOfflineStore((s) => s.setKeepFavorites)
+  const maxCacheMb = useOfflineStore((s) => s.maxCacheMb)
+  const setMaxCacheMb = useOfflineStore((s) => s.setMaxCacheMb)
+  const preCacheCount = useOfflineStore((s) => s.preCacheCount)
+  const setPreCacheCount = useOfflineStore((s) => s.setPreCacheCount)
   const offlineIds = Object.keys(offlineTracks)
   const keptCount = useOfflineStore((s) => Object.keys(s.keptPlaylists).length)
   // The room the downloaded songs take: measured again when the list changes.
   const offlineSize = useMemo(() => offlineBytes(offlineTracks), [offlineTracks])
+  const capText = maxCacheMb > 0 ? formatMegabytes(maxCacheMb * 1024 * 1024) : null
+  const usageText = capText ? `${formatMegabytes(offlineSize)} / ${capText}` : `${formatMegabytes(offlineSize)} sur ce téléphone`
 
   function confirmClearOffline(): void {
     Alert.alert(
@@ -262,7 +322,11 @@ function StoragePage() {
           icon={HardDriveDownload}
           title="Titres hors ligne"
           meta={
-            (offlineIds.length === 0 ? 'Aucun titre téléchargé' : `${plural(offlineIds.length, 'titre', 'titres')} · ${formatMegabytes(offlineSize)} sur ce téléphone`) +
+            (offlineIds.length === 0
+              ? capText
+                ? `Aucun titre téléchargé (${usageText})`
+                : 'Aucun titre téléchargé'
+              : `${plural(offlineIds.length, 'titre', 'titres')} · ${usageText}`) +
             (keptCount > 0 ? ` · ${plural(keptCount, 'playlist gardée', 'playlists gardées')}` : '')
           }
           right={offlineIds.length > 0 ? <RowButton label="Vider" danger onPress={confirmClearOffline} accessibilityLabel="Vider les titres hors ligne" /> : undefined}
@@ -285,6 +349,24 @@ function StoragePage() {
           }
         />
       </SettingsCard>
+      <GroupLabel>Cache automatique</GroupLabel>
+      <View style={styles.card}>
+        <ChipPicker
+          title="Limite du cache auto"
+          hint="Supprime les titres pré-chargés les moins écoutés si la limite est dépassée. Les téléchargements manuels, playlists gardées et favoris restent conservés."
+          options={CACHE_LIMIT_OPTIONS}
+          value={maxCacheMb}
+          onSelect={setMaxCacheMb}
+        />
+        <View style={styles.pickerDivider} />
+        <ChipPicker
+          title="Pré-chargement en Wi-Fi"
+          hint="Télécharge automatiquement les prochains titres de la file d’attente lorsque vous êtes en Wi-Fi."
+          options={PRE_CACHE_OPTIONS}
+          value={preCacheCount}
+          onSelect={setPreCacheCount}
+        />
+      </View>
       <GroupLabel>Pochettes</GroupLabel>
       <CoverStorageRow />
     </>
@@ -407,5 +489,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     paddingVertical: spacing.md
   },
-  saveButtonText: { color: colors.onAccent, fontWeight: '800', fontSize: 14 }
+  saveButtonText: { color: colors.onAccent, fontWeight: '800', fontSize: 14 },
+  pickerBlock: { gap: spacing.xs },
+  pickerTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  pickerDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: spacing.md },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+  chip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.hover },
+  chipSelected: { backgroundColor: colors.accent },
+  chipText: { color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  chipTextSelected: { color: colors.onAccent }
 })

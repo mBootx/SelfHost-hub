@@ -77,7 +77,8 @@ data class DeviceState(
     val shuffle: Boolean,
     val repeatMode: RepeatMode,
     val volume: Double,
-    val upNext: List<RemoteSong> = emptyList()
+    val upNext: List<RemoteSong> = emptyList(),
+    val isStarred: Boolean = false
 )
 
 data class DeviceSummary(val deviceId: String, val deviceName: String, val platform: String)
@@ -123,6 +124,7 @@ sealed class PlayerCommand(val action: String, val payload: Map<String, Any?>? =
     data class Seek(val seconds: Double) : PlayerCommand("seek", mapOf("seconds" to seconds))
     data class SetVolume(val volume: Double) : PlayerCommand("setVolume", mapOf("volume" to volume.coerceIn(0.0, 1.0)))
     data object ToggleShuffle : PlayerCommand("toggleShuffle")
+    data object ToggleLike : PlayerCommand("toggleLike")
     data class SetRepeatMode(val mode: RepeatMode) : PlayerCommand("setRepeatMode", mapOf("mode" to mode.wire))
 
     /** Sets the phone's sleep timer (`0` = off, `-1` = end of current track, `> 0` = minutes). */
@@ -252,7 +254,8 @@ object LinkCodec {
             shuffle = obj.bool("shuffle", false),
             repeatMode = RepeatMode.fromWire(obj.string("repeatMode")),
             volume = obj.double("volume", 1.0).coerceIn(0.0, 1.0),
-            upNext = upNext
+            upNext = upNext,
+            isStarred = obj.bool("isStarred", false)
         )
     }
 }

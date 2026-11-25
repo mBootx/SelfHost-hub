@@ -1,4 +1,7 @@
 import { create } from 'zustand'
+import { NORMALIZE_MODES, NormalizeMode } from '@renderer/services/loudness'
+
+export type { NormalizeMode }
 
 /** Centre frequencies (Hz) of the equalizer bands. */
 export const EQ_FREQUENCIES = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
@@ -21,6 +24,7 @@ export const EQ_PRESETS: { id: string; label: string; gains: number[] }[] = [
 interface AudioSettings {
   crossfadeSeconds: number
   gapless: boolean
+  normalize: NormalizeMode
   eqEnabled: boolean
   /** A preset id, or 'custom' once a band has been moved by hand. */
   eqPreset: string
@@ -31,6 +35,7 @@ const STORAGE_KEY = 'shub.audio'
 const DEFAULTS: AudioSettings = {
   crossfadeSeconds: 0,
   gapless: true,
+  normalize: 'off',
   eqEnabled: false,
   eqPreset: 'flat',
   eqGains: EQ_PRESETS[0].gains
@@ -40,6 +45,7 @@ function loadSettings(): AudioSettings {
   try {
     const saved = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }
     if (!Array.isArray(saved.eqGains) || saved.eqGains.length !== EQ_FREQUENCIES.length) saved.eqGains = DEFAULTS.eqGains
+    if (!NORMALIZE_MODES.includes(saved.normalize)) saved.normalize = DEFAULTS.normalize
     return saved
   } catch {
     return DEFAULTS
@@ -49,6 +55,7 @@ function loadSettings(): AudioSettings {
 interface AudioSettingsState extends AudioSettings {
   setCrossfade: (seconds: number) => void
   setGapless: (on: boolean) => void
+  setNormalize: (mode: NormalizeMode) => void
   setEqEnabled: (on: boolean) => void
   applyEqPreset: (id: string) => void
   setEqBand: (index: number, db: number) => void
@@ -57,13 +64,14 @@ interface AudioSettingsState extends AudioSettings {
 export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => {
   function update(patch: Partial<AudioSettings>): void {
     set(patch)
-    const { crossfadeSeconds, gapless, eqEnabled, eqPreset, eqGains } = get()
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ crossfadeSeconds, gapless, eqEnabled, eqPreset, eqGains }))
+    const { crossfadeSeconds, gapless, normalize, eqEnabled, eqPreset, eqGains } = get()
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ crossfadeSeconds, gapless, normalize, eqEnabled, eqPreset, eqGains }))
   }
   return {
     ...loadSettings(),
     setCrossfade: (seconds) => update({ crossfadeSeconds: Math.max(0, Math.min(CROSSFADE_MAX_S, seconds)) }),
     setGapless: (gapless) => update({ gapless }),
+    setNormalize: (normalize) => update({ normalize: NORMALIZE_MODES.includes(normalize) ? normalize : 'off' }),
     setEqEnabled: (eqEnabled) => update({ eqEnabled }),
     applyEqPreset: (id) => {
       const preset = EQ_PRESETS.find((p) => p.id === id)

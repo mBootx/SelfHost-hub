@@ -5,74 +5,164 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_background"
     android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:padding="12dp">
-
-    <ImageView
-        android:id="@+id/widget_cover"
-        android:layout_width="76dp"
-        android:layout_height="76dp"
-        android:contentDescription="@null"
-        android:scaleType="centerCrop"
-        android:src="@drawable/widget_cover_placeholder" />
+    android:orientation="vertical"
+    android:padding="10dp">
 
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/widget_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="SelfHost Hub"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/widget_artist"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="#B3B3B3"
-            android:textSize="13sp" />
+        <ImageView
+            android:id="@+id/widget_cover"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:src="@drawable/widget_cover_placeholder" />
 
         <LinearLayout
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="start"
-            android:orientation="horizontal">
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
 
-            <ImageButton
-                android:id="@+id/widget_previous"
-                android:layout_width="44dp"
-                android:layout_height="40dp"
-                android:background="@android:color/transparent"
-                android:contentDescription="@string/selfhost_widget_previous"
-                android:src="@drawable/ic_widget_previous" />
+            <TextView
+                android:id="@+id/widget_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="SelfHost Hub"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold" />
 
-            <ImageButton
-                android:id="@+id/widget_toggle"
-                android:layout_width="52dp"
-                android:layout_height="40dp"
-                android:background="@android:color/transparent"
-                android:contentDescription="@string/selfhost_widget_toggle"
-                android:src="@drawable/ic_widget_play" />
+            <TextView
+                android:id="@+id/widget_artist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#B3B3B3"
+                android:textSize="12sp" />
 
-            <ImageButton
-                android:id="@+id/widget_next"
-                android:layout_width="44dp"
-                android:layout_height="40dp"
-                android:background="@android:color/transparent"
-                android:contentDescription="@string/selfhost_widget_next"
-                android:src="@drawable/ic_widget_next" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="start|center_vertical"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/widget_previous"
+                    android:layout_width="36dp"
+                    android:layout_height="34dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/selfhost_widget_previous"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_widget_previous" />
+
+                <ImageButton
+                    android:id="@+id/widget_toggle"
+                    android:layout_width="44dp"
+                    android:layout_height="34dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/selfhost_widget_toggle"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_widget_play" />
+
+                <ImageButton
+                    android:id="@+id/widget_next"
+                    android:layout_width="36dp"
+                    android:layout_height="34dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/selfhost_widget_next"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_widget_next" />
+
+                <ImageButton
+                    android:id="@+id/widget_like"
+                    android:layout_width="36dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="4dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/selfhost_widget_like"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_widget_heart_outline" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/widget_shuffle_all"
+            android:layout_width="0dp"
+            android:layout_height="28dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_chip_background"
+            android:clickable="true"
+            android:contentDescription="@string/selfhost_widget_shuffle_all"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
+
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_widget_shuffle" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/selfhost_widget_shuffle_all"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_favorites"
+            android:layout_width="0dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_chip_background"
+            android:clickable="true"
+            android:contentDescription="@string/selfhost_widget_favorites"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
+
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_widget_favorites" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/selfhost_widget_favorites"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

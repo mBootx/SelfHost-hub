@@ -69,6 +69,7 @@ export interface RemoteDeviceState {
   repeatMode: 'off' | 'all' | 'one'
   volume: number
   upNext?: RemoteSongInfo[]
+  isStarred?: boolean
 }
 
 export interface RemoteDeviceSummary {

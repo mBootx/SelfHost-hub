@@ -5,6 +5,7 @@ import {
   EQ_PRESETS,
   useAudioSettingsStore
 } from '@renderer/store/audioSettingsStore'
+import { NORMALIZE_LABELS, NORMALIZE_MODES } from '@renderer/services/loudness'
 import Switch from '@renderer/components/Switch'
 
 function formatFrequency(hz: number): string {
@@ -14,11 +15,13 @@ function formatFrequency(hz: number): string {
 export default function PlaybackSection(): JSX.Element {
   const crossfadeSeconds = useAudioSettingsStore((s) => s.crossfadeSeconds)
   const gapless = useAudioSettingsStore((s) => s.gapless)
+  const normalize = useAudioSettingsStore((s) => s.normalize)
   const eqEnabled = useAudioSettingsStore((s) => s.eqEnabled)
   const eqPreset = useAudioSettingsStore((s) => s.eqPreset)
   const eqGains = useAudioSettingsStore((s) => s.eqGains)
   const setCrossfade = useAudioSettingsStore((s) => s.setCrossfade)
   const setGapless = useAudioSettingsStore((s) => s.setGapless)
+  const setNormalize = useAudioSettingsStore((s) => s.setNormalize)
   const setEqEnabled = useAudioSettingsStore((s) => s.setEqEnabled)
   const applyEqPreset = useAudioSettingsStore((s) => s.applyEqPreset)
   const setEqBand = useAudioSettingsStore((s) => s.setEqBand)
@@ -57,6 +60,27 @@ export default function PlaybackSection(): JSX.Element {
               </p>
             </div>
             <Switch checked={gapless} onChange={setGapless} label="Lecture sans blanc" />
+          </div>
+          <div className="border-t border-surface-border pt-4">
+            <p className="mb-2 text-sm font-semibold">Normalisation du volume (ReplayGain)</p>
+            <div className="flex flex-wrap gap-1.5">
+              {NORMALIZE_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setNormalize(mode)}
+                  aria-pressed={normalize === mode}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    normalize === mode ? 'bg-accent text-black' : 'bg-surface-hover text-gray-300 hover:text-white'
+                  }`}
+                >
+                  {NORMALIZE_LABELS[mode]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              Baisse les titres trop forts pour que tous sonnent à peu près pareil, d'après les balises ReplayGain de vos fichiers. Un titre sans balise n'est pas touché, et aucun titre n'est jamais amplifié.
+            </p>
           </div>
         </div>
       </section>

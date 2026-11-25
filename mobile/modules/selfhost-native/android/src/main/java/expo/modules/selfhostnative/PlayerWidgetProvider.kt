@@ -27,22 +27,44 @@ class PlayerWidgetProvider : AppWidgetProvider() {
     super.onReceive(context, intent)
     val action = intent.action ?: return
     if (!action.startsWith(ACTION_PREFIX)) return
+    val name = action.removePrefix(ACTION_PREFIX)
+    if (name !in ALLOWED_ACTIONS) return
     val live = SelfHostNativeModule.live
-    if (live != null) live.widgetAction(action.removePrefix(ACTION_PREFIX)) else openApp(context)
+    if (live != null && live.hasWidgetListener()) {
+      live.widgetAction(name)
+    } else {
+      setPendingAction(name)
+      openApp(context)
+    }
   }
 
   companion object {
     private const val PREFS = "selfhost_widget"
     private const val ACTION_PREFIX = "expo.modules.selfhostnative.widget."
     private const val COVER_SIDE_PX = 256
+    private val ALLOWED_ACTIONS = setOf("toggle", "next", "previous", "like", "shuffleAll", "favorites")
+
+    @Volatile
+    private var pendingAction: String? = null
+
+    fun setPendingAction(action: String) {
+      if (action in ALLOWED_ACTIONS) pendingAction = action
+    }
+
+    fun consumePendingAction(): String? = synchronized(this) {
+      val action = pendingAction
+      pendingAction = null
+      action
+    }
 
     /** Keeps what the widget shows; an empty title means nothing is playing. */
-    fun save(context: Context, title: String, artist: String, coverUrl: String, playing: Boolean) {
+    fun save(context: Context, title: String, artist: String, coverUrl: String, playing: Boolean, isStarred: Boolean = false) {
       context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
         .putString("title", title)
         .putString("artist", artist)
         .putString("cover", coverUrl)
         .putBoolean("playing", playing)
+        .putBoolean("starred", isStarred)
         .apply()
     }
 
@@ -71,15 +93,20 @@ class PlayerWidgetProvider : AppWidgetProvider() {
       val artist = prefs.getString("artist", "") ?: ""
       val cover = prefs.getString("cover", "") ?: ""
       val playing = prefs.getBoolean("playing", false)
+      val starred = prefs.getBoolean("starred", false)
 
       val manager = AppWidgetManager.getInstance(context)
       val views = RemoteViews(context.packageName, R.layout.player_widget)
       views.setTextViewText(R.id.widget_title, if (title.isEmpty()) "SelfHost Hub" else title)
       views.setTextViewText(R.id.widget_artist, if (title.isEmpty()) "Aucune lecture en cours" else artist)
       views.setImageViewResource(R.id.widget_toggle, if (playing) R.drawable.ic_widget_pause else R.drawable.ic_widget_play)
+      views.setImageViewResource(R.id.widget_like, if (starred) R.drawable.ic_widget_heart_filled else R.drawable.ic_widget_heart_outline)
       views.setOnClickPendingIntent(R.id.widget_toggle, command(context, "toggle", 1))
       views.setOnClickPendingIntent(R.id.widget_next, command(context, "next", 2))
       views.setOnClickPendingIntent(R.id.widget_previous, command(context, "previous", 3))
+      views.setOnClickPendingIntent(R.id.widget_like, command(context, "like", 4))
+      views.setOnClickPendingIntent(R.id.widget_shuffle_all, command(context, "shuffleAll", 5))
+      views.setOnClickPendingIntent(R.id.widget_favorites, command(context, "favorites", 6))
       val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
       if (open != null) {
         views.setOnClickPendingIntent(R.id.widget_root, PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))

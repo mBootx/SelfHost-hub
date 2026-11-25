@@ -9,6 +9,27 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.6.0',
+    items: [
+      {
+        title: 'Synchronisation façon Spotify Connect',
+        text: 'Actualisation automatique toutes les 5 s entre vos appareils, sélection automatique de l’appareil en cours de lecture et bascule en un geste (Réglages → Serveur Hub).'
+      },
+      {
+        title: 'Reprise hors ligne et Downtify à distance',
+        text: 'Reprenez la lecture là où un autre appareil l’a laissée même après sa fermeture, et utilisez Downtify à l’extérieur via le serveur Hub.'
+      },
+      {
+        title: 'Cache intelligent et pré-chargement Wi-Fi',
+        text: 'Limitez la taille du cache automatique (suppression des titres écoutés il y a le plus longtemps) et pré-chargez les prochains titres en Wi-Fi sous Stockage.'
+      },
+      {
+        title: 'Actions rapides sur le widget et la montre',
+        text: 'Ajoutez aux favoris et lancez « Mix aléatoire » ou « Titres aimés » directement depuis le widget Android et la tuile Wear OS.'
+      }
+    ]
+  },
+  {
     version: '3.5.0',
     items: [
       {

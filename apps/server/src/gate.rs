@@ -29,13 +29,15 @@ pub struct Gate {
     /// Allowed cookie domains; each covers its apex and subdomains (e.g. `goofysound.duckdns.org`).
     domains: Vec<String>,
     key: Vec<u8>,
+    /// Services shown on the signed-in page: `(name, url)`.
+    services: Vec<(String, String)>,
 }
 
-fn hex(b: &[u8]) -> String {
+pub(crate) fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
-fn unhex(s: &str) -> Option<Vec<u8>> {
+pub(crate) fn unhex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;
     }
@@ -70,7 +72,18 @@ impl Gate {
             .map(|d| d.trim().trim_start_matches('.').to_ascii_lowercase())
             .filter(|d| !d.is_empty())
             .collect();
-        Self { domains, key }
+        Self { domains, key, services: Vec::new() }
+    }
+
+    /// Sets the `(name, url)` service links returned by `/api/gate/verify`.
+    pub fn with_services(mut self, services: Vec<(String, String)>) -> Self {
+        self.services = services;
+        self
+    }
+
+    /// Configured `(name, url)` service links for this gate.
+    pub fn services(&self) -> &[(String, String)] {
+        &self.services
     }
 
     pub fn domain_for_host(&self, host_header: Option<&str>) -> &str {
@@ -142,7 +155,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/gate/verify", get(verify))
 }
 
-fn gate_cookie(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn gate_cookie(headers: &HeaderMap) -> Option<String> {
     headers
         .get_all(header::COOKIE)
         .iter()
@@ -173,7 +186,12 @@ async fn verify(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let Some(gate) = &state.gate else { return fail(StatusCode::NOT_FOUND, "gate-off") };
     match gate_cookie(&headers).and_then(|v| gate.verify(&v, unix_now())) {
         Some(user) => {
-            let mut resp = reply(StatusCode::OK, json!({"user": user}));
+            let services: Vec<Value> = gate
+                .services
+                .iter()
+                .map(|(name, url)| json!({"name": name, "url": url}))
+                .collect();
+            let mut resp = reply(StatusCode::OK, json!({"user": user, "services": services}));
             if let Ok(v) = HeaderValue::from_str(&user) {
                 resp.headers_mut().insert("x-hub-user", v);
             }
@@ -332,6 +350,56 @@ mod tests {
         assert_eq!(
             g.safe_redirect_for("https://downtify.goofysound.duckdns.org/", d1).as_deref(),
             Some("https://downtify.goofysound.duckdns.org/")
+        );
+    }
+
+    struct DummyAuth;
+    impl crate::auth::Authenticator for DummyAuth {
+        fn check<'a>(&'a self, _u: &'a str, _t: &'a str, _s: &'a str) -> crate::auth::BoxFuture<'a, AuthOutcome> {
+            Box::pin(async { AuthOutcome::BadAuth })
+        }
+    }
+
+    #[tokio::test]
+    async fn with_services_populates_verify_response() {
+        let g = gate().with_services(vec![
+            ("Downtify".into(), "https://downtify.goofysound.duckdns.org".into()),
+            ("Navidrome".into(), "https://music.goofysound.duckdns.org".into()),
+        ]);
+        assert_eq!(
+            g.services(),
+            &[
+                ("Downtify".to_string(), "https://downtify.goofysound.duckdns.org".to_string()),
+                ("Navidrome".to_string(), "https://music.goofysound.duckdns.org".to_string()),
+            ]
+        );
+        let tok = g.sign("max.b", unix_now() + 60);
+        let (_stop_tx, stop_rx) = tokio::sync::watch::channel(false);
+        let state = AppState::new(
+            "Test",
+            false,
+            crate::db::Db::open_in_memory().unwrap(),
+            std::sync::Arc::new(DummyAuth),
+            stop_rx,
+        )
+        .with_gate(g);
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::COOKIE, HeaderValue::from_str(&format!("hub_gate={tok}")).unwrap());
+        let resp = verify(State(state), headers).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(resp.headers()["x-hub-user"], "max.b");
+        let bytes = axum::body::to_bytes(resp.into_body(), 8192).await.unwrap();
+        let v: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            v,
+            json!({
+                "user": "max.b",
+                "services": [
+                    {"name": "Downtify", "url": "https://downtify.goofysound.duckdns.org"},
+                    {"name": "Navidrome", "url": "https://music.goofysound.duckdns.org"},
+                ]
+            })
         );
     }
 }

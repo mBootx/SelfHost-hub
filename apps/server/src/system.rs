@@ -937,8 +937,19 @@ impl Monitor {
 
     /// The `GET /api/admin/system` document; with `processes`, every process too.
     pub fn snapshot(&self, processes: bool) -> Value {
+        self.build_snapshot(processes, true)
+    }
+
+    /// Like `snapshot(false)`, without marking the panel as viewed.
+    pub fn peek_snapshot(&self) -> Value {
+        self.build_snapshot(false, false)
+    }
+
+    fn build_snapshot(&self, processes: bool, touch_viewed: bool) -> Value {
         let mut g = self.lock();
-        g.viewed = Some(Instant::now());
+        if touch_viewed {
+            g.viewed = Some(Instant::now());
+        }
         let mut doc = match &g.host {
             Some(Value::Object(m)) => m.clone(),
             _ => Map::new(),
@@ -964,6 +975,75 @@ impl Monitor {
         doc.insert("history".into(), series(&g.history, HISTORY_EVERY.as_secs()));
         Value::Object(doc)
     }
+
+    /// Fetches the last `tail` log lines for Docker container `id`.
+    pub async fn container_logs(&self, id: &str, tail: u32) -> Result<Vec<String>, (u16, &'static str)> {
+        let Some(base) = self.cfg.docker_url.as_deref() else {
+            return Err((503, "docker-not-configured"));
+        };
+        if id.is_empty()
+            || id.len() > 128
+            || !id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+        {
+            return Err((400, "bad-id"));
+        }
+        let tail = tail.clamp(1, 2000);
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .map_err(|_| (502, "docker-error"))?;
+        let url = format!("{}/containers/{id}/logs?stdout=1&stderr=1&tail={tail}&timestamps=1", base.trim_end_matches('/'));
+        let mut res = client.get(url).send().await.map_err(|_| (502, "docker-error"))?;
+        let status = res.status();
+        if status.as_u16() == 404 {
+            return Err((404, "not-found"));
+        }
+        if !status.is_success() {
+            return Err((502, "docker-error"));
+        }
+        const MAX_LOG_BYTES: usize = 2 * 1024 * 1024;
+        let mut buf = Vec::with_capacity(res.content_length().unwrap_or(0).min(MAX_LOG_BYTES as u64) as usize);
+        while let Some(chunk) = res.chunk().await.map_err(|_| (502, "docker-error"))? {
+            let take = chunk.len().min(MAX_LOG_BYTES - buf.len());
+            buf.extend_from_slice(&chunk[..take]);
+            if buf.len() >= MAX_LOG_BYTES {
+                break;
+            }
+        }
+        Ok(demux_docker_logs(&buf))
+    }
+}
+
+fn try_demux_frames(raw: &[u8]) -> Option<Vec<u8>> {
+    if raw.len() < 8 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(raw.len());
+    let mut off = 0;
+    while off < raw.len() {
+        let hdr = raw.get(off..off + 8)?;
+        if !matches!(hdr[0], 1 | 2) || hdr[1..4] != [0, 0, 0] {
+            return None;
+        }
+        let len = u32::from_be_bytes([hdr[4], hdr[5], hdr[6], hdr[7]]) as usize;
+        let end = off.checked_add(8)?.checked_add(len)?;
+        let payload = raw.get(off + 8..end)?;
+        out.extend_from_slice(payload);
+        off = end;
+    }
+    Some(out)
+}
+
+/// Decodes Docker container log output (8-byte multiplexed frames or plain TTY text) into lines.
+pub fn demux_docker_logs(raw: &[u8]) -> Vec<String> {
+    const MAX_LINES: usize = 5000;
+    let decoded = try_demux_frames(raw);
+    let text = String::from_utf8_lossy(decoded.as_deref().unwrap_or(raw));
+    let mut lines: Vec<String> = text.lines().map(|l| l.trim_end_matches('\r').to_string()).collect();
+    if lines.len() > MAX_LINES {
+        lines.drain(..lines.len() - MAX_LINES);
+    }
+    lines
 }
 
 #[derive(Clone, Copy)]
@@ -1213,5 +1293,36 @@ mod tests {
             parse_cpu_model("processor\t: 0\nmodel name\t: Intel(R) Core(TM)   i5-6400 CPU @ 2.70GHz\n").as_deref(),
             Some("Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz")
         );
+    }
+
+    #[test]
+    fn demux_logs_multiplexed_and_tty() {
+        let mut raw = Vec::new();
+        let frame = |stream: u8, msg: &[u8], dst: &mut Vec<u8>| {
+            dst.extend_from_slice(&[stream, 0, 0, 0]);
+            dst.extend_from_slice(&(msg.len() as u32).to_be_bytes());
+            dst.extend_from_slice(msg);
+        };
+        frame(1, b"2026-01-01T00:00:00Z started\n", &mut raw);
+        frame(2, b"2026-01-01T00:00:01Z warning\r\n", &mut raw);
+        assert_eq!(
+            demux_docker_logs(&raw),
+            vec!["2026-01-01T00:00:00Z started", "2026-01-01T00:00:01Z warning"]
+        );
+        assert_eq!(demux_docker_logs(b"plain tty line\r\nsecond line\n"), vec!["plain tty line", "second line"]);
+        assert!(demux_docker_logs(b"").is_empty());
+    }
+
+    #[test]
+    fn peek_snapshot_does_not_mark_viewed() {
+        let mon = Monitor::new(SysConfig::default());
+        assert!(!mon.watched());
+        let peek = mon.peek_snapshot();
+        assert_eq!(peek["ready"], false);
+        assert!(!mon.watched());
+        assert!(mon.lock().viewed.is_none());
+        let _ = mon.snapshot(false);
+        assert!(mon.watched());
+        assert!(mon.lock().viewed.is_some());
     }
 }

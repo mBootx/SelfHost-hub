@@ -5,6 +5,7 @@ import { useSleepTimerStore } from '@/services/sleepTimer'
 import { resumePosition } from '@/services/playbackMemory'
 import type { NavidromeClient, NDSong } from '@/services/navidrome'
 import { useNavidromeStore } from '@/store/navidromeStore'
+import { isStarred, useStarStore } from '@/store/starStore'
 import { useOfflineStore } from '@/store/offlineStore'
 import { useArtworkStore } from '@/store/artworkStore'
 import { useHistoryStore } from '@/store/historyStore'
@@ -59,6 +60,7 @@ export default function PlaybackController(): null {
   const setEqBands = useAudioSettingsStore((s) => s.setEqBands)
 
   const song = queue[queueIndex] || null
+  const starred = useStarStore((s) => (song ? isStarred(s, song) : false))
   // What follows the current track when it ends on its own - the same rules as the store's next().
   const nextSong = repeatMode === 'one' ? null : (queue[queueIndex + 1] ?? (repeatMode === 'all' ? queue[0] : null))
   // How much each track is turned down to even out the volume (1 when the setting is off or it has no tags).
@@ -183,15 +185,15 @@ export default function PlaybackController(): null {
     if (nextArtwork) SelfHostNative?.prefetchArtwork?.(nextArtwork)
   }, [nextArtwork])
 
-  // The home-screen widget shows the same song, and whether it is playing.
+  // The home-screen widget shows the same song, whether it is playing, and whether it is starred.
   useEffect(() => {
     if (!SelfHostNative?.updateWidget) return
     if (!song || !client) {
-      SelfHostNative.updateWidget('', '', '', false)
+      SelfHostNative.updateWidget('', '', '', false, false)
       return
     }
-    SelfHostNative.updateWidget(song.title, song.artist, lockScreenArtwork(song, client, artworkOverride) ?? '', isPlaying)
-  }, [song, client, artworkOverride, isPlaying])
+    SelfHostNative.updateWidget(song.title, song.artist, lockScreenArtwork(song, client, artworkOverride) ?? '', isPlaying, starred)
+  }, [song, client, artworkOverride, isPlaying, starred])
 
   // Nothing left to play (queue cleared, signed out): the Now Bar goes too, instead of showing the last song.
   useEffect(() => {

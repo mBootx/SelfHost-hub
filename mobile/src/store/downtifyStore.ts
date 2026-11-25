@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import { describeError, logEvent } from '@/services/diagnostics'
-import { DowntifyClient, DowntifySong, QueueItem } from '@/services/downtify'
+import { DowntifyClient, DowntifySong, HubDowntifyProxy, QueueItem } from '@/services/downtify'
+import { HubServerClient } from '@/services/hubServer'
 import { scanLibrary } from '@/services/libraryScan'
 import { storage } from '@/services/storage'
+import { useRemoteStore } from '@/store/remoteStore'
 import { ConnectionStatus } from '@/types'
 
 function generateClientId(): string {
@@ -10,10 +12,25 @@ function generateClientId(): string {
   return `client-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+function getHubProxy(): HubDowntifyProxy | null {
+  const { client } = useRemoteStore.getState()
+  if (!(client instanceof HubServerClient) || !client.connected) return null
+  if (!client.hasFeature('downtify')) return null
+  const apiToken = client.getApiToken()
+  const baseUrl = client.getServerUrl()
+  if (!apiToken || !baseUrl) return null
+  return { baseUrl, apiToken }
+}
+
+let hubSubscribed = false
+let loggedOutByUser = false
+
 interface DowntifyState {
   client: DowntifyClient | null
   status: ConnectionStatus
   error: string | null
+  /** True when requests are currently routed through the Hub server proxy instead of the LAN Downtify URL. */
+  viaHub: boolean
 
   queue: QueueItem[]
   completedSongs: DowntifySong[]
@@ -35,55 +52,100 @@ interface DowntifyState {
   clearQueue: () => Promise<void>
 }
 
-export const useDowntifyStore = create<DowntifyState>((set, get) => ({
-  client: null,
-  status: 'disconnected',
-  error: null,
-  queue: [],
-  completedSongs: [],
-  activeDownloads: 0,
-  lastCompletedAt: 0,
-  pollHandle: null,
-
-  connect: async (url, remember) => {
-    set({ status: 'connecting', error: null })
-    let clientId = await storage.loadPref<string>('downtify.clientId')
-    if (!clientId) {
-      clientId = generateClientId()
-      await storage.savePref('downtify.clientId', clientId)
-    }
-    const client = new DowntifyClient({ url }, clientId)
-    try {
-      await client.testConnection()
-      set({ client, status: 'connected' })
-      logEvent('connection', 'Downtify connecté')
-      if (remember) {
-        await storage.saveConnection('downtify', { url, username: '' })
+export const useDowntifyStore = create<DowntifyState>((set, get) => {
+  function ensureHubSubscription(): void {
+    if (hubSubscribed || typeof useRemoteStore.subscribe !== 'function') return
+    hubSubscribed = true
+    useRemoteStore.subscribe((remote, prev) => {
+      if (remote.serverUrl !== prev.serverUrl) loggedOutByUser = false
+      if (remote.status === 'connected' && getHubProxy()) {
+        if (!loggedOutByUser && get().status !== 'connected') {
+          void get().restoreSession()
+        }
+      } else if (prev.status === 'connected' && remote.status !== 'connected' && get().viaHub) {
+        void storage.loadConnection('downtify').then((conn) => {
+          if (conn?.url) {
+            void get().restoreSession()
+          } else if (get().viaHub) {
+            get().stopPolling()
+            set({ client: null, status: 'disconnected', viaHub: false, queue: [] })
+          }
+        })
       }
-      get().startPolling()
-      await get().refreshQueue()
-    } catch (err: any) {
-      set({ status: 'error', error: err?.message || 'Connexion impossible' })
-      logEvent('connection', `Downtify : ${describeError(err)}`, 'warn')
-      throw err
-    }
-  },
+    })
+  }
 
-  restoreSession: async () => {
-    const conn = await storage.loadConnection('downtify')
-    if (!conn) return
-    try {
-      await get().connect(conn.url, false)
-    } catch {
-      // service unreachable, stay logged out
-    }
-  },
+  return {
+    client: null,
+    status: 'disconnected',
+    error: null,
+    viaHub: false,
+    queue: [],
+    completedSongs: [],
+    activeDownloads: 0,
+    lastCompletedAt: 0,
+    pollHandle: null,
 
-  logout: async () => {
-    get().stopPolling()
-    await storage.clearConnection('downtify')
-    set({ client: null, status: 'disconnected', queue: [] })
-  },
+    connect: async (url, remember) => {
+      ensureHubSubscription()
+      loggedOutByUser = false
+      const normalizedUrl = (url ?? '').trim()
+      set({ status: 'connecting', error: null, viaHub: false })
+      if (!normalizedUrl && !getHubProxy()) {
+        const msg = 'Adresse Downtify manquante'
+        set({ status: 'error', error: msg })
+        throw new Error(msg)
+      }
+      let clientId = await storage.loadPref<string>('downtify.clientId')
+      if (!clientId) {
+        clientId = generateClientId()
+        await storage.savePref('downtify.clientId', clientId)
+      }
+      const client = new DowntifyClient(
+        {
+          url: normalizedUrl,
+          getHubProxy,
+          onTransportChange: (viaHub) => {
+            if (get().client === client) set({ viaHub })
+          }
+        },
+        clientId
+      )
+      try {
+        await client.testConnection()
+        const viaHub = client.isViaHub
+        set({ client, status: 'connected', viaHub })
+        logEvent('connection', viaHub ? 'Downtify connecté (via serveur Hub)' : 'Downtify connecté')
+        if (remember && normalizedUrl) {
+          await storage.saveConnection('downtify', { url: normalizedUrl, username: '' })
+        }
+        get().startPolling()
+        await get().refreshQueue()
+      } catch (err: any) {
+        set({ status: 'error', error: err?.message || 'Connexion impossible', viaHub: false })
+        logEvent('connection', `Downtify : ${describeError(err)}`, 'warn')
+        throw err
+      }
+    },
+
+    restoreSession: async () => {
+      ensureHubSubscription()
+      const conn = await storage.loadConnection('downtify')
+      const url = conn?.url ?? ''
+      if (!url && !getHubProxy()) return
+      try {
+        await get().connect(url, false)
+      } catch {
+        // service unreachable, stay logged out
+      }
+    },
+
+    logout: async () => {
+      loggedOutByUser = true
+      get().stopPolling()
+      await storage.clearConnection('downtify')
+      set({ client: null, status: 'disconnected', viaHub: false, queue: [] })
+    },
 
   refreshQueue: async () => {
     const { client, queue: prevQueue } = get()
@@ -167,10 +229,11 @@ export const useDowntifyStore = create<DowntifyState>((set, get) => ({
     await get().refreshQueue()
   },
 
-  clearQueue: async () => {
-    const { client } = get()
-    if (!client) return
-    await client.clearQueue()
-    await get().refreshQueue()
+    clearQueue: async () => {
+      const { client } = get()
+      if (!client) return
+      await client.clearQueue()
+      await get().refreshQueue()
+    }
   }
-}))
+})

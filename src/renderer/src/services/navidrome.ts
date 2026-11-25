@@ -1,4 +1,5 @@
 import { md5 } from 'js-md5'
+import type { ReplayGain } from '@renderer/services/loudness'
 import { NavidromeAdmin } from './navidromeAdmin'
 
 export interface NavidromeConfig {
@@ -35,6 +36,7 @@ export interface NDSong {
   duration: number
   track?: number; artistId?: string; genre?: string
   starred?: string
+  replayGain?: ReplayGain
   /** The file's extension on the server (mp3, flac...). */
   suffix?: string
 }

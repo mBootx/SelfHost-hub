@@ -1,9 +1,12 @@
 //! SelfHost Hub server: remote-control relay and listening-data store. Protocol: docs/server-protocol.md.
 
 pub mod admin;
+pub mod alerts;
 pub mod auth;
+pub mod backup;
 pub mod config;
 pub mod db;
+pub mod downtify;
 pub mod gate;
 pub mod hub;
 pub mod limiter;
@@ -41,6 +44,14 @@ pub struct AppState {
     pub shell: Arc<shell::ShellState>,
     /// The sign-in gate for other services (off unless GATE_DOMAIN is set).
     pub gate: Option<Arc<gate::Gate>>,
+    /// Signer and verifier for mobile/desktop Downtify client tokens.
+    pub client_token: Arc<downtify::ClientToken>,
+    /// Reverse proxy to Downtify (off unless DOWNTIFY_URL is set).
+    pub downtify: Option<Arc<downtify::DowntifyProxy>>,
+    /// Threshold alert evaluator and webhook notifier.
+    pub alerts: Arc<alerts::AlertEngine>,
+    /// SQLite backup manager.
+    pub backups: Option<Arc<backup::BackupManager>>,
     /// Turns `true` when the server is shutting down.
     pub shutdown: watch::Receiver<bool>,
 }
@@ -67,6 +78,10 @@ impl AppState {
             navidrome_url: "".into(),
             shell: Arc::default(),
             gate: None,
+            client_token: Arc::new(downtify::ClientToken::new(b"test-client-key-0123456789abcdef".to_vec())),
+            downtify: None,
+            alerts: alerts::AlertEngine::new(alerts::AlertConfig::default()),
+            backups: None,
             shutdown,
         }
     }
@@ -74,6 +89,30 @@ impl AppState {
     /// Turns the sign-in gate on.
     pub fn with_gate(mut self, gate: gate::Gate) -> Self {
         self.gate = Some(Arc::new(gate));
+        self
+    }
+
+    /// Sets the Downtify client bearer-token signer.
+    pub fn with_client_token(mut self, client_token: Arc<downtify::ClientToken>) -> Self {
+        self.client_token = client_token;
+        self
+    }
+
+    /// Turns the Downtify HTTP reverse proxy on.
+    pub fn with_downtify(mut self, downtify: Arc<downtify::DowntifyProxy>) -> Self {
+        self.downtify = Some(downtify);
+        self
+    }
+
+    /// Sets the alert engine.
+    pub fn with_alerts(mut self, alerts: Arc<alerts::AlertEngine>) -> Self {
+        self.alerts = alerts;
+        self
+    }
+
+    /// Sets the SQLite backup manager.
+    pub fn with_backups(mut self, backups: Arc<backup::BackupManager>) -> Self {
+        self.backups = Some(backups);
         self
     }
 
@@ -98,6 +137,7 @@ pub fn router(state: AppState) -> Router {
         .route("/ws", get(ws::upgrade))
         .merge(admin::routes())
         .merge(gate::routes())
+        .merge(downtify::routes())
         .with_state(state)
 }
 

@@ -43,6 +43,15 @@ export class ApiError extends Error {
   }
 }
 
+interface HubProxyInfo {
+  baseUrl: string
+  apiToken: string
+  downtifyEnabled: boolean
+}
+
+const DIRECT_RETRY_AFTER_MS = 60_000
+const CONNECT_WAIT_MS = 2_500
+
 /**
  * Client for Downtify (open-source YouTube/YouTube-Music based music
  * downloader, no Spotify account needed). There is no authentication at
@@ -50,28 +59,86 @@ export class ApiError extends Error {
  * used to keep a separate settings profile. The exact endpoints below were
  * reverse-engineered from the app's own frontend bundle, since there is no
  * published API reference.
+ *
+ * When the direct LAN URL is unreachable (or unset), falls back to the
+ * authenticated SelfHost Hub server proxy (`/api/downtify/*`).
  */
 export class DowntifyClient {
   private baseUrl: string
   private clientId: string
+  private usingProxy = false
+  private proxyAt = 0
+  private proxyInfo: HubProxyInfo | null = null
 
   constructor(config: DowntifyConfig, clientId: string) {
-    this.baseUrl = config.url.replace(/\/+$/, '')
+    this.baseUrl = (config.url || '').trim().replace(/\/+$/, '')
     this.clientId = clientId
   }
 
-  private async request<T>(
-    path: string,
-    method = 'GET',
-    params?: Record<string, string>,
+  private async resolveProxy(): Promise<HubProxyInfo | null> {
+    let info = await window.api.hubServer.getProxyInfo().catch(() => null)
+    if (!info) {
+      const st = await window.api.hubServer.status().catch(() => null)
+      if (st?.state === 'connecting') {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            off()
+            resolve()
+          }, CONNECT_WAIT_MS)
+          const off = window.api.hubServer.onStatus((next) => {
+            if (next.state !== 'connecting') {
+              clearTimeout(timer)
+              off()
+              resolve()
+            }
+          })
+        })
+        info = await window.api.hubServer.getProxyInfo().catch(() => null)
+      }
+    }
+    this.proxyInfo = info
+    return info
+  }
+
+  private async requestDirect<T>(
+    cleanPath: string,
+    query: string,
+    method: string,
+    data?: unknown,
+    timeoutMs?: number
+  ): Promise<{ ok: true; data: T } | { ok: false; networkError: boolean; status: number; error: string }> {
+    const res = await window.api.net.request({
+      url: `${this.baseUrl}/${cleanPath}${query}`,
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      data,
+      timeout: timeoutMs
+    })
+    if (res.ok) return { ok: true, data: res.data as T }
+    return {
+      ok: false,
+      networkError: res.status === 0,
+      status: res.status,
+      error: res.error || `Erreur Downtify (${res.status})`
+    }
+  }
+
+  private async requestProxy<T>(
+    proxy: HubProxyInfo,
+    cleanPath: string,
+    query: string,
+    method: string,
     data?: unknown,
     timeoutMs?: number
   ): Promise<T> {
-    const query = params ? `?${new URLSearchParams(params).toString()}` : ''
+    const base = proxy.baseUrl.replace(/\/+$/, '')
     const res = await window.api.net.request({
-      url: `${this.baseUrl}${path}${query}`,
+      url: `${base}/api/downtify/${cleanPath}${query}`,
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${proxy.apiToken}`
+      },
       data,
       timeout: timeoutMs
     })
@@ -79,8 +146,64 @@ export class DowntifyClient {
     return res.data as T
   }
 
+  private async request<T>(
+    path: string,
+    method = 'GET',
+    params?: Record<string, string>,
+    data?: unknown,
+    timeoutMs?: number,
+    forceDirectCheck = false
+  ): Promise<T> {
+    const cleanPath = path.replace(/^\/+/, '')
+    const query = params ? `?${new URLSearchParams(params).toString()}` : ''
+    const shouldTryDirect =
+      !!this.baseUrl && (forceDirectCheck || !this.usingProxy || Date.now() - this.proxyAt > DIRECT_RETRY_AFTER_MS)
+
+    let directErr: ApiError | null = null
+    if (shouldTryDirect) {
+      const direct = await this.requestDirect<T>(cleanPath, query, method, data, timeoutMs)
+      if (direct.ok) {
+        this.usingProxy = false
+        return direct.data
+      }
+      directErr = new ApiError(direct.error, direct.status)
+      if (!direct.networkError) throw directErr
+    }
+
+    const proxy = await this.resolveProxy()
+    if (proxy && proxy.downtifyEnabled && proxy.apiToken) {
+      try {
+        const result = await this.requestProxy<T>(proxy, cleanPath, query, method, data, timeoutMs)
+        this.usingProxy = true
+        this.proxyAt = Date.now()
+        return result
+      } catch (err) {
+        // If proxy was tried first because we were cached in proxy mode, give direct LAN one chance.
+        if (!shouldTryDirect && this.baseUrl) {
+          const direct = await this.requestDirect<T>(cleanPath, query, method, data, timeoutMs)
+          if (direct.ok) {
+            this.usingProxy = false
+            return direct.data
+          }
+        }
+        throw err
+      }
+    }
+
+    if (!shouldTryDirect && this.baseUrl) {
+      const direct = await this.requestDirect<T>(cleanPath, query, method, data, timeoutMs)
+      if (direct.ok) {
+        this.usingProxy = false
+        return direct.data
+      }
+      throw new ApiError(direct.error, direct.status)
+    }
+
+    throw directErr ?? new ApiError('Downtify injoignable', 0)
+  }
+
   async testConnection(): Promise<void> {
-    await this.request<string>('/api/version')
+    await this.request<string>('/api/version', 'GET', undefined, undefined, undefined, true)
   }
 
   async getQueue(): Promise<QueueItem[]> {
@@ -140,13 +263,43 @@ export class DowntifyClient {
     await this.request('/delete', 'DELETE', { file })
   }
 
+  private activeProxyBase(): string | null {
+    if ((this.usingProxy || !this.baseUrl) && this.proxyInfo?.downtifyEnabled && this.proxyInfo.apiToken) {
+      return `${this.proxyInfo.baseUrl.replace(/\/+$/, '')}/api/downtify`
+    }
+    return null
+  }
+
   fileUrl(file: string): string {
     const encoded = file.split('/').map(encodeURIComponent).join('/')
-    return `${this.baseUrl}/downloads/${encoded}`
+    const proxyBase = this.activeProxyBase()
+    return proxyBase ? `${proxyBase}/downloads/${encoded}` : `${this.baseUrl}/downloads/${encoded}`
+  }
+
+  downloadUrl(file: string): string {
+    return this.fileUrl(file)
   }
 
   coverUrl(file: string): string {
-    return `${this.baseUrl}/cover?file=${encodeURIComponent(file)}`
+    const proxyBase = this.activeProxyBase()
+    return proxyBase
+      ? `${proxyBase}/cover?file=${encodeURIComponent(file)}`
+      : `${this.baseUrl}/cover?file=${encodeURIComponent(file)}`
+  }
+
+  /** Fetches a cover image (with bearer auth if routed through the hub proxy) and returns a blob URL. */
+  async fetchCoverBlob(file: string): Promise<string | null> {
+    const proxy = this.usingProxy || !this.baseUrl ? await this.resolveProxy() : null
+    const useProxy = !!proxy && proxy.downtifyEnabled && !!proxy.apiToken && (this.usingProxy || !this.baseUrl)
+    const url = useProxy
+      ? `${proxy!.baseUrl.replace(/\/+$/, '')}/api/downtify/cover?file=${encodeURIComponent(file)}`
+      : `${this.baseUrl}/cover?file=${encodeURIComponent(file)}`
+    const headers: Record<string, string> = useProxy ? { Authorization: `Bearer ${proxy!.apiToken}` } : {}
+    const res = await window.api.net.request({ url, method: 'GET', headers, responseType: 'arraybuffer' })
+    if (!res.ok || !res.data) return null
+    const bytes = res.data instanceof Uint8Array ? res.data : new Uint8Array(res.data as ArrayBuffer)
+    const contentType = res.headers?.['content-type'] || 'image/jpeg'
+    return URL.createObjectURL(new Blob([bytes], { type: contentType }))
   }
 
   async getSettings(): Promise<DowntifySettings> {

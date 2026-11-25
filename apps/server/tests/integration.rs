@@ -171,6 +171,32 @@ async fn remote_control_between_two_devices() {
 }
 
 #[tokio::test]
+async fn sessions_refresh_returns_devices_and_other_states() {
+    let (addr, _stop) = start_server().await;
+    let mut a = Client::join(addr, "Max", "a").await;
+    let mut b = Client::join(addr, "max", "b").await;
+    a.recv().await; // devices (b joined)
+
+    a.send(json!({"type":"state","song":null,"isPlaying":true,"currentTime":1.5,"volume":0.8})).await;
+    assert_eq!(b.recv().await["deviceId"], "a");
+    b.send(json!({"type":"state","song":null,"isPlaying":false,"currentTime":0.0,"volume":0.5})).await;
+    assert_eq!(a.recv().await["deviceId"], "b");
+
+    b.send(json!({"type":"sessions.refresh"})).await;
+    let devices = b.recv().await;
+    assert_eq!(devices["type"], "devices");
+    assert_eq!(devices["devices"].as_array().unwrap().len(), 2);
+    let state = b.recv().await;
+    assert_eq!(state["type"], "state");
+    assert_eq!(state["deviceId"], "a");
+    assert_eq!(state["isPlaying"], true);
+
+    // Next reply is for a new request, proving b's own state was not included.
+    b.send(json!({"type":"command","targetId":"nobody","action":"play"})).await;
+    assert_eq!(b.recv().await["code"], "bad-command");
+}
+
+#[tokio::test]
 async fn command_to_another_users_device_is_refused() {
     let (addr, _stop) = start_server().await;
     let mut a = Client::join(addr, "max", "a").await;
@@ -239,6 +265,62 @@ async fn listening_push_notifies_and_pull_returns_entry() {
     let ack = a.recv().await;
     assert_eq!(ack["weeks"], json!([]));
     assert_eq!(ack["rev"], 1);
+}
+
+#[tokio::test]
+async fn resume_persists_across_disconnect_and_welcome_has_token() {
+    let (addr, _stop) = start_server().await;
+
+    let (mut a, _) = Client::raw(addr).await;
+    a.hello("Max", "a", "good").await;
+    let welcome = a.recv().await;
+    assert_eq!(welcome["type"], "welcome");
+    assert_eq!(welcome["accepted"], true);
+    assert!(welcome["apiToken"].as_str().is_some_and(|t| !t.is_empty()));
+    assert!(welcome["features"].as_array().is_some_and(|f| f.iter().any(|x| x == "resume")));
+    assert_eq!(a.recv().await["type"], "devices");
+
+    a.send(json!({
+        "type": "resume.save",
+        "state": {
+            "song": {"id": "s1", "title": "Track"},
+            "isPlaying": true,
+            "currentTime": 42.5
+        }
+    }))
+    .await;
+    let ack = a.recv().await;
+    assert_eq!(ack["type"], "resume.ack");
+    let updated_at = ack["updatedAt"].as_i64().unwrap();
+
+    let _ = a.ws.close(None).await;
+    drop(a);
+
+    let (mut b, _) = Client::raw(addr).await;
+    b.hello("max", "b", "good").await;
+    let welcome_b = b.recv().await;
+    assert_eq!(welcome_b["type"], "welcome");
+    assert_eq!(welcome_b["accepted"], true);
+    assert!(welcome_b["apiToken"].as_str().is_some_and(|t| !t.is_empty()));
+
+    let pushed = b.recv().await;
+    assert_eq!(pushed["type"], "resume.state");
+    assert_eq!(pushed["deviceId"], "a");
+    assert_eq!(pushed["deviceName"], "dev-a");
+    assert_eq!(pushed["platform"], "mobile");
+    assert_eq!(pushed["updatedAt"], updated_at);
+    assert_eq!(pushed["state"]["song"]["id"], "s1");
+    assert_eq!(pushed["state"]["currentTime"], 42.5);
+
+    assert_eq!(b.recv().await["type"], "devices");
+
+    b.send(json!({"type": "resume.get"})).await;
+    let got = b.recv().await;
+    assert_eq!(got["type"], "resume.state");
+    assert_eq!(got["deviceId"], "a");
+    assert_eq!(got["updatedAt"], updated_at);
+    assert_eq!(got["state"]["song"]["id"], "s1");
+    assert_eq!(got["state"]["currentTime"], 42.5);
 }
 
 // --- the real Navidrome check against a tiny local fake Navidrome ---

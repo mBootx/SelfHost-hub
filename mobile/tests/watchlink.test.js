@@ -211,6 +211,7 @@ test('every action the watch may send is read, with its payload checked', () => 
   ok({ action: 'next' }, { action: 'next' })
   ok({ action: 'prev' }, { action: 'prev' })
   ok({ action: 'toggleShuffle' }, { action: 'toggleShuffle' })
+  ok({ action: 'toggleLike' }, { action: 'toggleLike' })
   ok({ action: 'seek', payload: { seconds: 95.5, junk: true } }, { action: 'seek', payload: { seconds: 95.5 } })
   ok({ action: 'setVolume', payload: { volume: 0.64 } }, { action: 'setVolume', payload: { volume: 0.64 } })
   ok({ action: 'setVolume', payload: { volume: 7 } }, { action: 'setVolume', payload: { volume: 1 } })

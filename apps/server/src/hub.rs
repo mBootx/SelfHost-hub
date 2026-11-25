@@ -182,6 +182,23 @@ impl Hub {
             }
         }
     }
+
+    /// Returns the current `devices` frame plus the cached `state` of every other online device.
+    pub fn session_frames(&self, user: &str, for_device: &str) -> Vec<String> {
+        let rooms = self.lock();
+        let Some(room) = rooms.users.get(user) else {
+            return vec![];
+        };
+        let mut frames = vec![devices_message(room)];
+        for (device_id, c) in room.iter() {
+            if device_id != for_device
+                && let Some(state) = &c.state
+            {
+                frames.push(state.to_string());
+            }
+        }
+        frames
+    }
 }
 
 #[cfg(test)]
@@ -243,5 +260,30 @@ mod tests {
             saw |= m == Outgoing::Close(4001, "kicked");
         }
         assert!(saw);
+    }
+
+    #[test]
+    fn session_frames_returns_devices_and_other_states() {
+        let hub = Hub::default();
+        let (t1, _r1) = unbounded_channel();
+        let (t2, _r2) = unbounded_channel();
+        let (t3, _r3) = unbounded_channel();
+        hub.join("max", dev("a"), t1, IP);
+        hub.join("max", dev("b"), t2, IP);
+        hub.join("max", dev("c"), t3, IP);
+        hub.relay_state("max", "a", json!({"type": "state", "isPlaying": true}));
+        hub.relay_state("max", "b", json!({"type": "state", "isPlaying": false}));
+
+        assert!(hub.session_frames("nobody", "a").is_empty());
+
+        let frames = hub.session_frames("max", "b");
+        assert_eq!(frames.len(), 2);
+        let devices: Value = serde_json::from_str(&frames[0]).unwrap();
+        assert_eq!(devices["type"], "devices");
+        assert_eq!(devices["devices"].as_array().unwrap().len(), 3);
+        let other: Value = serde_json::from_str(&frames[1]).unwrap();
+        assert_eq!(other["type"], "state");
+        assert_eq!(other["deviceId"], "a");
+        assert_eq!(other["isPlaying"], true);
     }
 }

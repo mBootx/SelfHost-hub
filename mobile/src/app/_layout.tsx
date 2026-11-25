@@ -23,6 +23,7 @@ import { startShareIntake } from '@/services/shareIntake'
 import { initSleepTimer } from '@/services/sleepTimer'
 import { startWatchLink } from '@/services/watchLink'
 import { startOfflineMode } from '@/services/offlineMode'
+import { startPreCache } from '@/services/preCache'
 import { retryDownServices, startReconnect } from '@/services/reconnect'
 import { startKeptPlaylists } from '@/services/keptPlaylists'
 import { loadCoverStore, setCoverPinning } from '@/services/coverStore'
@@ -115,6 +116,7 @@ export default function RootLayout() {
     startWidget()
     startWatchLink()
     startOfflineMode()
+    startPreCache()
     // A saved login whose server was out of reach is tried again when the network comes back, and now and then.
     startReconnect()
     // Playlists kept on the phone fetch the songs added to them since, on Wi-Fi.

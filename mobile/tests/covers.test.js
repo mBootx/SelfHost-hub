@@ -15,6 +15,7 @@ let outfile
 
 const STUBS = {
   'react-native': 'react-native.js',
+  'expo-network': 'expo-network.js',
   'expo-file-system': 'expo-file-system.js',
   '@/services/storage': 'storage.js'
 }

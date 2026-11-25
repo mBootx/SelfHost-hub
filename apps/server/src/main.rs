@@ -4,9 +4,13 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
+use selfhost_hub_server::alerts::{AlertConfig, AlertEngine};
 use selfhost_hub_server::auth::NavidromeAuth;
+use selfhost_hub_server::backup::BackupManager;
 use selfhost_hub_server::config::Config;
 use selfhost_hub_server::db::Db;
+use selfhost_hub_server::downtify::{ClientToken, DowntifyProxy};
+use selfhost_hub_server::gate::Gate;
 use selfhost_hub_server::shell;
 use selfhost_hub_server::system::{Monitor, SysConfig};
 use selfhost_hub_server::{AppState, router};
@@ -116,12 +120,53 @@ async fn run() -> Result<(), String> {
         ),
         None => None,
     };
-    let mut state = AppState::new(&config.server_name, config.trust_proxy, db, Arc::new(auth), stop_rx)
-        .with_runtime(db_path.clone(), &config.navidrome_url, monitor)
-        .with_shell(shell::ShellState::new(config.shell.clone(), shell_key));
+    let client_key = db
+        .secret("client-key", || {
+            let mut k = vec![0u8; 32];
+            getrandom::fill(&mut k).expect("system randomness");
+            k
+        })
+        .map_err(|e| format!("client key: {e}"))?;
+    let alerts = AlertEngine::new(AlertConfig {
+        disk_percent: config.alert_disk_percent,
+        temp_c: config.alert_temp_c,
+        webhook_url: config.alert_webhook_url.clone(),
+    });
+    let backups = BackupManager::new(db.clone(), config.data_dir.join("backups"), config.backup_keep);
+    backups.spawn(stop_rx.clone());
+    let downtify = match &config.downtify_url {
+        Some(u) => Some(Arc::new(DowntifyProxy::new(u)?)),
+        None => None,
+    };
+    let mut state = AppState::new(&config.server_name, config.trust_proxy, db, Arc::new(auth), stop_rx.clone())
+        .with_runtime(db_path.clone(), &config.navidrome_url, monitor.clone())
+        .with_shell(shell::ShellState::new(config.shell.clone(), shell_key))
+        .with_client_token(Arc::new(ClientToken::new(client_key)))
+        .with_alerts(alerts.clone())
+        .with_backups(backups);
+    if let Some(proxy) = &downtify {
+        state = state.with_downtify(proxy.clone());
+    }
     if let (Some(domain), Some(key)) = (&config.gate_domain, gate_key) {
         tracing::info!(%domain, "sign-in gate enabled");
-        state = state.with_gate(selfhost_hub_server::gate::Gate::new(domain, key));
+        state = state.with_gate(Gate::new(domain, key).with_services(config.gate_services.clone()));
+    }
+    alerts.spawn(
+        {
+            let m = monitor.clone();
+            move || m.peek_snapshot()
+        },
+        {
+            let a = state.admin.clone();
+            move || a.navidrome_ok()
+        },
+        stop_rx,
+    );
+    if downtify.is_some() {
+        tracing::info!(url = %config.downtify_url.as_deref().unwrap_or(""), "downtify proxy enabled");
+    }
+    if config.backup_keep > 0 {
+        tracing::info!(keep = config.backup_keep, "backups enabled");
     }
     if let Some(s) = &config.shell {
         tracing::info!(host = %s.host, port = s.port, user = %s.user, "admin terminal enabled (SSH to the host)");

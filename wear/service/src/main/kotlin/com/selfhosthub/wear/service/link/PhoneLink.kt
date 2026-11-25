@@ -295,6 +295,7 @@ class PhoneLink(
                 is PlayerCommand.Seek -> base.copy(currentTime = command.seconds.coerceAtLeast(0.0))
                 is PlayerCommand.SetVolume -> base.copy(volume = command.volume.coerceIn(0.0, 1.0))
                 PlayerCommand.ToggleShuffle -> base.copy(shuffle = !base.shuffle)
+                PlayerCommand.ToggleLike -> if (base.song != null) base.copy(isStarred = !base.isStarred) else return@update current
                 is PlayerCommand.SetRepeatMode -> base.copy(repeatMode = command.mode)
                 else -> return@update current
             }

@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { Music, FolderOpen, Server, Settings, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Music, FolderOpen, ChartColumn, Server, Settings, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { useUIStore } from '@renderer/store/uiStore'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useFileBrowserStore } from '@renderer/store/filebrowserStore'
@@ -12,6 +12,7 @@ import AppLogo from './AppLogo'
 const NAV_ITEMS = [
   { to: '/navidrome', label: 'Navidrome', icon: Music },
   { to: '/filebrowser', label: 'FileBrowser', icon: FolderOpen },
+  { to: '/wrapped', label: 'Rétrospective', icon: ChartColumn },
   // The server dashboard: only for the account that runs the server.
   { to: '/server', label: 'Serveur', icon: Server, ownerOnly: true },
   { to: '/settings', label: 'Réglages', icon: Settings }

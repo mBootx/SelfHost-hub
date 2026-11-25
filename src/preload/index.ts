@@ -21,6 +21,36 @@ export interface HubServerStatus {
   user?: string
   serverName?: string
   reason?: string
+  deviceId?: string
+}
+
+export interface HubProxyInfo {
+  baseUrl: string
+  apiToken: string
+  downtifyEnabled: boolean
+}
+
+export interface ResumeStatePayload {
+  deviceId?: string
+  deviceName?: string
+  platform?: string
+  updatedAt?: number
+  state: Record<string, unknown> | null
+}
+
+export interface ListeningPullEntry {
+  deviceId: string
+  deviceName: string
+  platform: string
+  week: string
+  log: unknown
+  rev: number
+}
+
+export interface ListeningPullResult {
+  rev: number
+  entries: ListeningPullEntry[]
+  more: boolean
 }
 
 export type TrayCommand = 'toggle' | 'next' | 'prev'
@@ -149,13 +179,32 @@ const api = {
     connect: (url: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('hubServer:connect', { url }),
     disconnect: (): Promise<boolean> => ipcRenderer.invoke('hubServer:disconnect'),
     status: (): Promise<HubServerStatus> => ipcRenderer.invoke('hubServer:status'),
+    getProxyInfo: (): Promise<HubProxyInfo | null> => ipcRenderer.invoke('hubServer:getProxyInfo'),
+    saveResume: (state: Record<string, unknown>): Promise<boolean> => ipcRenderer.invoke('hubServer:saveResume', state),
+    getResume: (): Promise<boolean> => ipcRenderer.invoke('hubServer:getResume'),
+    refreshSessions: (): Promise<boolean> => ipcRenderer.invoke('hubServer:refreshSessions'),
     /** Uploads up to 8 listening weeks; resolves with the ones the server acknowledged. */
     pushListening: (weeks: Record<string, unknown>): Promise<string[]> => ipcRenderer.invoke('hubServer:pushListening', weeks),
+    pullListening: (since: number): Promise<ListeningPullResult | null> => ipcRenderer.invoke('hubServer:pullListening', since),
     onStatus: (callback: (status: HubServerStatus) => void) => {
       const listener = (_event: unknown, status: HubServerStatus): void => callback(status)
       ipcRenderer.on('hubServer:status', listener)
       return (): void => {
         ipcRenderer.removeListener('hubServer:status', listener)
+      }
+    },
+    onResumeState: (callback: (payload: ResumeStatePayload) => void) => {
+      const listener = (_event: unknown, payload: ResumeStatePayload): void => callback(payload)
+      ipcRenderer.on('hubServer:resumeState', listener)
+      return (): void => {
+        ipcRenderer.removeListener('hubServer:resumeState', listener)
+      }
+    },
+    onListeningChanged: (callback: (data: { rev: number }) => void) => {
+      const listener = (_event: unknown, data: { rev: number }): void => callback(data)
+      ipcRenderer.on('hubServer:listeningChanged', listener)
+      return (): void => {
+        ipcRenderer.removeListener('hubServer:listeningChanged', listener)
       }
     }
   }

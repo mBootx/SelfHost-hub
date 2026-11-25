@@ -141,6 +141,8 @@ export class HubServerClient {
   private refusal: string | null = null
   private serverName: string | undefined
   private serverVersion: string | undefined
+  private apiToken: string | null = null
+  private features: string[] = []
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private handshakeTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -170,6 +172,8 @@ export class HubServerClient {
     const socket = this.socket
     this.socket = null
     this.welcomed = false
+    this.apiToken = null
+    this.features = []
     try {
       socket?.close()
     } catch {
@@ -194,6 +198,21 @@ export class HubServerClient {
     return this.status === 'connected' && this.welcomed
   }
 
+  /** Returns the bearer token issued in `welcome` for authenticated HTTP endpoints (`/api/downtify/*`), or null. */
+  getApiToken(): string | null {
+    return this.apiToken
+  }
+
+  /** Whether the server advertised `name` in its `welcome.features` list. */
+  hasFeature(name: string): boolean {
+    return this.features.includes(name)
+  }
+
+  /** Returns the normalized HTTP base URL of this hub server. */
+  getServerUrl(): string {
+    return normalizeServerUrl(this.options.baseUrl)
+  }
+
   onDevices(cb: (devices: RemoteDeviceSummary[]) => void): () => void {
     return subscribe(this.deviceHandlers, cb)
   }
@@ -203,7 +222,7 @@ export class HubServerClient {
   onCommand(cb: (command: ServerCommand) => void): () => void {
     return subscribe(this.commandHandlers, cb)
   }
-  /** Every other message once signed in: `listening.*`, `error`, whatever a newer server adds. */
+  /** Every other message once signed in: `listening.*`, `resume.*`, `error`, whatever a newer server adds. */
   onMessage(cb: (message: Record<string, any>) => void): () => void {
     return subscribe(this.messageHandlers, cb)
   }
@@ -228,6 +247,21 @@ export class HubServerClient {
 
   sendCommand(targetId: string, action: string, payload?: unknown): void {
     this.send({ type: 'command', targetId, action, payload })
+  }
+
+  /** Saves the current playback snapshot on the server so another device can resume later. */
+  sendResumeSave(state: RemoteDeviceState): boolean {
+    return this.send({ type: 'resume.save', state })
+  }
+
+  /** Requests the latest saved cross-device resume snapshot (`resume.state`). */
+  requestResume(): boolean {
+    return this.send({ type: 'resume.get' })
+  }
+
+  /** Asks the server for the latest device list and playback states (`sessions.refresh`). */
+  refreshSessions(): void {
+    this.send({ type: 'sessions.refresh' })
   }
 
   /** Same as stop(): lets the client stand in for the LAN one where a connection is closed. */
@@ -263,6 +297,8 @@ export class HubServerClient {
     }
     this.welcomed = false
     this.refusal = null
+    this.apiToken = null
+    this.features = []
     this.setStatus('connecting', { serverName: this.serverName, serverVersion: this.serverVersion })
 
     let ws: WebSocket
@@ -311,6 +347,8 @@ export class HubServerClient {
   private closed(code: number | undefined): void {
     this.socket = null
     this.welcomed = false
+    this.apiToken = null
+    this.features = []
     if (this.handshakeTimer) clearTimeout(this.handshakeTimer)
     this.handshakeTimer = null
     if (this.stopped) return
@@ -381,6 +419,8 @@ export class HubServerClient {
       if (msg.accepted === true) {
         this.welcomed = true
         this.attempt = 0
+        this.apiToken = typeof msg.apiToken === 'string' && msg.apiToken ? msg.apiToken : null
+        this.features = Array.isArray(msg.features) ? msg.features.filter((f): f is string => typeof f === 'string') : []
         if (this.handshakeTimer) clearTimeout(this.handshakeTimer)
         this.handshakeTimer = null
         this.setStatus('connected', {

@@ -20,6 +20,9 @@ button{font:inherit;border-radius:8px;padding:9px 16px;cursor:pointer;border:1px
 button.ghost{background:none;color:var(--fg);border-color:var(--line)}button:disabled{opacity:.5;cursor:default}
 .msg{margin-top:12px;color:var(--bad);min-height:1.4em}
 .hidden{display:none}
+.services{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.services h2{font-size:13px;color:var(--mute);margin:0 0 8px;font-weight:600}
+.services ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 a{color:var(--accent)}
 </style>
 </head>
@@ -39,6 +42,7 @@ a{color:var(--accent)}
     <h1>Connecté</h1>
     <div class="sub" id="who"></div>
     <div id="back"></div>
+    <div id="services" class="services hidden"></div>
     <button class="ghost" id="out" type="button">Se déconnecter</button>
   </div>
 </div>
@@ -87,11 +91,40 @@ async function api(path,body){
   const r=await fetch(path,o);let j=null;try{j=await r.json()}catch(e){}
   return {status:r.status,body:j};
 }
-function signedIn(user){
+function safeHttpUrl(raw){
+  if(typeof raw!=="string")return null;
+  try{
+    const u=new URL(raw);
+    return(u.protocol==="https:"||u.protocol==="http:")?u.href:null;
+  }catch(e){return null}
+}
+function signedIn(user,services){
   $("#signin").classList.add("hidden");$("#done").classList.remove("hidden");
   $("#who").textContent="Compte Navidrome : "+user;
   const back=$("#back");back.textContent="";
   if(target){const p=document.createElement("p");const a=document.createElement("a");a.href=target.href;a.textContent="Continuer vers "+target.host;p.appendChild(a);back.appendChild(p)}
+  const box=$("#services");box.textContent="";box.classList.add("hidden");
+  if(Array.isArray(services)&&services.length>0){
+    const list=document.createElement("ul");
+    for(const s of services){
+      if(!s||typeof s.name!=="string")continue;
+      const href=safeHttpUrl(s.url);
+      if(!href)continue;
+      const li=document.createElement("li");
+      const a=document.createElement("a");
+      a.href=href;
+      a.textContent=s.name;
+      li.appendChild(a);
+      list.appendChild(li);
+    }
+    if(list.children.length>0){
+      const h=document.createElement("h2");
+      h.textContent="Services";
+      box.appendChild(h);
+      box.appendChild(list);
+      box.classList.remove("hidden");
+    }
+  }
 }
 const ERR={401:"Identifiants invalides.",429:"Trop de tentatives : réessayez dans 10 minutes.",502:"Navidrome est injoignable depuis le serveur.",400:"Requête refusée, réessayez."};
 $("#form").addEventListener("submit",async e=>{
@@ -103,13 +136,19 @@ $("#form").addEventListener("submit",async e=>{
     if(c.status!==200){msg.textContent=ERR[c.status]||"Erreur serveur.";return}
     const nonce=c.body.nonce,pw=$("#p").value;
     const r=await api("/api/gate/login",{user:$("#u").value.trim(),token:md5(pw+nonce),nonce,rd});
-    if(r.status===200){$("#p").value="";if(r.body.redirect){location.replace(r.body.redirect);return}signedIn(r.body.user)}
+    if(r.status===200){
+      $("#p").value="";
+      if(r.body.redirect){location.replace(r.body.redirect);return}
+      let services=[];
+      try{const v=await api("/api/gate/verify");if(v.status===200&&v.body)services=v.body.services}catch(err){}
+      signedIn(r.body.user,services);
+    }
     else msg.textContent=ERR[r.status]||"Erreur serveur ("+r.status+").";
   }catch(err){msg.textContent="Serveur injoignable."}
   finally{$("#go").disabled=!md5Ok}
 });
 $("#out").addEventListener("click",async()=>{try{await api("/api/gate/logout",{})}catch(e){}location.reload()});
-api("/api/gate/verify").then(r=>{if(r.status===200)signedIn(r.body.user);else $("#u").focus()}).catch(()=>{});
+api("/api/gate/verify").then(r=>{if(r.status===200)signedIn(r.body.user,r.body.services);else $("#u").focus()}).catch(()=>{});
 </script>
 </body>
 </html>

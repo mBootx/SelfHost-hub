@@ -28,6 +28,28 @@ export interface HubServerStatus {
   user?: string
   serverName?: string
   reason?: string
+  deviceId?: string
+}
+
+export interface HubProxyInfo {
+  baseUrl: string
+  apiToken: string
+  downtifyEnabled: boolean
+}
+
+export interface ListeningPullEntry {
+  deviceId: string
+  deviceName: string
+  platform: string
+  week: string
+  log: unknown
+  rev: number
+}
+
+export interface ListeningPullResult {
+  rev: number
+  entries: ListeningPullEntry[]
+  more: boolean
 }
 
 export interface HubServerDeps {
@@ -45,6 +67,11 @@ interface PendingPush {
   timer: ReturnType<typeof setTimeout>
 }
 
+interface PendingPull {
+  resolve: (result: ListeningPullResult | null) => void
+  timer: ReturnType<typeof setTimeout>
+}
+
 let deps: HubServerDeps | null = null
 let baseUrl = ''
 let socket: WebSocket | null = null
@@ -54,7 +81,10 @@ let retryTimer: ReturnType<typeof setTimeout> | null = null
 let helloTimer: ReturnType<typeof setTimeout> | null = null
 let lastState: Record<string, unknown> | null = null
 let pending: PendingPush[] = []
+let pendingPulls: PendingPull[] = []
 let selfDeviceId = ''
+let apiToken = ''
+let features: string[] = []
 
 export function initHubServer(d: HubServerDeps): void {
   deps = d
@@ -118,6 +148,12 @@ function failPending(): void {
     clearTimeout(p.timer)
     p.resolve([])
   }
+  const pulls = pendingPulls
+  pendingPulls = []
+  for (const p of pulls) {
+    clearTimeout(p.timer)
+    p.resolve(null)
+  }
 }
 
 function clearTimers(): void {
@@ -144,6 +180,8 @@ function scheduleReconnect(): void {
 function open(): void {
   if (!baseUrl) return
   clearTimers()
+  apiToken = ''
+  features = []
   const base = baseUrl
   let ws: WebSocket
   try {
@@ -201,7 +239,16 @@ function open(): void {
           attempt = 0
           if (helloTimer) clearTimeout(helloTimer)
           helloTimer = null
-          setStatus({ state: 'connected', user: typeof msg.user === 'string' ? msg.user : undefined, serverName: status.serverName })
+          apiToken = typeof msg.apiToken === 'string' ? msg.apiToken : ''
+          features = Array.isArray(msg.features)
+            ? (msg.features as unknown[]).filter((f): f is string => typeof f === 'string')
+            : []
+          setStatus({
+            state: 'connected',
+            user: typeof msg.user === 'string' ? msg.user : undefined,
+            serverName: status.serverName,
+            deviceId: deviceId()
+          })
           if (lastState) sendFrame({ type: 'state', ...lastState })
         } else {
           refusal = typeof msg.reason === 'string' ? msg.reason : 'bad-hello'
@@ -242,10 +289,28 @@ function open(): void {
         }
         return
       }
+      case 'listening.data': {
+        const first = pendingPulls.shift()
+        if (first) {
+          clearTimeout(first.timer)
+          const rev = typeof msg.rev === 'number' && Number.isFinite(msg.rev) ? msg.rev : 0
+          const entries = Array.isArray(msg.entries) ? (msg.entries as ListeningPullEntry[]) : []
+          const more = msg.more === true
+          first.resolve({ rev, entries, more })
+        }
+        return
+      }
+      case 'listening.changed': {
+        win?.webContents.send('hubServer:listeningChanged', { rev: typeof msg.rev === 'number' ? msg.rev : 0 })
+        return
+      }
+      case 'resume.state': {
+        win?.webContents.send('hubServer:resumeState', msg)
+        return
+      }
       case 'error':
         console.warn('[hub-server] error from server:', msg.code)
         return
-      // listening.changed, listening.data: the PC has no Wrapped view, nothing to pull. Others: ignored.
       default:
         return
     }
@@ -254,7 +319,11 @@ function open(): void {
   ws.on('close', (code) => {
     if (helloTimer) clearTimeout(helloTimer)
     helloTimer = null
-    if (socket === ws) socket = null
+    if (socket === ws) {
+      socket = null
+      apiToken = ''
+      features = []
+    }
     failPending()
     // Replaced by a newer connection of the same device: do not fight it.
     if (code === 4000) refusal = 'replaced'
@@ -287,6 +356,8 @@ export function connect(url: string): { ok: boolean; error?: string } {
 
 export function disconnect(): void {
   baseUrl = ''
+  apiToken = ''
+  features = []
   clearTimers()
   failPending()
   const ws = socket
@@ -299,6 +370,30 @@ export function disconnect(): void {
     }
   }
   if (status.state !== 'off') setStatus({ state: 'off' })
+}
+
+export function getProxyInfo(): HubProxyInfo | null {
+  if (!isConnected() || !baseUrl || !apiToken) return null
+  return {
+    baseUrl,
+    apiToken,
+    downtifyEnabled: features.includes('downtify')
+  }
+}
+
+export function saveResume(state: Record<string, unknown>): boolean {
+  if (!isConnected()) return false
+  return sendFrame({ type: 'resume.save', state })
+}
+
+export function getResume(): boolean {
+  if (!isConnected()) return false
+  return sendFrame({ type: 'resume.get' })
+}
+
+export function refreshSessions(): boolean {
+  if (!isConnected()) return false
+  return sendFrame({ type: 'sessions.refresh' })
 }
 
 /** The player state of this PC, sent now and again after every reconnection. */
@@ -336,6 +431,26 @@ export function pushListening(weeks: Record<string, unknown>): Promise<string[]>
       clearTimeout(entry.timer)
       pending = pending.filter((p) => p !== entry)
       resolve([])
+    }
+  })
+}
+
+/** Downloads other devices' listening weeks since `since`; resolves with null if disconnected or timed out. */
+export function pullListening(since: number): Promise<ListeningPullResult | null> {
+  if (!isConnected()) return Promise.resolve(null)
+  return new Promise<ListeningPullResult | null>((resolve) => {
+    const entry: PendingPull = {
+      resolve,
+      timer: setTimeout(() => {
+        pendingPulls = pendingPulls.filter((p) => p !== entry)
+        resolve(null)
+      }, ACK_TIMEOUT_MS)
+    }
+    pendingPulls.push(entry)
+    if (!sendFrame({ type: 'listening.pull', since })) {
+      clearTimeout(entry.timer)
+      pendingPulls = pendingPulls.filter((p) => p !== entry)
+      resolve(null)
     }
   })
 }

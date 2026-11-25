@@ -2,8 +2,10 @@ import { create } from 'zustand'
 import SelfHostNative, { WatchMessage } from '../../modules/selfhost-native'
 import { describeError, logEvent } from '@/services/diagnostics'
 import { parsePlayMedia, runPlayMedia } from '@/services/playMedia'
+import type { NDSong } from '@/services/navidrome'
 import type { RemoteDeviceState, RemoteDeviceSummary, RemoteSongInfo } from '@/services/remoteControl'
 import { useNavidromeStore } from '@/store/navidromeStore'
+import { isStarred, useStarStore } from '@/store/starStore'
 import { applyCommandLocally, currentStatePayload, LOCAL_DEVICE_ID, RemoteStatus, useRemoteStore } from '@/store/remoteStore'
 import { useWatchUpdate } from '@/store/watchUpdateStore'
 import { parseUpdateStatus, parseWatchRequest, UPDATE_PATHS } from '@/services/watchUpdateProtocol'
@@ -108,7 +110,8 @@ function cleanState(state: RemoteDeviceState): RemoteDeviceState {
     shuffle: state.shuffle === true,
     repeatMode: state.repeatMode === 'all' || state.repeatMode === 'one' ? state.repeatMode : 'off',
     volume: Math.min(1, Math.max(0, number(state.volume, 1))),
-    ...(upNext.length > 0 ? { upNext } : {})
+    ...(upNext.length > 0 ? { upNext } : {}),
+    ...(typeof state.isStarred === 'boolean' ? { isStarred: state.isStarred } : {})
   }
 }
 
@@ -176,7 +179,7 @@ export function unchangedForWatch(previous: Pushed | null, next: WatchSnapshot, 
 
 // --- What the watch asks of this phone ---
 
-export const WATCH_ACTIONS = ['toggle', 'play', 'pause', 'next', 'prev', 'seek', 'setVolume', 'toggleShuffle', 'setRepeatMode', 'playMedia', 'setSleepTimer'] as const
+export const WATCH_ACTIONS = ['toggle', 'play', 'pause', 'next', 'prev', 'seek', 'setVolume', 'toggleShuffle', 'setRepeatMode', 'playMedia', 'setSleepTimer', 'toggleLike'] as const
 export type WatchAction = (typeof WATCH_ACTIONS)[number]
 
 export interface WatchCommand {
@@ -249,7 +252,16 @@ export function applyWatchCommand(command: WatchCommand): CommandOutcome {
     return 'media'
   }
   const remote = useRemoteStore.getState()
-  if (command.targetId === PHONE_ID || (remote.deviceId && command.targetId === remote.deviceId)) {
+  const isLocalTarget = command.targetId === PHONE_ID || (!!remote.deviceId && command.targetId === remote.deviceId)
+  if (command.action === 'toggleLike') {
+    const player = useNavidromeStore.getState()
+    const targetSong = isLocalTarget ? player.queue?.[player.queueIndex] : remote.devices[command.targetId]?.song
+    if (targetSong && player.client) {
+      void useStarStore.getState().toggle(targetSong as NDSong, player.client)
+    }
+    return 'phone'
+  }
+  if (isLocalTarget) {
     applyCommandLocally(command.action, command.payload)
     return 'phone'
   }
@@ -281,6 +293,13 @@ let lastReconnectAt = 0
 
 function currentSnapshot(): WatchSnapshot {
   const remote = useRemoteStore.getState()
+  const local = currentStatePayload()
+  const nav = useNavidromeStore.getState()
+  const localSong = nav.queue?.[nav.queueIndex]
+  const localWithStar =
+    local.song && localSong && localSong.id === local.song.id && typeof local.isStarred !== 'boolean'
+      ? { ...local, isStarred: isStarred(useStarStore.getState(), localSong) }
+      : local
   return buildSnapshot({
     phoneName: remote.deviceName,
     enabled: remote.enabled,
@@ -291,7 +310,7 @@ function currentSnapshot(): WatchSnapshot {
     ownId: remote.deviceId,
     deviceList: remote.deviceList,
     remoteStates: remote.devices,
-    local: currentStatePayload()
+    local: localWithStar
   })
 }
 
@@ -441,7 +460,7 @@ export function startWatchLink(): void {
   }
   started = true
   const nudge = (): void => void push(false)
-  stops = [() => listener.remove(), useNavidromeStore.subscribe(nudge), useRemoteStore.subscribe(nudge)]
+  stops = [() => listener.remove(), useNavidromeStore.subscribe(nudge), useRemoteStore.subscribe(nudge), useStarStore.subscribe(nudge)]
   nudge()
 }
 

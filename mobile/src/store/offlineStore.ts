@@ -5,6 +5,7 @@ import { storage } from '@/services/storage'
 import { SONG_COVER_SIZES, storeCover } from '@/services/coverStore'
 import { describeError, logEvent } from '@/services/diagnostics'
 import { plural } from '@/services/plural'
+import { useStarStore } from '@/store/starStore'
 import { useToastStore } from '@/store/toastStore'
 
 export const OFFLINE_PLAYLIST_ID = '__offline__'
@@ -19,6 +20,12 @@ export interface OfflineTrack {
   filename: string
   /** The file's size in bytes (songs downloaded before 2.7.1 don't have it: their file is measured). */
   size?: number
+  /** Downloaded automatically by Wi-Fi pre-caching; eligible for LRU eviction when maxCacheMb is set. */
+  autoCached?: boolean
+  /** Epoch ms when this track was last played (or auto-cached), used for LRU eviction. */
+  lastPlayedAt?: number
+  /** Whether this track was starred when downloaded (protects favorites from eviction when keepFavorites is on). */
+  starred?: boolean
 }
 
 export interface CachedPlaylist {
@@ -50,6 +57,10 @@ interface OfflineState {
   playlistCache: Record<string, CachedPlaylist>
   /** Whether starred/liked tracks are automatically downloaded on Wi-Fi. */
   keepFavorites: boolean
+  /** Maximum auto-cache size in MiB (0 = illimité). */
+  maxCacheMb: number
+  /** Number of upcoming queue tracks to pre-cache on Wi-Fi (0 = désactivé). */
+  preCacheCount: number
 
   loadFromDisk: () => Promise<void>
   isOffline: (id: string) => boolean
@@ -58,6 +69,8 @@ interface OfflineState {
   downloadTrack: (song: NDSong, client: NavidromeClient) => Promise<void>
   /** Downloads what isn't on the phone yet; resolves to how many songs it downloaded. */
   downloadTracks: (songs: NDSong[], client: NavidromeClient, options?: DownloadOptions) => Promise<number>
+  /** Quietly downloads upcoming tracks as auto-cached (no toast); resolves to how many songs it downloaded. */
+  downloadAutoTracks: (songs: NDSong[], client: NavidromeClient) => Promise<number>
   removeOffline: (id: string) => Promise<void>
   /** Keeps a playlist on the phone, or stops (the songs already downloaded stay). */
   setKeptPlaylist: (playlistId: string, name: string, keep: boolean) => void
@@ -66,9 +79,19 @@ interface OfflineState {
   removeCachedPlaylist: (playlistId: string) => void
   /** Keeps all starred tracks on the phone, or stops. */
   setKeepFavorites: (keep: boolean) => void
+  /** Sets max auto-cache size in MiB (0 = illimité) and evicts excess auto-cached tracks. */
+  setMaxCacheMb: (mb: number) => void
+  /** Sets how many upcoming queue tracks to pre-cache on Wi-Fi (0 = désactivé). */
+  setPreCacheCount: (count: number) => void
+  /** Updates `lastPlayedAt` to now for `id` (and remembers it as active) and persists. */
+  touchPlayed: (id: string) => void
+  /** Evicts oldest auto-cached tracks until total offline size <= maxCacheMb, sparing protected tracks. */
+  evictIfNeeded: (protectedIds?: Set<string>) => Promise<void>
 }
 
 const offlineDir = new Directory(Paths.document, 'offline-music')
+/** Most recently started track ID, spared from auto-eviction while playing. */
+let activeTrackId: string | null = null
 
 function ensureOfflineDir(): void {
   if (!offlineDir.exists) offlineDir.create({ intermediates: true })
@@ -81,6 +104,8 @@ async function persist(tracks: Record<string, OfflineTrack>): Promise<void> {
 const KEPT_KEY = 'navidrome.keptPlaylists'
 const PLAYLIST_CACHE_KEY = 'navidrome.cachedPlaylists'
 const KEEP_FAVORITES_KEY = 'navidrome.keepFavorites'
+const MAX_CACHE_MB_KEY = 'navidrome.maxCacheMb'
+const PRE_CACHE_COUNT_KEY = 'navidrome.preCacheCount'
 
 /** Virtual playlist representing all songs downloaded to the phone. */
 export function offlinePlaylist(tracks: Record<string, OfflineTrack>): NDPlaylist {
@@ -122,8 +147,39 @@ export function offlineBytes(tracks: Record<string, OfflineTrack>): number {
   return total
 }
 
+function trackBytes(track: OfflineTrack): number {
+  return typeof track.size === 'number' ? track.size : offlineBytes({ [track.id]: track })
+}
+
+/**
+ * Selects auto-cached track IDs to delete in LRU order (`lastPlayedAt ?? 0` ascending)
+ * until total offline storage is at or below `maxBytes`.
+ * Never selects manual downloads (`autoCached !== true`) or IDs in `protectedIds`.
+ */
+export function selectEvictions(
+  tracks: Record<string, OfflineTrack>,
+  maxBytes: number,
+  protectedIds: ReadonlySet<string> = new Set()
+): string[] {
+  if (maxBytes <= 0) return []
+  let remaining = offlineBytes(tracks)
+  if (remaining <= maxBytes) return []
+
+  const candidates = Object.values(tracks)
+    .filter((track) => track.autoCached === true && !protectedIds.has(track.id))
+    .sort((a, b) => (a.lastPlayedAt ?? 0) - (b.lastPlayedAt ?? 0))
+
+  const evict: string[] = []
+  for (const track of candidates) {
+    if (remaining <= maxBytes) break
+    evict.push(track.id)
+    remaining -= trackBytes(track)
+  }
+  return evict
+}
+
 /** Downloads a song to the phone. Resolves to null when it is there (or already was), else to why it failed. */
-async function fetchTrack(song: NDSong, client: NavidromeClient): Promise<string | null> {
+async function fetchTrack(song: NDSong, client: NavidromeClient, autoCached = false): Promise<string | null> {
   const { getState: get, setState: set } = useOfflineStore
   if (get().tracks[song.id] || get().downloading[song.id]) return null
   ensureOfflineDir()
@@ -169,7 +225,9 @@ async function fetchTrack(song: NDSong, client: NavidromeClient): Promise<string
       coverArt: song.coverArt || song.albumId,
       duration: song.duration,
       filename,
-      size
+      size,
+      ...(autoCached ? { autoCached: true, lastPlayedAt: Date.now() } : {}),
+      ...(song.starred ? { starred: true } : {})
     }
     // Its cover too, at every size the app shows, so the song looks the same with no network.
     if (track.coverArt) for (const size of SONG_COVER_SIZES) void storeCover(client.coverArtUrl(track.coverArt, size))
@@ -197,6 +255,33 @@ async function fetchTrack(song: NDSong, client: NavidromeClient): Promise<string
   }
 }
 
+/** Downloads `wanted` with bounded concurrency so a full album doesn't open dozens of simultaneous sockets. */
+async function runDownloadBatch(
+  wanted: NDSong[],
+  client: NavidromeClient,
+  autoCached: boolean
+): Promise<{ done: number; failed: number; lastFailure: string }> {
+  const CONCURRENCY = 3
+  let cursor = 0
+  let failed = 0
+  let lastFailure = ''
+  const worker = async (): Promise<void> => {
+    while (cursor < wanted.length) {
+      const failure = await fetchTrack(wanted[cursor++], client, autoCached)
+      if (failure) {
+        failed++
+        lastFailure = failure
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, wanted.length) }, worker))
+  return { done: wanted.length - failed, failed, lastFailure }
+}
+
+function uniqueWanted(songs: NDSong[], tracks: Record<string, OfflineTrack>, downloading: Record<string, OfflineProgress>): NDSong[] {
+  return songs.filter((song, i) => !tracks[song.id] && !downloading[song.id] && songs.findIndex((s) => s.id === song.id) === i)
+}
+
 export const useOfflineStore = create<OfflineState>((set, get) => ({
   tracks: {},
   downloading: {},
@@ -205,20 +290,26 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
   keptPlaylists: {},
   playlistCache: {},
   keepFavorites: false,
+  maxCacheMb: 0,
+  preCacheCount: 0,
 
   loadFromDisk: async () => {
     if (get().loaded) return
-    const [saved, kept, playlistCache, keepFavorites] = await Promise.all([
+    const [saved, kept, playlistCache, keepFavorites, maxCacheMb, preCacheCount] = await Promise.all([
       storage.loadPref<Record<string, OfflineTrack>>('navidrome.offlineTracks'),
       storage.loadPref<Record<string, string>>(KEPT_KEY).catch(() => null),
       storage.loadPref<Record<string, CachedPlaylist>>(PLAYLIST_CACHE_KEY).catch(() => null),
-      storage.loadPref<boolean>(KEEP_FAVORITES_KEY).catch(() => false)
+      storage.loadPref<boolean>(KEEP_FAVORITES_KEY).catch(() => false),
+      storage.loadPref<number>(MAX_CACHE_MB_KEY).catch(() => 0),
+      storage.loadPref<number>(PRE_CACHE_COUNT_KEY).catch(() => 0)
     ])
     set({
       tracks: saved || {},
       keptPlaylists: kept && typeof kept === 'object' ? kept : {},
       playlistCache: playlistCache && typeof playlistCache === 'object' ? playlistCache : {},
       keepFavorites: !!keepFavorites,
+      maxCacheMb: typeof maxCacheMb === 'number' && maxCacheMb > 0 ? maxCacheMb : 0,
+      preCacheCount: typeof preCacheCount === 'number' && preCacheCount > 0 ? preCacheCount : 0,
       loaded: true
     })
   },
@@ -232,37 +323,55 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
   },
 
   downloadTrack: async (song, client) => {
-    const failure = await fetchTrack(song, client)
+    const existing = get().tracks[song.id]
+    if (existing) {
+      // Explicitly requesting a previously auto-cached track promotes it to a permanent manual download.
+      if (existing.autoCached || (song.starred && !existing.starred)) {
+        set((s) => {
+          const cur = s.tracks[song.id]
+          if (!cur) return s
+          const { autoCached: _auto, ...rest } = cur
+          const next: OfflineTrack = { ...rest, ...(song.starred ? { starred: true } : {}) }
+          const tracks = { ...s.tracks, [song.id]: next }
+          void persist(tracks)
+          return { tracks }
+        })
+      }
+      return
+    }
+    const failure = await fetchTrack(song, client, false)
     if (failure) useToastStore.getState().show(`« ${song.title} » n’a pas pu être téléchargé : ${failure}`)
   },
 
   downloadTracks: async (songs, client, options = {}) => {
-    // Bounded, not Promise.all over the whole album: firing twenty tracks at once
-    // opened twenty sockets and twenty write streams on a phone, for no gain on a
-    // single connection.
-    const CONCURRENCY = 3
-    // Once each, even when the same song is twice in a playlist.
-    const wanted = songs.filter((song, i) => !get().tracks[song.id] && !get().downloading[song.id] && songs.findIndex((s) => s.id === song.id) === i)
+    // Promote any existing auto-cached tracks now claimed manually / by kept playlists / favorites, and record starred status.
+    const markStarred = options.label === 'Titres aimés'
+    set((s) => {
+      let changed = false
+      const tracks = { ...s.tracks }
+      for (const song of songs) {
+        const cur = tracks[song.id]
+        if (!cur) continue
+        const wantStarred = (markStarred || !!song.starred) && !cur.starred
+        if (cur.autoCached || wantStarred) {
+          const { autoCached: _auto, ...rest } = cur
+          tracks[song.id] = { ...rest, ...(cur.starred || markStarred || song.starred ? { starred: true } : {}) }
+          changed = true
+        }
+      }
+      if (!changed) return s
+      void persist(tracks)
+      return { tracks }
+    })
+
+    const wanted = uniqueWanted(songs, get().tracks, get().downloading)
     const toast = useToastStore.getState().show
     if (wanted.length === 0) {
       if (songs.length > 0 && !options.quiet) toast('Déjà téléchargé sur le téléphone')
       return 0
     }
     if (!options.quiet) toast(`Téléchargement de ${plural(wanted.length, 'titre', 'titres')}…`)
-    let cursor = 0
-    let failed = 0
-    let lastFailure = ''
-    const worker = async (): Promise<void> => {
-      while (cursor < wanted.length) {
-        const failure = await fetchTrack(wanted[cursor++], client)
-        if (failure) {
-          failed++
-          lastFailure = failure
-        }
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, wanted.length) }, worker))
-    const done = wanted.length - failed
+    const { done, failed, lastFailure } = await runDownloadBatch(wanted, client, false)
     if (options.quiet) {
       // Kept playlists: only news is told (new songs downloaded); failures go to the diagnostics log.
       if (done > 0) toast(`${plural(done, 'nouveau titre', 'nouveaux titres')}${options.label ? ` de « ${options.label} »` : ''} sur le téléphone`)
@@ -271,6 +380,13 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
     } else {
       toast(`${failed} sur ${wanted.length} ${failed > 1 ? "n'ont pas pu être téléchargés" : "n'a pas pu être téléchargé"} : ${lastFailure}`)
     }
+    return done
+  },
+
+  downloadAutoTracks: async (songs, client) => {
+    const wanted = uniqueWanted(songs, get().tracks, get().downloading)
+    if (wanted.length === 0) return 0
+    const { done } = await runDownloadBatch(wanted, client, true)
     return done
   },
 
@@ -311,6 +427,78 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
   setKeepFavorites: (keep) => {
     set({ keepFavorites: keep })
     storage.savePref(KEEP_FAVORITES_KEY, keep).catch(() => {})
+  },
+
+  setMaxCacheMb: (mb) => {
+    const normalized = mb > 0 ? mb : 0
+    set({ maxCacheMb: normalized })
+    storage.savePref(MAX_CACHE_MB_KEY, normalized).catch(() => {})
+    void get().evictIfNeeded()
+  },
+
+  setPreCacheCount: (count) => {
+    const normalized = count > 0 ? count : 0
+    set({ preCacheCount: normalized })
+    storage.savePref(PRE_CACHE_COUNT_KEY, normalized).catch(() => {})
+  },
+
+  touchPlayed: (id) => {
+    activeTrackId = id
+    if (!get().tracks[id]) return
+    const now = Date.now()
+    set((s) => {
+      const existing = s.tracks[id]
+      if (!existing) return s
+      const tracks = { ...s.tracks, [id]: { ...existing, lastPlayedAt: now } }
+      void persist(tracks)
+      return { tracks }
+    })
+  },
+
+  evictIfNeeded: async (protectedIds) => {
+    const { maxCacheMb, tracks, keptPlaylists, playlistCache, keepFavorites } = get()
+    if (maxCacheMb <= 0) return
+
+    const protectedSet = new Set<string>(protectedIds)
+    if (activeTrackId) protectedSet.add(activeTrackId)
+    for (const playlistId of Object.keys(keptPlaylists)) {
+      const cached = playlistCache[playlistId]
+      if (cached) {
+        for (const song of cached.songs) protectedSet.add(song.id)
+      }
+    }
+    if (keepFavorites) {
+      const overrides = useStarStore.getState().overrides
+      for (const track of Object.values(tracks)) {
+        const isFav = overrides[track.id] ?? !!track.starred
+        if (isFav) protectedSet.add(track.id)
+      }
+    }
+
+    const toEvict = selectEvictions(tracks, maxCacheMb * 1024 * 1024, protectedSet)
+    if (toEvict.length === 0) return
+
+    for (const id of toEvict) {
+      const track = tracks[id]
+      if (!track) continue
+      try {
+        const file = new File(offlineDir, track.filename)
+        if (file.exists) file.delete()
+      } catch {
+        // if the file is already gone, still drop it from the manifest below
+      }
+    }
+
+    const evictSet = new Set(toEvict)
+    set((s) => {
+      const nextTracks: Record<string, OfflineTrack> = {}
+      for (const [id, track] of Object.entries(s.tracks)) {
+        if (!evictSet.has(id)) nextTracks[id] = track
+      }
+      void persist(nextTracks)
+      return { tracks: nextTracks }
+    })
+    logEvent('music', `Cache auto : ${plural(toEvict.length, 'titre supprimé', 'titres supprimés')}`)
   },
 
   removeOffline: async (id) => {

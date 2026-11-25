@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub navidrome_url: String,
     pub port: u16,
@@ -15,13 +15,44 @@ pub struct Config {
     pub shell: Option<crate::shell::ShellConfig>,
     /// The sign-in gate's cookie domain (GATE_DOMAIN): None leaves the gate off.
     pub gate_domain: Option<String>,
+    /// Internal Downtify URL shown on the admin panel (`DOWNTIFY_URL`).
+    pub downtify_url: Option<String>,
+    /// Disk usage percentage threshold triggering an alert (`ALERT_DISK_PERCENT`).
+    pub alert_disk_percent: f64,
+    /// Temperature threshold in °C triggering an alert (`ALERT_TEMP_C`).
+    pub alert_temp_c: f64,
+    /// Optional webhook URL for alert notifications (`ALERT_WEBHOOK_URL`).
+    pub alert_webhook_url: Option<String>,
+    /// Number of scheduled SQLite backups to retain (`BACKUP_KEEP`, 0 disables).
+    pub backup_keep: usize,
+    /// Extra services shown on the sign-in gate page (`GATE_SERVICES`).
+    pub gate_services: Vec<(String, String)>,
+}
+
+fn parse_f64_range(name: &str, raw: Option<String>, default: f64, min: f64, max: f64) -> Result<f64, String> {
+    match raw {
+        Some(s) => {
+            let v: f64 = s.parse().map_err(|_| format!("{name} is not a valid number: {s}"))?;
+            if !v.is_finite() || !(min..=max).contains(&v) {
+                return Err(format!("{name} must be between {min} and {max}: {s}"));
+            }
+            Ok(v)
+        }
+        None => Ok(default),
+    }
+}
+
+fn is_http_url(u: &str) -> bool {
+    u.starts_with("http://") || u.starts_with("https://")
 }
 
 impl Config {
+    /// Loads configuration from process environment variables.
     pub fn from_env() -> Result<Self, String> {
         Self::from_lookup(|k| std::env::var(k).ok())
     }
 
+    /// Loads configuration from an arbitrary variable lookup function.
     pub fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
         let non_empty = |k: &str| get(k).map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
         let navidrome_url = non_empty("NAVIDROME_URL")
@@ -46,6 +77,44 @@ impl Config {
         } else {
             None
         };
+        let downtify_url = match non_empty("DOWNTIFY_URL") {
+            Some(raw) => {
+                let u = raw.trim_end_matches('/').to_string();
+                if !is_http_url(&u) {
+                    return Err(format!("DOWNTIFY_URL must start with http:// or https://: {raw}"));
+                }
+                Some(u)
+            }
+            None => None,
+        };
+        let alert_disk_percent = parse_f64_range("ALERT_DISK_PERCENT", non_empty("ALERT_DISK_PERCENT"), 90.0, 1.0, 100.0)?;
+        let alert_temp_c = parse_f64_range("ALERT_TEMP_C", non_empty("ALERT_TEMP_C"), 85.0, 10.0, 150.0)?;
+        let alert_webhook_url = match non_empty("ALERT_WEBHOOK_URL") {
+            Some(u) if is_http_url(&u) => Some(u),
+            Some(u) => return Err(format!("ALERT_WEBHOOK_URL must start with http:// or https://: {u}")),
+            None => None,
+        };
+        let backup_keep = match non_empty("BACKUP_KEEP") {
+            Some(raw) => raw.parse().map_err(|_| format!("BACKUP_KEEP is not a valid integer: {raw}"))?,
+            None => 7,
+        };
+        let mut gate_services = Vec::new();
+        if let Some(raw) = non_empty("GATE_SERVICES") {
+            for item in raw.split(',') {
+                let item = item.trim();
+                let Some((label, url)) = item.split_once('=') else {
+                    return Err(format!("GATE_SERVICES entry must be Label=URL: {item}"));
+                };
+                let (label, url) = (label.trim(), url.trim());
+                if label.is_empty() {
+                    return Err(format!("GATE_SERVICES entry has an empty label: {item}"));
+                }
+                if !is_http_url(url) {
+                    return Err(format!("GATE_SERVICES URL must start with http:// or https://: {url}"));
+                }
+                gate_services.push((label.to_string(), url.to_string()));
+            }
+        }
         Ok(Self {
             navidrome_url,
             port,
@@ -71,6 +140,12 @@ impl Config {
                 }
                 None => None,
             },
+            downtify_url,
+            alert_disk_percent,
+            alert_temp_c,
+            alert_webhook_url,
+            backup_keep,
+            gate_services,
         })
     }
 }
@@ -142,5 +217,69 @@ mod tests {
             .shell
             .unwrap();
         assert_eq!((s.host.as_str(), s.port), ("10.0.0.1", 2222));
+    }
+
+    #[test]
+    fn phase1_settings_defaults_overrides_and_validation() {
+        let get = |extra: &[(&str, &str)]| {
+            Config::from_lookup(|k| {
+                if k == "NAVIDROME_URL" {
+                    return Some("http://n".into());
+                }
+                extra.iter().find(|(n, _)| *n == k).map(|(_, v)| (*v).to_string())
+            })
+        };
+
+        let def = get(&[]).unwrap();
+        assert_eq!(def.downtify_url, None);
+        assert_eq!(def.alert_disk_percent, 90.0);
+        assert_eq!(def.alert_temp_c, 85.0);
+        assert_eq!(def.alert_webhook_url, None);
+        assert_eq!(def.backup_keep, 7);
+        assert!(def.gate_services.is_empty());
+
+        let ok = get(&[
+            ("DOWNTIFY_URL", " https://dl.example.com/// "),
+            ("ALERT_DISK_PERCENT", "75.5"),
+            ("ALERT_TEMP_C", "70"),
+            ("ALERT_WEBHOOK_URL", " https://ntfy.sh/hub "),
+            ("BACKUP_KEEP", "0"),
+            ("GATE_SERVICES", "Downtify = https://dl.example.com/a?x=1 , Logs=http://10.0.0.2:8080"),
+        ])
+        .unwrap();
+        assert_eq!(ok.downtify_url.as_deref(), Some("https://dl.example.com"));
+        assert_eq!(ok.alert_disk_percent, 75.5);
+        assert_eq!(ok.alert_temp_c, 70.0);
+        assert_eq!(ok.alert_webhook_url.as_deref(), Some("https://ntfy.sh/hub"));
+        assert_eq!(ok.backup_keep, 0);
+        assert_eq!(
+            ok.gate_services,
+            vec![
+                ("Downtify".into(), "https://dl.example.com/a?x=1".into()),
+                ("Logs".into(), "http://10.0.0.2:8080".into()),
+            ]
+        );
+        assert!(get(&[("GATE_SERVICES", "   ")]).unwrap().gate_services.is_empty());
+
+        for bad in [
+            ("DOWNTIFY_URL", "ftp://dl"),
+            ("DOWNTIFY_URL", "http://"),
+            ("ALERT_DISK_PERCENT", "0.5"),
+            ("ALERT_DISK_PERCENT", "101"),
+            ("ALERT_DISK_PERCENT", "NaN"),
+            ("ALERT_DISK_PERCENT", "abc"),
+            ("ALERT_TEMP_C", "9.9"),
+            ("ALERT_TEMP_C", "151"),
+            ("ALERT_TEMP_C", "inf"),
+            ("ALERT_WEBHOOK_URL", "not-a-url"),
+            ("BACKUP_KEEP", "-1"),
+            ("BACKUP_KEEP", "many"),
+            ("GATE_SERVICES", "NoEquals"),
+            ("GATE_SERVICES", "=https://a.com"),
+            ("GATE_SERVICES", "App=ftp://a.com"),
+            ("GATE_SERVICES", "App=https://a.com,"),
+        ] {
+            assert!(get(&[bad]).is_err(), "expected error for {bad:?}");
+        }
     }
 }

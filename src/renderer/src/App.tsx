@@ -6,6 +6,7 @@ import NavidromeModule from '@renderer/components/Navidrome'
 import FileBrowserModule from '@renderer/components/FileBrowser'
 import SettingsModule from '@renderer/components/Settings'
 import ServerDashboard from '@renderer/components/Server'
+import WrappedView from '@renderer/components/Wrapped/WrappedView'
 import Player from '@renderer/components/Navidrome/Player'
 import BigPicture from '@renderer/components/Navidrome/BigPicture'
 import UploadManager from '@renderer/components/FileBrowser/UploadManager'
@@ -117,6 +118,14 @@ export default function App(): JSX.Element {
               element={
                 <ErrorBoundary label="FileBrowser">
                   <FileBrowserModule />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/wrapped"
+              element={
+                <ErrorBoundary label="Rétrospective">
+                  <WrappedView />
                 </ErrorBoundary>
               }
             />

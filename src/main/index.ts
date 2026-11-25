@@ -480,9 +480,20 @@ function registerIpc(): void {
     return true
   })
   ipcMain.handle('hubServer:status', () => hubServer.getStatus())
+  ipcMain.handle('hubServer:getProxyInfo', () => hubServer.getProxyInfo())
+  ipcMain.handle('hubServer:saveResume', (_e, state: Record<string, unknown>) => {
+    if (!state || typeof state !== 'object') return false
+    return hubServer.saveResume(state)
+  })
+  ipcMain.handle('hubServer:getResume', () => hubServer.getResume())
+  ipcMain.handle('hubServer:refreshSessions', () => hubServer.refreshSessions())
   ipcMain.handle('hubServer:pushListening', (_e, weeks: Record<string, unknown>) => {
     if (!weeks || typeof weeks !== 'object') return []
     return hubServer.pushListening(weeks)
+  })
+  ipcMain.handle('hubServer:pullListening', (_e, since: number) => {
+    const cleanSince = typeof since === 'number' && Number.isFinite(since) && since >= 0 ? since : 0
+    return hubServer.pullListening(cleanSince)
   })
 
   ipcMain.handle('wol:wake', (_e, args: { mac: string; broadcast: string }) => sendMagicPacket(args.mac, args.broadcast))

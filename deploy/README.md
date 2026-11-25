@@ -33,6 +33,12 @@ Variables (dans `docker-compose.yml`) :
 | `HOST_ROOT` | (vide) | Racine de l'hôte montée en lecture seule, pour les disques ; vide : les disques du conteneur |
 | `DOCKER_URL` | (vide) | Proxy Docker en lecture seule (`http://docker-proxy:2375`) ; vide : page Services « non configuré » |
 | `GATE_DOMAIN` | (vide) | Active `/gate` et `/api/gate/*` avec un cookie `hub_gate` sur un ou plusieurs domaines racines séparés par des virgules (choisi d'après `Host`) ; vide : désactivé |
+| `GATE_SERVICES` | (vide) | Lanceur sur `/gate` après connexion : entrées `Nom=URL` séparées par des virgules |
+| `DOWNTIFY_URL` | (vide) | Adresse interne de Downtify (ex. `http://host.docker.internal:8087`) pour le proxy `/api/downtify/*` ; vide : proxy désactivé (`503`) |
+| `BACKUP_KEEP` | `7` | Nombre de sauvegardes automatiques quotidiennes de `hub.db` conservées (`0` désactive la planification) |
+| `ALERT_DISK_PERCENT` | `90` | Seuil d'occupation disque (%) déclenchant une alerte (`critical` à partir de 95 %) |
+| `ALERT_TEMP_C` | `85` | Seuil de température (°C) déclenchant une alerte (`critical` à partir de seuil + 10 °C) |
+| `ALERT_WEBHOOK_URL` | (vide) | URL webhook (ntfy, Discord…) appelée lors d'une nouvelle alerte ou de sa résolution |
 
 `NAVIDROME_URL` : `http://navidrome:4533` si Navidrome est dans le même réseau Docker, `http://192.168.1.10:4533`
 s'il est ailleurs sur le réseau local, `http://host.docker.internal:4533` s'il tourne directement sur la machine hôte.
@@ -111,8 +117,11 @@ envoyé, comme le fait Subsonic). La session dure 12 h, dans un cookie `HttpOnly
 derrière HTTPS avec `TRUST_PROXY=true`). Les 5 échecs en 10 min par adresse bloquent la connexion, comme pour les apps.
 
 La page affiche : Performances (courbes en direct sur 60 s, détail par cœur, E/S disque, températures, 1 h d'historique),
-Processus, Conteneurs, Disques, Réseau, Hub (appareils en ligne avec un bouton « Déconnecter », appareils connus, données
-d'écoute) et Terminal. Elle se rafraîchit toutes les 1 s tant que l'onglet est visible (3 s pour l'onglet Hub).
+Processus, Conteneurs (avec consultation des **Logs**), Disques, Réseau, **Alertes** (disques, températures,
+conteneurs arrêtés, Navidrome ; notification webhook optionnelle via `ALERT_WEBHOOK_URL`), Hub (appareils en ligne
+avec un bouton « Déconnecter », appareils connus, données d'écoute, **Sauvegardes (`hub.db`)** automatiques et
+manuelles via `VACUUM INTO`) et Terminal. Elle se rafraîchit toutes les 1 s tant que l'onglet est visible (3 s pour
+l'onglet Hub).
 
 Ce que le compose monte, et pourquoi tout est en lecture seule :
 
@@ -162,6 +171,10 @@ laissant les apps sur le réseau local y accéder directement.
 Le cookie `hub_gate` (signé HMAC-SHA256, valable 30 jours) reçoit un `Domain=` choisi d'après l'en-tête `Host` de la
 requête, et `rd` est validé sur ce même domaine (les sous-domaines partagent le cookie). Mets `auth_request` dans
 `location /` afin que les défis Let's Encrypt (`/.well-known/acme-challenge/`) ne soient jamais bloqués.
+
+Si `GATE_SERVICES` est défini, `/gate` affiche un lanceur vers ces services une fois connecté. Pour les apps
+(téléphone, PC), le hub propose aussi le proxy authentifié `/api/downtify/*` (via `POST /api/client/token` et
+`DOWNTIFY_URL`) : il n'est donc pas nécessaire d'exposer le port `8087` de Downtify sur le routeur.
 
 **1. Service sur son propre domaine DuckDNS** (ex. `goofydownloader.duckdns.org`, distinct de `goofysound.duckdns.org` :
 un cookie DuckDNS ne peut pas être partagé entre deux sous-domaines racine) — onglet **Advanced** du Proxy Host :

@@ -82,10 +82,15 @@ interface SelfHostNative {
    * Shows a song on the home-screen widget; an empty title means nothing is playing. Returns false when there is no
    * context to draw it with. Missing from older installed builds.
    */
-  updateWidget?(title: string, artist: string, coverUrl: string, playing: boolean): boolean
+  updateWidget?(title: string, artist: string, coverUrl: string, playing: boolean, isStarred?: boolean): boolean
+  /**
+   * Returns and clears the widget button action that launched the app before JS finished starting, or null.
+   * Missing from older installed builds.
+   */
+  consumePendingWidgetAction?(): string | null
   /**
    * Told when a share arrives while the app is running, when the sleep timer has finished, and when a button of the
-   * home-screen widget is pressed ('toggle', 'next' or 'previous'). Missing from older installed builds.
+   * home-screen widget is pressed ('toggle', 'next', 'previous', 'like', 'shuffleAll', 'favorites'). Missing from older installed builds.
    */
   addListener?: {
     (event: 'onShareReceived' | 'onSleepTimerEnded', listener: () => void): { remove: () => void }

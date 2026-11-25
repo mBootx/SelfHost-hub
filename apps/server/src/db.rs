@@ -66,6 +66,16 @@ pub struct ShellAudit {
     pub end_reason: Option<String>,
 }
 
+/// Last saved playback state for cross-device resume.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResumeRow {
+    pub device_id: String,
+    pub device_name: String,
+    pub platform: String,
+    pub state: Value,
+    pub updated_at: i64,
+}
+
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS listening (
     user TEXT NOT NULL,
@@ -113,6 +123,14 @@ CREATE TABLE IF NOT EXISTS shell_audit (
 CREATE TABLE IF NOT EXISTS secrets (
     name TEXT PRIMARY KEY,
     value BLOB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS resume_state (
+    user TEXT PRIMARY KEY,
+    device_id TEXT NOT NULL,
+    device_name TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    state TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
 );
 ";
 
@@ -337,6 +355,50 @@ impl Db {
         entries.truncate(PAGE_SIZE);
         Ok(Page { rev, entries, more })
     }
+
+    /// Saves or replaces the user's cross-device resume state and returns `updated_at`.
+    pub fn save_resume(&self, user: &str, d: &DeviceInfo, state_json: &str) -> rusqlite::Result<i64> {
+        let now = unix_now();
+        self.lock().execute(
+            "INSERT INTO resume_state (user, device_id, device_name, platform, state, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(user) DO UPDATE SET
+                device_id = excluded.device_id,
+                device_name = excluded.device_name,
+                platform = excluded.platform,
+                state = excluded.state,
+                updated_at = excluded.updated_at",
+            params![user, d.device_id, d.device_name, d.platform, state_json, now],
+        )?;
+        Ok(now)
+    }
+
+    /// Returns the user's saved cross-device resume state, if any.
+    pub fn get_resume(&self, user: &str) -> rusqlite::Result<Option<ResumeRow>> {
+        use rusqlite::OptionalExtension;
+        self.lock()
+            .query_row(
+                "SELECT device_id, device_name, platform, state, updated_at FROM resume_state WHERE user = ?1",
+                [user],
+                |r| {
+                    let s: String = r.get(3)?;
+                    Ok(ResumeRow {
+                        device_id: r.get(0)?,
+                        device_name: r.get(1)?,
+                        platform: r.get(2)?,
+                        state: serde_json::from_str(&s).unwrap_or(Value::Null),
+                        updated_at: r.get(4)?,
+                    })
+                },
+            )
+            .optional()
+    }
+
+    /// Writes a consistent standalone copy of the database to `dest`.
+    pub fn vacuum_into(&self, dest: &Path) -> rusqlite::Result<()> {
+        self.lock().execute("VACUUM INTO ?1", [dest.to_string_lossy().as_ref()])?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -463,4 +525,47 @@ mod tests {
         assert_eq!((rows[1].bytes_in, rows[1].bytes_out, rows[1].end_reason.as_deref()), (10, 20, Some("closed-by-client")));
         assert!(rows[1].ended_at.is_some());
         assert_eq!(db.audit_recent(1).unwrap().len(), 1);
-    }}
+    }
+
+    #[test]
+    fn save_and_get_resume_upserts_per_user() {
+        let db = Db::open_in_memory().unwrap();
+        assert_eq!(db.get_resume("max").unwrap(), None);
+
+        let ts1 = db.save_resume("max", &dev("a"), r#"{"song":{"id":"1"},"positionMs":1200}"#).unwrap();
+        let row = db.get_resume("max").unwrap().unwrap();
+        assert_eq!(row.device_id, "a");
+        assert_eq!(row.device_name, "name-a");
+        assert_eq!(row.platform, "mobile");
+        assert_eq!(row.state["positionMs"], 1200);
+        assert_eq!(row.updated_at, ts1);
+
+        let ts2 = db.save_resume("max", &dev("b"), "not-json").unwrap();
+        let row2 = db.get_resume("max").unwrap().unwrap();
+        assert_eq!(row2.device_id, "b");
+        assert_eq!(row2.state, Value::Null);
+        assert_eq!(row2.updated_at, ts2);
+    }
+
+    #[test]
+    fn vacuum_into_creates_valid_backup_copy() {
+        let dir = std::env::temp_dir().join(format!(
+            "shh-vacuum-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos())
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let backup = dir.join("backup.db");
+
+        let db = Db::open_in_memory().unwrap();
+        db.upsert_weeks("max", &dev("a"), &[w("2026-11-23", r#"{"days":[1]}"#)]).unwrap();
+        db.save_resume("max", &dev("a"), r#"{"playing":true}"#).unwrap();
+        db.vacuum_into(&backup).unwrap();
+
+        let copy = Db::open(&backup).unwrap();
+        assert_eq!(copy.current_rev().unwrap(), 1);
+        assert_eq!(copy.get_resume("max").unwrap().unwrap().state["playing"], true);
+        drop(copy);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

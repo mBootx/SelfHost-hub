@@ -15,6 +15,7 @@ use axum::{Json, Router};
 use serde_json::{Value, json};
 
 use crate::auth::{AdminOutcome, AuthOutcome};
+use crate::backup::BackupInfo;
 use crate::ws::client_ip;
 use crate::{AppState, VERSION};
 
@@ -70,6 +71,11 @@ impl AdminState {
     /// Records whether the last call to Navidrome got an answer.
     pub fn note_navidrome(&self, reachable: bool) {
         *lock(&self.navidrome) = Some((reachable, unix_now()));
+    }
+
+    /// Returns whether the last Navidrome check succeeded, if any check has occurred.
+    pub fn navidrome_ok(&self) -> Option<bool> {
+        lock(&self.navidrome).as_ref().map(|(ok, _)| *ok)
     }
 
     fn new_nonce(&self) -> Option<String> {
@@ -185,6 +191,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/admin/me", get(me))
         .route("/api/admin/hub", get(hub))
         .route("/api/admin/system", get(system))
+        .route("/api/admin/containers/{id}/logs", get(container_logs))
+        .route("/api/admin/alerts", get(alerts_list))
+        .route("/api/admin/backup", post(run_backup))
         .route("/api/admin/disconnect", post(disconnect))
         .route("/admin/vendor/{file}", get(vendor))
         .merge(crate::terminal::routes())
@@ -371,10 +380,67 @@ async fn me(State(state): State<AppState>, headers: HeaderMap) -> Response {
 
 async fn system(State(state): State<AppState>, headers: HeaderMap, uri: axum::http::Uri) -> Response {
     // `?processes=1`: every process too (the Processus tab), left out otherwise to keep the answer small.
+    if let Err(r) = require_session(&state, &headers) {
+        return r;
+    }
     let processes = uri.query().is_some_and(|q| q.split('&').any(|kv| kv == "processes=1"));
-    match require_session(&state, &headers) {
-        Ok(_) => reply(StatusCode::OK, state.monitor.snapshot(processes)),
-        Err(r) => r,
+    let mut snap = state.monitor.snapshot(processes);
+    state.alerts.evaluate(&snap, state.admin.navidrome_ok(), unix_now());
+    let alerts: Vec<Value> = state.alerts.active().into_iter().map(|a| a.to_json()).collect();
+    if let Value::Object(ref mut map) = snap {
+        map.insert("alerts".into(), Value::Array(alerts));
+    }
+    reply(StatusCode::OK, snap)
+}
+
+async fn container_logs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    uri: axum::http::Uri,
+) -> Response {
+    if let Err(r) = require_session(&state, &headers) {
+        return r;
+    }
+    let tail = uri
+        .query()
+        .and_then(|q| q.split('&').find_map(|kv| kv.strip_prefix("tail=")).and_then(|v| v.parse::<u32>().ok()))
+        .unwrap_or(200);
+    match state.monitor.container_logs(&id, tail).await {
+        Ok(lines) => reply(StatusCode::OK, json!({"id": id, "lines": lines})),
+        Err((400, msg)) => fail(StatusCode::BAD_REQUEST, msg),
+        Err((404, msg)) => fail(StatusCode::NOT_FOUND, msg),
+        Err((503, msg)) => fail(StatusCode::SERVICE_UNAVAILABLE, msg),
+        Err((_, msg)) => fail(StatusCode::BAD_GATEWAY, msg),
+    }
+}
+
+async fn alerts_list(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Err(r) = require_session(&state, &headers) {
+        return r;
+    }
+    let snap = state.monitor.peek_snapshot();
+    state.alerts.evaluate(&snap, state.admin.navidrome_ok(), unix_now());
+    let alerts: Vec<Value> = state.alerts.active().into_iter().map(|a| a.to_json()).collect();
+    reply(StatusCode::OK, json!({"alerts": alerts}))
+}
+
+async fn run_backup(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Err(r) = require_session(&state, &headers) {
+        return r;
+    }
+    if let Err(r) = require_csrf(&headers) {
+        return r;
+    }
+    let Some(backups) = state.backups.as_ref() else {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "backups-not-configured");
+    };
+    match backups.run_once().await {
+        Ok(b) => reply(StatusCode::OK, json!({"ok": true, "backup": b.to_json()})),
+        Err(e) => {
+            tracing::warn!(error = %e, "manual backup failed");
+            fail(StatusCode::INTERNAL_SERVER_ERROR, "backup-failed")
+        }
     }
 }
 
@@ -444,12 +510,27 @@ async fn hub(State(state): State<AppState>, headers: HeaderMap) -> Response {
         [p.as_path(), wal.as_path()].iter().filter_map(|f| std::fs::metadata(f).ok()).map(|m| m.len()).sum::<u64>()
     });
     let nav = *lock(&state.admin.navidrome);
+    let backups = if let Some(bm) = state.backups.clone() {
+        let enabled = bm.enabled();
+        let keep = bm.keep();
+        let Ok(items) = tokio::task::spawn_blocking(move || bm.list()).await else {
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "db-error");
+        };
+        json!({
+            "enabled": enabled,
+            "keep": keep,
+            "items": items.iter().map(BackupInfo::to_json).collect::<Vec<_>>(),
+        })
+    } else {
+        Value::Null
+    };
     reply(
         StatusCode::OK,
         json!({
             "server": {"name": &*state.server_name, "version": VERSION, "uptime": state.started.elapsed().as_secs()},
             "navidrome": {"url": &*state.navidrome_url, "ok": nav.map(|n| n.0), "checkedAt": nav.map(|n| n.1)},
             "dbBytes": db_bytes,
+            "backups": backups,
             "users": users,
         }),
     )

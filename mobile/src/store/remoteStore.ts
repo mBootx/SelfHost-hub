@@ -1,3 +1,4 @@
+import { AppState, AppStateStatus } from 'react-native'
 import { create, StoreApi } from 'zustand'
 import * as Device from 'expo-device'
 import { describeError, logEvent } from '@/services/diagnostics'
@@ -56,6 +57,15 @@ export interface RemoteLink {
   close: () => void
 }
 
+/** A playback snapshot saved on the hub server by another device so this phone can resume it. */
+export interface ResumeSnapshot {
+  deviceId: string
+  deviceName: string
+  platform: string
+  updatedAt: number
+  state: RemoteDeviceState
+}
+
 interface RemoteControlState {
   enabled: boolean
   status: RemoteStatus
@@ -72,6 +82,8 @@ interface RemoteControlState {
   deviceList: RemoteDeviceSummary[]
   devices: Record<string, RemoteDeviceState>
   selectedDeviceId: string
+  manualSelection: boolean
+  resumeState: ResumeSnapshot | null
 
   init: () => Promise<void>
   setEnabled: (enabled: boolean) => Promise<void>
@@ -89,22 +101,41 @@ interface RemoteControlState {
   setServerUrl: (url: string) => Promise<boolean>
   disconnect: () => void
   selectDevice: (id: string) => void
+  /** One-tap Spotify Connect switcher: transfers active playback when needed or selects `targetId`. */
+  switchOutput: (targetId: string) => boolean
   sendCommand: (action: string, payload?: unknown) => void
   /** Pulls playback (song, upNext, playhead, shuffle, repeatMode) from `fromDeviceId` onto this phone. */
   handoffToHere: (fromDeviceId?: string) => boolean
   /** Pushes this phone's current playback to `targetDeviceId` and switches control to it. */
   handoffToDevice: (targetDeviceId: string) => boolean
+  /** Loads the server's saved cross-device resume snapshot onto this phone. */
+  applyResume: () => boolean
+  /** Hides the current cross-device resume banner. */
+  dismissResume: () => void
 }
 
 let subscribedToPlayback = false
 let lastStatePush = 0
 /** A link to the PC that dropped is looked for again after this long (the PC restarting, the Wi-Fi switching). */
 const RECONNECT_DELAY_MS = 3000
+/** Periodic session refresh while connected to the Hub server and active in the foreground. */
+export const SESSION_REFRESH_MS = 5000
+
+let sessionRefreshTimer: ReturnType<typeof setInterval> | null = null
+let currentAppState: AppStateStatus = AppState.currentState
+
+function stopSessionRefresh(): void {
+  if (sessionRefreshTimer) {
+    clearInterval(sessionRefreshTimer)
+    sessionRefreshTimer = null
+  }
+}
 
 /** The listening sync of the current server connection, if there is one. */
 let detachListeningSync: (() => void) | null = null
 
 function stopServerLink(): void {
+  stopSessionRefresh()
   detachListeningSync?.()
   detachListeningSync = null
 }
@@ -258,6 +289,18 @@ async function loadPairing(): Promise<Pairing | null> {
 type SetState = StoreApi<RemoteControlState>['setState']
 type GetState = StoreApi<RemoteControlState>['getState']
 
+/** Picks the first playing remote device automatically when the user hasn't picked an output manually and isn't playing locally. */
+function maybeAutoSelectPlayingDevice(set: SetState, get: GetState): void {
+  const { manualSelection, selectedDeviceId, deviceList, devices } = get()
+  if (manualSelection || selectedDeviceId !== LOCAL_DEVICE_ID) return
+  if (useNavidromeStore.getState().isPlaying) return
+  const playing = deviceList.find((d) => {
+    const st = devices[d.deviceId]
+    return Boolean(st?.isPlaying && st?.song)
+  })
+  if (playing) set({ selectedDeviceId: playing.deviceId })
+}
+
 /** A new list of devices: the states and the selection of those that left are dropped. */
 function applyDeviceList(devices: RemoteDeviceSummary[], set: SetState, get: GetState): void {
   const knownIds = new Set(devices.map((d) => d.deviceId))
@@ -265,11 +308,12 @@ function applyDeviceList(devices: RemoteDeviceSummary[], set: SetState, get: Get
   for (const id of Object.keys(nextDevices)) {
     if (!knownIds.has(id)) delete nextDevices[id]
   }
-  const selectedDeviceId =
-    get().selectedDeviceId === LOCAL_DEVICE_ID || knownIds.has(get().selectedDeviceId)
-      ? get().selectedDeviceId
-      : LOCAL_DEVICE_ID
-  set({ deviceList: devices, devices: nextDevices, selectedDeviceId })
+  const prevSelected = get().selectedDeviceId
+  const disappeared = prevSelected !== LOCAL_DEVICE_ID && !knownIds.has(prevSelected)
+  const selectedDeviceId = disappeared ? LOCAL_DEVICE_ID : prevSelected
+  const manualSelection = disappeared ? false : get().manualSelection
+  set({ deviceList: devices, devices: nextDevices, selectedDeviceId, manualSelection })
+  maybeAutoSelectPlayingDevice(set, get)
 }
 
 function wireClient(client: RemoteHubClient, set: SetState, get: GetState): void {
@@ -277,6 +321,7 @@ function wireClient(client: RemoteHubClient, set: SetState, get: GetState): void
   client.onState((state) => {
     const { deviceId, ...rest } = state
     set({ devices: { ...get().devices, [deviceId]: rest as RemoteDeviceState } })
+    maybeAutoSelectPlayingDevice(set, get)
   })
   client.onCommand((command) => applyCommandLocally(command.action, command.payload))
   client.onClose(() => {
@@ -319,6 +364,24 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
     return { hubId: hub.hubId }
   }
 
+  function syncSessionsNow(): void {
+    const { client, enabled } = get()
+    if (!enabled || !(client instanceof HubServerClient) || !client.connected) return
+    client.refreshSessions()
+    const payload = currentStatePayload()
+    if (payload.song || payload.isPlaying) client.sendState(payload)
+  }
+
+  function startSessionRefresh(): void {
+    stopSessionRefresh()
+    if (currentAppState !== 'active') return
+    const { client, enabled } = get()
+    if (!enabled || !(client instanceof HubServerClient) || !client.connected) return
+    sessionRefreshTimer = setInterval(() => {
+      if (currentAppState === 'active') syncSessionsNow()
+    }, SESSION_REFRESH_MS)
+  }
+
   /** Connects to the hub server (its address is `serverUrl`), replacing whatever link there was. */
   function connectServer(): void {
     stopServerLink()
@@ -342,9 +405,26 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
       const { deviceId: from, ...rest } = state as { deviceId: string } & RemoteDeviceState & { type?: string }
       delete rest.type
       set({ devices: { ...get().devices, [from]: rest as RemoteDeviceState } })
+      maybeAutoSelectPlayingDevice(set, get)
     })
     client.onCommand((command) => {
       if (get().client === client) applyCommandLocally(command.action, command.payload)
+    })
+    client.onMessage((msg) => {
+      if (get().client !== client || msg.type !== 'resume.state') return
+      if (msg.state?.song && typeof msg.deviceId === 'string' && msg.deviceId !== get().deviceId) {
+        set({
+          resumeState: {
+            deviceId: msg.deviceId,
+            deviceName: typeof msg.deviceName === 'string' && msg.deviceName ? msg.deviceName : 'Autre appareil',
+            platform: typeof msg.platform === 'string' ? msg.platform : 'mobile',
+            updatedAt: typeof msg.updatedAt === 'number' ? msg.updatedAt : Math.floor(Date.now() / 1000),
+            state: msg.state as RemoteDeviceState
+          }
+        })
+      } else {
+        set({ resumeState: null })
+      }
     })
     client.onStatus((status, info) => {
       // A connection replaced since (turned off and on, another server) reporting late must not undo the new one.
@@ -353,9 +433,12 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
         set({ status: 'connected', error: null, serverUser: info.user ?? null, serverName: info.serverName ?? null })
         logEvent('remote', `Connecté au serveur${info.user ? ` (${info.user})` : ''}`)
         client.sendState(currentStatePayload())
+        syncSessionsNow()
+        startSessionRefresh()
         return
       }
-      const gone = { deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID, serverUser: null }
+      stopSessionRefresh()
+      const gone = { deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID, manualSelection: false, serverUser: null }
       if (status === 'refused') {
         set({ ...gone, status: 'error', error: info.message ?? 'Connexion refusée par le serveur' })
         logEvent('remote', `Serveur : ${info.message ?? 'connexion refusée'}`, 'warn')
@@ -366,7 +449,16 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
       }
     })
     detachListeningSync = attachListeningSync(client)
-    set({ client, status: 'connecting', error: null, deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID, serverUser: null })
+    set({
+      client,
+      status: 'connecting',
+      error: null,
+      deviceList: [],
+      devices: {},
+      selectedDeviceId: LOCAL_DEVICE_ID,
+      manualSelection: false,
+      serverUser: null
+    })
     client.start()
   }
 
@@ -384,6 +476,8 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
     deviceList: [],
     devices: {},
     selectedDeviceId: LOCAL_DEVICE_ID,
+    manualSelection: false,
+    resumeState: null,
 
     init: async () => {
       const deviceId = await loadOrCreateDeviceId()
@@ -401,13 +495,29 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
         serverUrl: normalizeServerUrl(serverUrl ?? '')
       })
 
+      const saveResumeSnapshot = (): void => {
+        const { client, enabled: on } = get()
+        if (!on || !(client instanceof HubServerClient) || !client.connected || !client.hasFeature('resume')) return
+        const snapshot = currentStatePayload()
+        if (!snapshot.song) return
+        client.sendResumeSave(snapshot)
+      }
+
       if (!subscribedToPlayback) {
         subscribedToPlayback = true
         useNavidromeStore.subscribe((state, prev) => {
           const { client, enabled: on } = get()
           if (!on || !client) return
+          if (!prev.isPlaying && state.isPlaying) {
+            if (get().selectedDeviceId !== LOCAL_DEVICE_ID || !get().manualSelection) {
+              set({ selectedDeviceId: LOCAL_DEVICE_ID, manualSelection: true })
+            }
+          }
           const song = state.queue[state.queueIndex] || null
           const prevSong = prev.queue[prev.queueIndex] || null
+          const songChanged = !!song?.id && song?.id !== prevSong?.id
+          const paused = prev.isPlaying && !state.isPlaying && !!song?.id
+          if (songChanged || paused) saveResumeSnapshot()
           const changed =
             song?.id !== prevSong?.id ||
             state.isPlaying !== prev.isPlaying ||
@@ -423,6 +533,16 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
         useNavidromeStore.subscribe((state, prev) => {
           const { client } = get()
           if (state.client && state.client !== prev.client && client instanceof HubServerClient) client.retryNow(true)
+        })
+        AppState.addEventListener('change', (next) => {
+          currentAppState = next
+          if (next === 'active') {
+            syncSessionsNow()
+            startSessionRefresh()
+          } else if (next === 'background' || next === 'inactive') {
+            stopSessionRefresh()
+            saveResumeSnapshot()
+          }
         })
       }
 
@@ -538,7 +658,7 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
       // Another server (or none) does not know the revisions and devices of the last: they are forgotten, and every week
       // of this phone is to be uploaded again.
       if (url !== previous) clearOtherDevices()
-      set({ serverUrl: url, serverUser: null, serverName: null, error: null })
+      set({ serverUrl: url, serverUser: null, serverName: null, error: null, resumeState: null })
       if (url) {
         await storage.savePref('remote.enabled', true)
         set({ enabled: true })
@@ -552,18 +672,55 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
     disconnect: () => {
       const { client } = get()
       stopServerLink()
-      set({ client: null, status: 'disconnected', deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID, error: null, serverUser: null })
+      set({
+        client: null,
+        status: 'disconnected',
+        deviceList: [],
+        devices: {},
+        selectedDeviceId: LOCAL_DEVICE_ID,
+        manualSelection: false,
+        error: null,
+        serverUser: null,
+        resumeState: null
+      })
       client?.close()
     },
 
     selectDevice: (id) => {
-      if (id === get().selectedDeviceId) return
+      if (id === get().selectedDeviceId) {
+        if (!get().manualSelection) set({ manualSelection: true })
+        return
+      }
       if (id !== LOCAL_DEVICE_ID && useNavidromeStore.getState().isPlaying) {
         // Switching output to a remote device: silence local audio so it doesn't
         // keep playing here while this UI drives the other device instead.
         useNavidromeStore.getState().togglePlay()
       }
-      set({ selectedDeviceId: id })
+      set({ selectedDeviceId: id, manualSelection: true })
+    },
+
+    switchOutput: (targetId) => {
+      const { selectedDeviceId, deviceList, devices } = get()
+      if (targetId === LOCAL_DEVICE_ID) {
+        const selectedPlaying =
+          selectedDeviceId !== LOCAL_DEVICE_ID && devices[selectedDeviceId]?.isPlaying && devices[selectedDeviceId]?.song
+            ? selectedDeviceId
+            : null
+        const playingId =
+          selectedPlaying ||
+          deviceList.find((d) => devices[d.deviceId]?.isPlaying && devices[d.deviceId]?.song)?.deviceId ||
+          Object.keys(devices).find((id) => devices[id]?.isPlaying && devices[id]?.song)
+        if (playingId) return get().handoffToHere(playingId)
+        get().selectDevice(LOCAL_DEVICE_ID)
+        return true
+      }
+      const nav = useNavidromeStore.getState()
+      const localSong = nav.queue[nav.queueIndex] || null
+      if (nav.isPlaying && localSong) {
+        return get().handoffToDevice(targetId)
+      }
+      get().selectDevice(targetId)
+      return true
     },
 
     sendCommand: (action, payload) => {
@@ -583,7 +740,7 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
       const remoteState = sourceId ? devices[sourceId] : null
       if (!sourceId || !remoteState?.song) return false
       client?.sendCommand(sourceId, 'pause')
-      set({ selectedDeviceId: LOCAL_DEVICE_ID })
+      set({ selectedDeviceId: LOCAL_DEVICE_ID, manualSelection: true })
       applyHandoff(remoteState)
       return true
     },
@@ -598,8 +755,20 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
       }
       if (useNavidromeStore.getState().isPlaying) setPlaying(false)
       client.sendCommand(targetDeviceId, 'handoff', payload)
-      set({ selectedDeviceId: targetDeviceId })
+      set({ selectedDeviceId: targetDeviceId, manualSelection: true })
       return true
+    },
+
+    applyResume: () => {
+      const { resumeState } = get()
+      if (!resumeState?.state?.song?.id) return false
+      set({ selectedDeviceId: LOCAL_DEVICE_ID, manualSelection: true, resumeState: null })
+      applyHandoff(resumeState.state)
+      return true
+    },
+
+    dismissResume: () => {
+      set({ resumeState: null })
     }
   }
 })

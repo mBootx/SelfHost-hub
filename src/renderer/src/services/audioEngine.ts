@@ -1,10 +1,16 @@
-import { EQ_FREQUENCIES } from '@renderer/store/audioSettingsStore'
+import { EQ_FREQUENCIES, NormalizeMode, useAudioSettingsStore } from '@renderer/store/audioSettingsStore'
+import { gainForSong, ReplayGain } from '@renderer/services/loudness'
 
 type DeckIndex = 0 | 1
+
+export interface ReplayGainSong {
+  replayGain?: ReplayGain
+}
 
 interface Deck {
   el: HTMLAudioElement
   gain: GainNode
+  replayGain: GainNode
   trackId: string | null
   ready: boolean
 }
@@ -12,6 +18,7 @@ interface Deck {
 export interface NextTrack {
   id: string
   src: string
+  replayGain?: ReplayGain
 }
 
 export interface EngineHandlers {
@@ -52,15 +59,21 @@ function fadeCurve(fadeIn: boolean): Float32Array {
 export class AudioEngine {
   private ctx = new AudioContext()
   private master = this.ctx.createGain()
+  private sleepGain = this.ctx.createGain()
   private preamp = this.ctx.createGain()
   private filters: BiquadFilterNode[]
   private decks: [Deck, Deck]
   private active: DeckIndex = 0
   private next: NextTrack | null = null
+  private activeSong: ReplayGainSong | null = null
+  private nextSong: ReplayGainSong | null = null
+  private normalizeMode: NormalizeMode = useAudioSettingsStore.getState().normalize
   private fadingFrom: DeckIndex | null = null
   private fadeTimer: ReturnType<typeof setTimeout> | null = null
   private crossfadeSeconds = 0
   private gapless = true
+  private stopAfterTrack = false
+  private sleepFading = false
   private rate = 1
   private handlers: EngineHandlers | null = null
 
@@ -79,8 +92,15 @@ export class AudioEngine {
       tail = filter
     }
     tail.connect(this.master)
-    this.master.connect(this.ctx.destination)
+    this.master.connect(this.sleepGain)
+    this.sleepGain.connect(this.ctx.destination)
     this.decks = [this.createDeck(0), this.createDeck(1)]
+    useAudioSettingsStore.subscribe((state, prev) => {
+      if (state.normalize !== prev.normalize) {
+        this.normalizeMode = state.normalize
+        this.reapplyNormalize()
+      }
+    })
   }
 
   private createDeck(index: DeckIndex): Deck {
@@ -89,9 +109,11 @@ export class AudioEngine {
     el.crossOrigin = 'anonymous'
     el.preload = 'auto'
     const gain = this.ctx.createGain()
+    const replayGain = this.ctx.createGain()
     this.ctx.createMediaElementSource(el).connect(gain)
-    gain.connect(this.preamp)
-    const deck: Deck = { el, gain, trackId: null, ready: false }
+    gain.connect(replayGain)
+    replayGain.connect(this.preamp)
+    const deck: Deck = { el, gain, replayGain, trackId: null, ready: false }
     el.addEventListener('canplay', () => {
       deck.ready = true
     })
@@ -117,9 +139,13 @@ export class AudioEngine {
    * Makes `id` current: keeps it if a transition already started it, switches instantly if it was
    * preloaded, else loads it. `startAt` (seconds) resumes a track part-way through.
    */
-  load(id: string, src: string, autoplay: boolean, startAt = 0): void {
+  load(id: string, src: string, autoplay: boolean, startAt = 0, replayGain?: ReplayGain): void {
+    if (replayGain !== undefined) this.activeSong = { replayGain }
     const current = this.decks[this.active]
     if (current.trackId === id) {
+      if (replayGain !== undefined) {
+        this.setDeckReplayGain(this.active, gainForSong(this.activeSong, this.normalizeMode))
+      }
       if (autoplay) this.play()
       return
     }
@@ -141,13 +167,16 @@ export class AudioEngine {
       this.applyRate(current)
       this.setGain(current, 1)
     }
+    this.setDeckReplayGain(this.active, gainForSong(this.activeSong, this.normalizeMode))
     if (autoplay) this.play()
   }
 
   /** The track that should follow the current one, or null (end of queue, repeat-one). */
   setNext(next: NextTrack | null): void {
     this.next = next
-    const otherIndex = 1 - this.active
+    if (!next) this.nextSong = null
+    else if (next.replayGain !== undefined) this.nextSong = { replayGain: next.replayGain }
+    const otherIndex = (1 - this.active) as DeckIndex
     if (this.fadingFrom === otherIndex) return
     const other = this.decks[otherIndex]
     if (other.trackId && other.trackId !== next?.id) this.stopDeck(other)
@@ -155,6 +184,9 @@ export class AudioEngine {
 
   play(): void {
     void this.ctx.resume()
+    if (!this.sleepFading && this.sleepGain.gain.value < 1) {
+      this.resetSleepFade()
+    }
     const el = this.decks[this.active].el
     // A track that failed to load (the server was out of reach) is tried again when play is pressed: an element
     // in error just refuses to play, it never retries by itself.
@@ -186,10 +218,76 @@ export class AudioEngine {
     this.stopDeck(this.decks[0])
     this.stopDeck(this.decks[1])
     this.next = null
+    this.activeSong = null
+    this.nextSong = null
   }
 
   setVolume(volume: number): void {
     this.master.gain.setTargetAtTime(volume, this.ctx.currentTime, SMOOTHING_S)
+  }
+
+  setDeckReplayGain(deck: DeckIndex, gain: number): void {
+    const safeGain = Number.isFinite(gain) ? Math.max(0, Math.min(1, gain)) : 1
+    const target = this.decks[deck]
+    const param = target.replayGain.gain
+    const now = this.ctx.currentTime
+    param.cancelScheduledValues(now)
+    if (target.el.paused) {
+      param.setValueAtTime(safeGain, now)
+    } else {
+      param.setTargetAtTime(safeGain, now, SMOOTHING_S)
+    }
+  }
+
+  applyNormalize(
+    songA: ReplayGainSong | null | undefined,
+    songB: ReplayGainSong | null | undefined,
+    mode: NormalizeMode
+  ): void {
+    this.normalizeMode = mode
+    this.activeSong = songA ?? null
+    this.nextSong = songB ?? null
+    this.reapplyNormalize()
+  }
+
+  private reapplyNormalize(): void {
+    const otherIndex = (1 - this.active) as DeckIndex
+    this.setDeckReplayGain(this.active, gainForSong(this.activeSong, this.normalizeMode))
+    this.setDeckReplayGain(otherIndex, gainForSong(this.nextSong, this.normalizeMode))
+  }
+
+  setSleepFade(multiplier: number): void {
+    const safe = Number.isFinite(multiplier) ? Math.max(0, Math.min(1, multiplier)) : 1
+    this.sleepFading = safe < 1
+    const now = this.ctx.currentTime
+    const param = this.sleepGain.gain
+    param.cancelScheduledValues(now)
+    param.setTargetAtTime(safe, now, SMOOTHING_S)
+  }
+
+  fadeMasterOut(durationMs: number): void {
+    this.sleepFading = true
+    const now = this.ctx.currentTime
+    const param = this.sleepGain.gain
+    param.cancelScheduledValues(now)
+    param.setValueAtTime(param.value, now)
+    param.linearRampToValueAtTime(0, now + Math.max(0.02, durationMs / 1000))
+  }
+
+  resetSleepFade(): void {
+    this.sleepFading = false
+    const now = this.ctx.currentTime
+    const param = this.sleepGain.gain
+    param.cancelScheduledValues(now)
+    if (this.decks[this.active].el.paused) {
+      param.setValueAtTime(1, now)
+    } else {
+      param.setTargetAtTime(1, now, SMOOTHING_S)
+    }
+  }
+
+  setStopAfterTrack(stop: boolean): void {
+    this.stopAfterTrack = stop
   }
 
   setRate(rate: number): void {
@@ -221,7 +319,7 @@ export class AudioEngine {
     const el = this.decks[index].el
     const duration = el.duration || 0
     this.handlers?.onProgress(el.currentTime, duration)
-    if (!this.next || !duration || el.paused || this.fadingFrom !== null) return
+    if (!this.next || !duration || el.paused || this.fadingFrom !== null || this.stopAfterTrack) return
     if (this.crossfadeSeconds <= 0 && !this.gapless) return
     const remaining = (duration - el.currentTime) / (el.playbackRate || 1)
     if (remaining <= this.crossfadeSeconds + PRELOAD_LEAD_S) this.preloadNext()
@@ -230,13 +328,16 @@ export class AudioEngine {
 
   private preloadNext(): void {
     const next = this.next
-    const other = this.decks[1 - this.active]
+    const otherIndex = (1 - this.active) as DeckIndex
+    const other = this.decks[otherIndex]
     if (!next || other.trackId === next.id) return
     other.trackId = next.id
     other.ready = false
     other.el.src = next.src
     this.applyRate(other)
     this.setGain(other, 0)
+    const nextGainSource = next.replayGain !== undefined ? { replayGain: next.replayGain } : this.nextSong
+    this.setDeckReplayGain(otherIndex, gainForSong(nextGainSource, this.normalizeMode))
   }
 
   private startCrossfade(remaining: number): void {
@@ -250,6 +351,8 @@ export class AudioEngine {
     this.rampGain(to, fadeCurve(true), now, duration)
     to.el.currentTime = 0
     this.active = toIndex
+    this.activeSong = this.nextSong
+    this.nextSong = null
     this.fadingFrom = fromIndex
     this.fadeTimer = setTimeout(() => this.finishFade(), duration * 1000 + 250)
     this.play()
@@ -262,6 +365,10 @@ export class AudioEngine {
       return
     }
     if (index !== this.active) return
+    if (this.stopAfterTrack) {
+      this.handlers?.onTrackEnd()
+      return
+    }
     const next = this.next
     const otherIndex = (1 - index) as DeckIndex
     const other = this.decks[otherIndex]
@@ -269,6 +376,8 @@ export class AudioEngine {
     if (next && (this.gapless || this.crossfadeSeconds > 0) && other.trackId === next.id && other.ready) {
       this.stopDeck(this.decks[index])
       this.active = otherIndex
+      this.activeSong = this.nextSong
+      this.nextSong = null
       other.el.currentTime = 0
       this.setGain(other, 1)
       this.play()

@@ -34,9 +34,12 @@ Every message is one JSON object in one text frame, with a string `type`. Unknow
 ```
 server → {"type":"challenge","v":2,"nonce":"<32 hex chars>","serverName":"Maison","serverVersion":"0.1.0"}
 client → {"type":"hello","v":2,"deviceId":"…","deviceName":"Pixel de Max","platform":"mobile","user":"max","token":"<md5 hex>"}
-server → {"type":"welcome","accepted":true,"user":"max","deviceId":"…","serverVersion":"0.1.0","features":["remote","listening"]}
+server → {"type":"welcome","accepted":true,"user":"max","deviceId":"…","serverVersion":"0.1.0","features":["remote","listening","resume","apiToken"]}
      or  {"type":"welcome","accepted":false,"reason":"bad-auth"}   (then the server closes)
 ```
+
+- `features` lists server capabilities: always includes `"remote"`, `"listening"`, `"resume"`, and `"apiToken"`, and
+  includes `"downtify"` when `DOWNTIFY_URL` is configured.
 
 - `token = md5(navidromePassword + nonce)`, lowercase hex: the Subsonic salt+token scheme with the server's
   nonce as the salt. The server checks it by calling Navidrome
@@ -87,6 +90,14 @@ server → {"type":"command","targetId":"<deviceId>","fromId":"<sender>","action
   answers it with `error` (`bad-command`).
 - There is no `"hub"` target any more: the PC is a device like the others.
 
+```
+client → {"type":"sessions.refresh"}
+server → {"type":"devices","devices":[…]}, followed by the latest "state" frame of each other online device
+```
+
+- A device can send `sessions.refresh` at any time to get the current `devices` list plus the cached `state` frame
+  of each other online device of the same user (excluding its own state).
+
 ## Listening data (Wrapped sync)
 
 Each device owns its own ledger. That is the `Ledger` / `WeekLog` from `mobile/src/services/wrapped.ts`: weeks keyed
@@ -128,12 +139,48 @@ server → {"type":"listening.data","rev":1042,"entries":[{"deviceId":"…","dev
    goes to the background. It pulls whenever it receives `listening.changed`.
 4. It prunes the others' weeks locally with the same `KEEP_WEEKS` as its own.
 
+## Cross-device resume
+
+The server keeps one last playback snapshot per user (`resume_state` table: `deviceId`, `deviceName`, `platform`,
+`state`, `updatedAt`) so another device can resume where playback left off.
+
+```
+client → {"type":"resume.save","state":{…}}
+server → {"type":"resume.ack","updatedAt":1764000000}
+
+client → {"type":"resume.get"}
+server → {"type":"resume.state","deviceId":"…","deviceName":"…","platform":"mobile","state":{…},"updatedAt":1764000000}
+     or  {"type":"resume.state","state":null}
+```
+
+- `resume.save` stores the device's snapshot and replies with `resume.ack` (`updatedAt` in unix seconds).
+- The server also auto-saves from incoming `state` frames (every 30 s, on song change, and on pause) while a song is
+  present.
+- `resume.get` returns the latest saved entry for that user, or `state: null` if none exists.
+
 ## Errors and keep-alive
 
 - `{"type":"error","code":"bad-command"|"too-large"|"bad-message","message":"…"}` reports a problem with one message.
   The connection stays open.
 - The server sends a WebSocket ping every 30 s and drops a connection that hasn't answered in 75 s. Clients reconnect
   with a backoff of 1 s, 2 s, 5 s, 10 s, then 30 s.
+
+## Client token and Downtify proxy
+
+Native clients (phone, desktop) can obtain an HTTP bearer token (`POST /api/client/token`) and talk to Downtify through
+the hub (`ANY /api/downtify/{*path}`) without exposing Downtify's port directly.
+
+| Endpoint | |
+|---|---|
+| `POST /api/client/token {"user","token","nonce"}` | Uses a single-use nonce from `GET /api/admin/challenge` and Subsonic `token = md5(password + nonce)` for any Navidrome account (subject to the IP limiter). Returns `200 {"ok":true,"user","apiToken","expiresIn":86400}` (24 h HMAC-SHA256 token `client-v1\|<user>\|<expires>`), or `400 bad-request` / `bad-nonce`, `401 bad-auth`, `429 too-many-attempts`, `502 navidrome-unreachable` |
+| `ANY /api/downtify/{*path}` | Authenticated reverse proxy to `DOWNTIFY_URL` (accepts `Authorization: Bearer <apiToken>` or a valid `hub_gate` cookie; otherwise `401 unauthorized`). Returns `503 downtify-not-configured` if `DOWNTIFY_URL` is unset, `403 path-not-allowed` outside the allowlist, `413 body-too-large` over 1 MiB, `502 downtify-unreachable` on upstream error (180 s timeout, redirects disabled). Responses carry `Cache-Control: no-store` |
+
+Allowed paths/methods on `/api/downtify/{*path}` (paths containing `.` / `..` segments, `\`, `?`, `#`, `@`, or control
+characters are rejected):
+
+- `GET`: `api/version`, `api/queue`, `api/songs/search`, `list`, `cover`, `downloads/<file>`
+- `POST`: `api/download/url`
+- `DELETE`: `api/queue`, `api/queue/item`, `delete`
 
 ## Server configuration (environment)
 
@@ -154,6 +201,12 @@ server → {"type":"listening.data","rev":1042,"entries":[{"deviceId":"…","dev
 | `SHELL_SSH_HOST` | `host.docker.internal` | |
 | `SHELL_SSH_PORT` | `22` | |
 | `GATE_DOMAIN` | (unset) | Comma-separated root cookie domains for the sign-in gate (`/gate`, `/api/gate/*`); `Domain=` is chosen from `Host`. Unset: gate disabled (`404`) |
+| `GATE_SERVICES` | (unset) | Comma-separated `Label=URL` links shown on `/gate` and returned by `GET /api/gate/verify` |
+| `DOWNTIFY_URL` | (unset) | Internal Downtify URL (e.g. `http://host.docker.internal:8087`) for `/api/downtify/*`; unset returns `503 downtify-not-configured` |
+| `BACKUP_KEEP` | `7` | Daily `hub.db` backups (`VACUUM INTO`) to retain; `0` disables scheduled backups |
+| `ALERT_DISK_PERCENT` | `90` | Disk usage % threshold (`1`–`100`) triggering a disk alert (`critical` at `>= 95`) |
+| `ALERT_TEMP_C` | `85` | Temperature threshold in °C (`10`–`150`) triggering a temperature alert (`critical` at `>= threshold + 10`) |
+| `ALERT_WEBHOOK_URL` | (unset) | HTTP/HTTPS webhook URL notified on alert transitions (Discord JSON `{"content"}` or plain text with `Title: SelfHost Hub`) |
 
 ## Admin API
 
@@ -182,9 +235,12 @@ login) also need the header `X-Requested-With: hub-admin`, otherwise `403 csrf`.
 |---|---|
 | `GET /api/admin/me` | `{"user"}` |
 | `POST /api/admin/logout` | ends the session, clears the cookie |
-| `GET /api/admin/hub` | `server` (name, version, uptime), `navidrome` (url, `ok` of the last check, `checkedAt`), `dbBytes`, and `users[]`: `online[]` (deviceId, deviceName, platform, `ip`, `connectedAt`, `state` = `{title, artist, isPlaying}` or null), `known[]` (from the devices table, `lastSeen`), `listening[]` (per device: `weeks`, `totalSeconds` = sum of the numbers in each week's `days`, `rev`) |
+| `GET /api/admin/hub` | `server` (name, version, uptime), `navidrome` (url, `ok` of the last check, `checkedAt`), `dbBytes`, `backups` (`[{"name","bytes","createdAt"}]`, newest-first), and `users[]`: `online[]` (deviceId, deviceName, platform, `ip`, `connectedAt`, `state` = `{title, artist, isPlaying}` or null), `known[]` (from the devices table, `lastSeen`), `listening[]` (per device: `weeks`, `totalSeconds` = sum of the numbers in each week's `days`, `rev`) |
+| `POST /api/admin/backup` | triggers an on-demand `VACUUM INTO` backup of `hub.db` and prunes older backups beyond `BACKUP_KEEP.max(1)`; returns `{"name","bytes","createdAt"}` |
 | `POST /api/admin/disconnect {"user","deviceId"}` | closes that connection with code 4001 `kicked`; `404 not-online` if it is not connected |
-| `GET /api/admin/system` | read-only host monitor, below (`?processes=1` includes the full `processes` list) |
+| `GET /api/admin/system` | read-only host monitor, below (`?processes=1` includes the full `processes` list); also includes `alerts` (`[{"id","severity","title","detail","since"}]`) |
+| `GET /api/admin/alerts` | active alerts `{"items":[{"id","severity","title","detail","since"}]}` (`severity` is `"critical"` or `"warn"`; sources: `disk:<mount>`, `temp:max`, `container:<name>`, `navidrome:down`) |
+| `GET /api/admin/containers/{id}/logs` | last `?tail=` lines (clamped `1..=2000`, up to 2 MiB / 5000 lines, demuxed stdout/stderr) for container `id`; `400 bad-id`, `404 not-found`, `502 docker-error`, `503 docker-not-configured` |
 
 `GET /api/admin/system` returns `ready`, `sampledAt`, and:
 
@@ -198,7 +254,8 @@ login) also need the header `X-Requested-With: hub-admin`, otherwise `403 csrf`.
 - `containers` (`configured`, `items[]` from `DOCKER_URL`, GET only: `id`, `name`, `image`, `state`, `status`, `project`, `cpu`, `memUsed`, `memLimit`, `rx`, `tx`, `rxRate`, `txRate`, `readRate`, `writeRate`, `pids`);
 - `processes` (only present when `?processes=1` is passed; `items[]`: `pid`, `ppid`, `name`, `cmd`, `user`, `state`, `threads`, `rss`, `cpu`, `container`, `kernel`);
 - `live` (`step: 1`, up to 60 points: `cpu`, `mem`, `temp`, `rx`, `tx`, `dr`, `dw`, `busy`, `cores` per-core arrays);
-- `history` (`step: 10`, up to 360 points / 1 hour: `cpu`, `mem`, `temp`, `rx`, `tx`, `dr`, `dw`, `busy`).
+- `history` (`step: 10`, up to 360 points / 1 hour: `cpu`, `mem`, `temp`, `rx`, `tx`, `dr`, `dw`, `busy`);
+- `alerts` (`[{"id","severity","title","detail","since"}]`, same items as `GET /api/admin/alerts`).
 
 A section that cannot be read is `{"unavailable":"<reason>"}` (for `network` and `containers`, `interfaces` / `items` is `[]` next to `unavailable`). CPU % for both `processes` and `containers` is a share of the whole machine (`0–100`), not per-core. Background sampling runs every 1 s for the host (5 s when idle, after 20 s without a request) and every 2 s for containers (15 s when idle).
 
@@ -236,7 +293,7 @@ account (not restricted to admins) using the same `GET /api/admin/challenge` md5
 |---|---|
 | `GET /gate?rd=<url>` | French sign-in page (strict CSP, `no-store`) |
 | `POST /api/gate/login {"user","token","nonce","rd"?}` | Requires `X-Requested-With: hub-admin` (`403 csrf`). Sets the `hub_gate` cookie and returns `200 {"ok":true,"user","redirect"}` |
-| `GET /api/gate/verify` | For Nginx `auth_request`: returns `200 {"user"}` with header `X-Hub-User: <user>`, or `401 {"error":"unauthorized"}` |
+| `GET /api/gate/verify` | For Nginx `auth_request`: returns `200 {"user","services":[{"name","url"}]}` with header `X-Hub-User: <user>`, or `401 {"error":"unauthorized"}` |
 | `POST /api/gate/logout` | Requires `X-Requested-With: hub-admin` (`403 csrf`). Clears `hub_gate` (`Max-Age=0`) and returns `200 {"ok":true}` |
 
 The `hub_gate` cookie (`Domain=<domain>; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`, valid 30 days)

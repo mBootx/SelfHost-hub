@@ -1,7 +1,14 @@
 import { fetchWithTimeout } from './http'
 
+export interface HubDowntifyProxy {
+  baseUrl: string
+  apiToken: string
+}
+
 export interface DowntifyConfig {
   url: string
+  getHubProxy?: () => HubDowntifyProxy | null
+  onTransportChange?: (viaHub: boolean) => void
 }
 
 export interface DowntifySong {
@@ -55,10 +62,43 @@ export class ApiError extends Error {
 export class DowntifyClient {
   private baseUrl: string
   private clientId: string
+  private getHubProxy?: () => HubDowntifyProxy | null
+  private onTransportChange?: (viaHub: boolean) => void
+  private usingHub = false
 
   constructor(config: DowntifyConfig, clientId: string) {
-    this.baseUrl = config.url.replace(/\/+$/, '')
+    this.baseUrl = (config.url ?? '').trim().replace(/\/+$/, '')
     this.clientId = clientId
+    this.getHubProxy = config.getHubProxy
+    this.onTransportChange = config.onTransportChange
+  }
+
+  get isViaHub(): boolean {
+    return this.usingHub
+  }
+
+  private setUsingHub(viaHub: boolean): void {
+    if (this.usingHub === viaHub) return
+    this.usingHub = viaHub
+    this.onTransportChange?.(viaHub)
+  }
+
+  private parseResponse<T>(text: string): T {
+    try {
+      return JSON.parse(text) as T
+    } catch {
+      return text as unknown as T
+    }
+  }
+
+  private async isLanReachable(): Promise<boolean> {
+    if (!this.baseUrl) return false
+    try {
+      const res = await fetchWithTimeout(`${this.baseUrl}/api/version`, { method: 'GET' }, 2500)
+      return res.ok
+    } catch {
+      return false
+    }
   }
 
   private async request<T>(
@@ -68,32 +108,73 @@ export class DowntifyClient {
     data?: unknown,
     timeoutMs = 20000
   ): Promise<T> {
+    const cleanPath = path.startsWith('/') ? path : `/${path}`
     const query = params ? `?${new URLSearchParams(params).toString()}` : ''
+    const body = data !== undefined ? JSON.stringify(data) : undefined
+    const hub = this.getHubProxy?.() ?? null
+
+    if (this.baseUrl) {
+      let skipLan = false
+      let lanTimeout = timeoutMs
+      if (this.usingHub && hub) {
+        if (timeoutMs > 10000) {
+          skipLan = !(await this.isLanReachable())
+        } else {
+          lanTimeout = Math.min(timeoutMs, 2500)
+        }
+      }
+
+      if (!skipLan) {
+        try {
+          const res = await fetchWithTimeout(
+            `${this.baseUrl}${cleanPath}${query}`,
+            {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body
+            },
+            lanTimeout
+          )
+          this.setUsingHub(false)
+          if (!res.ok) throw new ApiError(`Erreur Downtify (${res.status})`, res.status)
+          return this.parseResponse<T>(await res.text())
+        } catch (err) {
+          if (err instanceof ApiError || !hub) {
+            if (err instanceof ApiError) throw err
+            throw new ApiError(err instanceof Error ? err.message : 'Serveur injoignable', 0)
+          }
+          // Network error or timeout on direct LAN: fall back to the Hub proxy below.
+        }
+      }
+    }
+
+    if (!hub) throw new ApiError('Serveur injoignable', 0)
+
+    const hubBase = hub.baseUrl.replace(/\/+$/, '')
     let res: Response
     try {
       res = await fetchWithTimeout(
-        `${this.baseUrl}${path}${query}`,
+        `${hubBase}/api/downtify${cleanPath}${query}`,
         {
           method,
-          headers: { 'Content-Type': 'application/json' },
-          body: data !== undefined ? JSON.stringify(data) : undefined
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${hub.apiToken}`
+          },
+          body
         },
         timeoutMs
       )
     } catch (err) {
-      throw new ApiError(err instanceof Error ? err.message : 'Serveur injoignable', 0)
+      throw new ApiError(err instanceof Error ? err.message : 'Serveur Hub injoignable', 0)
     }
     if (!res.ok) throw new ApiError(`Erreur Downtify (${res.status})`, res.status)
-    const text = await res.text()
-    try {
-      return JSON.parse(text) as T
-    } catch {
-      return text as unknown as T
-    }
+    this.setUsingHub(true)
+    return this.parseResponse<T>(await res.text())
   }
 
   async testConnection(): Promise<void> {
-    await this.request<string>('/api/version')
+    await this.request<string>('/api/version', 'GET', undefined, undefined, 5000)
   }
 
   async getQueue(): Promise<QueueItem[]> {
@@ -152,13 +233,21 @@ export class DowntifyClient {
     await this.request('/delete', 'DELETE', { file })
   }
 
+  private activeBase(): string {
+    if (this.usingHub || !this.baseUrl) {
+      const hub = this.getHubProxy?.()
+      if (hub) return `${hub.baseUrl.replace(/\/+$/, '')}/api/downtify`
+    }
+    return this.baseUrl
+  }
+
   fileUrl(file: string): string {
     const encoded = file.split('/').map(encodeURIComponent).join('/')
-    return `${this.baseUrl}/downloads/${encoded}`
+    return `${this.activeBase()}/downloads/${encoded}`
   }
 
   coverUrl(file: string): string {
-    return `${this.baseUrl}/cover?file=${encodeURIComponent(file)}`
+    return `${this.activeBase()}/cover?file=${encodeURIComponent(file)}`
   }
 
   async getSettings(): Promise<DowntifySettings> {

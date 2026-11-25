@@ -41,6 +41,13 @@ services:
       SHELL_SSH_USER: "mboot"
       # Portail de connexion (/gate) pour protéger d'autres services web derrière Nginx Proxy Manager.
       GATE_DOMAIN: "goofysound.duckdns.org,goofydownloader.duckdns.org"
+      GATE_SERVICES: "Navidrome=https://goofysound.duckdns.org,Downtify=https://goofydownloader.duckdns.org,Crafty=https://crafty.goofysound.duckdns.org,Admin Hub=https://hub.goofysound.duckdns.org/admin"
+      # Proxy Downtify (/api/downtify/*) pour les apps mobiles/desktop (évite d'exposer le port 8087).
+      DOWNTIFY_URL: "http://host.docker.internal:8087"
+      # Sauvegardes automatiques quotidiennes de hub.db (0 désactive) et seuils d'alerte (/admin).
+      BACKUP_KEEP: "7"
+      ALERT_DISK_PERCENT: "90"
+      ALERT_TEMP_C: "85"
     # Needed for host.docker.internal on Linux.
     extra_hosts:
       - "host.docker.internal:host-gateway"

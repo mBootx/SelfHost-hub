@@ -8,10 +8,24 @@ const miniStore = require('./stubs/mini-store')
 
 const NL = String.fromCharCode(10)
 const calls = []
+const queued = []
+const starred = []
+const tick = () => new Promise((resolve) => setImmediate(resolve))
 globalThis.__navidromeStub = miniStore({
+  client: {
+    getRandomSongs: async () => [{ id: 'r1', title: 'R1', artist: 'A', duration: 180 }],
+    getStarred: async () => ({ songs: [{ id: 'f1', title: 'F1', artist: 'A', duration: 200 }] }),
+    star: async (id) => starred.push(['star', id]),
+    unstar: async (id) => starred.push(['unstar', id])
+  },
+  queue: [{ id: 's1', title: 'S1', artist: 'A', duration: 150 }],
+  queueIndex: 0,
   togglePlay: () => calls.push('toggle'),
   next: () => calls.push('next'),
-  prev: () => calls.push('previous')
+  prev: () => calls.push('previous'),
+  playQueue: (songs, index) => queued.push([songs.map((s) => s.id), index]),
+  playNext: () => {},
+  addToQueue: () => {}
 })
 
 let m
@@ -28,6 +42,18 @@ test('anything else is ignored', () => {
   calls.length = 0
   for (const action of ['', 'delete', undefined, null, 'TOGGLE']) m.handleWidgetAction(action)
   assert.deepStrictEqual(calls, [])
+})
+
+test('like, shuffleAll and favorites act on stars and the queue', async () => {
+  starred.length = 0
+  queued.length = 0
+  m.handleWidgetAction('like')
+  m.handleWidgetAction('shuffleAll')
+  m.handleWidgetAction('favorites')
+  await tick()
+  await tick()
+  assert.deepStrictEqual(starred, [['star', 's1']])
+  assert.deepStrictEqual(queued, [[['r1'], 0], [['f1'], 0]])
 })
 
 test('the widget\'s events are listened to once, and carry the action', () => {

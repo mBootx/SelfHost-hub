@@ -3,6 +3,8 @@ package com.selfhosthub.wear.service.tile
 import com.selfhosthub.wear.core.DeviceState
 import com.selfhosthub.wear.core.DeviceSummary
 import com.selfhosthub.wear.core.LinkProtocol
+import com.selfhosthub.wear.core.MediaKind
+import com.selfhosthub.wear.core.PlayMode
 import com.selfhosthub.wear.core.PlayerCommand
 import com.selfhosthub.wear.core.RemoteSong
 import com.selfhosthub.wear.core.RepeatMode
@@ -15,9 +17,14 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private fun playing(title: String = "Neon Rivers", artist: String = "Halcyon Drive", isPlaying: Boolean = true): LinkUiState {
+private fun playing(
+    title: String = "Neon Rivers",
+    artist: String = "Halcyon Drive",
+    isPlaying: Boolean = true,
+    isStarred: Boolean = false
+): LinkUiState {
     val song = RemoteSong("s1", title, artist, null, null, null, 200.0)
-    val player = DeviceState(song, isPlaying, 10.0, 200.0, false, RepeatMode.OFF, 1.0)
+    val player = DeviceState(song, isPlaying, 10.0, 200.0, false, RepeatMode.OFF, 1.0, isStarred = isStarred)
     return LinkUiState(
         status = LinkStatus.CONNECTED,
         devices = listOf(DeviceSummary(LinkProtocol.PHONE_ID, "Galaxy S25", "android")),
@@ -28,23 +35,28 @@ private fun playing(title: String = "Neon Rivers", artist: String = "Halcyon Dri
 
 class NowPlayingTileTest {
     @Test
-    fun `the tile shows the song, its artist, and the three buttons`() {
+    fun `the tile shows the song, its artist, starred state, and controls`() {
         val content = TileContent.of(playing())
         assertEquals("Neon Rivers", content.title)
         assertEquals("Halcyon Drive", content.subtitle)
         assertTrue(content.playing)
         assertTrue(content.controls)
+        assertTrue(content.quickActions)
+        assertFalse(content.isStarred)
         assertFalse(TileContent.of(playing(isPlaying = false)).playing)
+        assertTrue(TileContent.of(playing(isStarred = true)).isStarred)
     }
 
     @Test
-    fun `nothing playing, or no link with the phone, shows no buttons and says so`() {
+    fun `nothing playing shows quick actions only, and no link with the phone shows no buttons`() {
         val idle = TileContent.of(LinkUiState(status = LinkStatus.CONNECTED))
         assertEquals("Rien en lecture", idle.title)
         assertFalse(idle.controls)
+        assertTrue(idle.quickActions)
         val closed = TileContent.of(playing().copy(status = LinkStatus.PHONE_APP_CLOSED))
         assertEquals("Appli fermée", closed.subtitle)
         assertFalse(closed.controls)
+        assertFalse(closed.quickActions)
     }
 
     @Test
@@ -53,10 +65,19 @@ class NowPlayingTileTest {
     }
 
     @Test
-    fun `each button sends its command, anything else sends nothing`() {
+    fun `each button and quick action sends its command, anything else sends nothing`() {
         assertEquals(PlayerCommand.Prev, TileClicks.commandFor(TileClicks.PREVIOUS))
         assertEquals(PlayerCommand.Toggle, TileClicks.commandFor(TileClicks.TOGGLE))
         assertEquals(PlayerCommand.Next, TileClicks.commandFor(TileClicks.NEXT))
+        assertEquals(PlayerCommand.ToggleLike, TileClicks.commandFor(TileClicks.LIKE))
+        assertEquals(
+            PlayerCommand.PlayMedia(MediaKind.SHUFFLE_ALL, "all", mode = PlayMode.NOW),
+            TileClicks.commandFor(TileClicks.SHUFFLE_ALL)
+        )
+        assertEquals(
+            PlayerCommand.PlayMedia(MediaKind.FAVORITES, "all", mode = PlayMode.NOW),
+            TileClicks.commandFor(TileClicks.FAVORITES)
+        )
         assertNull(TileClicks.commandFor("open"))
         assertNull(TileClicks.commandFor(""))
         assertNull(TileClicks.commandFor(null))

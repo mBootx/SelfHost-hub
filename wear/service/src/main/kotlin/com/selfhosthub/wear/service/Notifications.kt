@@ -11,8 +11,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
-import com.selfhosthub.wear.core.PlayerCommand
 import com.selfhosthub.wear.service.link.PlayerSnapshot
+import com.selfhosthub.wear.service.tile.TileClicks
 import kotlinx.coroutines.launch
 
 object Notifications {
@@ -152,12 +152,7 @@ object Notifications {
 class PlaybackActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val name = intent.action?.removePrefix(PREFIX) ?: return
-        val command = when (name) {
-            PREVIOUS -> PlayerCommand.Prev
-            TOGGLE -> PlayerCommand.Toggle
-            NEXT -> PlayerCommand.Next
-            else -> return
-        }
+        val command = TileClicks.commandFor(name) ?: return
         // The process may end as soon as this returns: the command is handed to the data layer first.
         val pending: PendingResult? = goAsync()
         val graph = context.watchGraph()
@@ -172,8 +167,11 @@ class PlaybackActionReceiver : BroadcastReceiver() {
 
     companion object {
         const val PREFIX = "com.selfhosthub.wear.action."
-        const val PREVIOUS = "previous"
-        const val TOGGLE = "toggle"
-        const val NEXT = "next"
+        const val PREVIOUS = TileClicks.PREVIOUS
+        const val TOGGLE = TileClicks.TOGGLE
+        const val NEXT = TileClicks.NEXT
+        const val LIKE = TileClicks.LIKE
+        const val SHUFFLE_ALL = TileClicks.SHUFFLE_ALL
+        const val FAVORITES = TileClicks.FAVORITES
     }
 }

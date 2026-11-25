@@ -17,9 +17,18 @@ use crate::protocol::{DeviceInfo, error_json, parse_hello, plan_push};
 use crate::{AppState, VERSION};
 
 const MAX_FRAME: usize = 16 * 1024 * 1024;
+const MAX_RESUME_BYTES: usize = 512 * 1024;
+const AUTO_RESUME_EVERY: Duration = Duration::from_secs(30);
+const RESUME_STATE_KEYS: [&str; 8] = ["song", "upNext", "isPlaying", "currentTime", "duration", "shuffle", "repeatMode", "volume"];
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 const PING_EVERY: Duration = Duration::from_secs(30);
 const DEAD_AFTER: Duration = Duration::from_secs(75);
+
+#[derive(Default)]
+struct AutoResume {
+    last_song_id: Option<String>,
+    last_at: Option<Instant>,
+}
 
 pub async fn upgrade(
     State(state): State<AppState>,
@@ -119,9 +128,14 @@ async fn connection(mut socket: WebSocket, state: AppState, ip: IpAddr) {
 
     let user = hello.user.to_lowercase();
     let device = hello.device;
+    let mut features = vec!["remote", "listening", "resume"];
+    if state.downtify.is_some() {
+        features.push("downtify");
+    }
+    let api_token = state.client_token.sign(&user, crate::admin::unix_now() + crate::downtify::TOKEN_TTL);
     let welcome = json!({
         "type": "welcome", "accepted": true, "user": user, "deviceId": device.device_id,
-        "serverVersion": VERSION, "features": ["remote", "listening"],
+        "serverVersion": VERSION, "features": features, "apiToken": api_token,
     });
     if socket.send(text(welcome.to_string())).await.is_err() {
         return;
@@ -137,7 +151,21 @@ async fn connection(mut socket: WebSocket, state: AppState, ip: IpAddr) {
 
     let (tx, mut rx) = unbounded_channel();
     let conn_id = state.hub.join(&user, device.clone(), tx, ip);
-    run(&mut socket, &state, &user, &device, &mut rx).await;
+    let resume_ok = {
+        let db = state.db.clone();
+        let u = user.clone();
+        match tokio::task::spawn_blocking(move || db.get_resume(&u)).await {
+            Ok(Ok(Some(r))) => socket.send(text(resume_state_json(Some(&r)))).await.is_ok(),
+            Ok(Ok(None)) => true,
+            other => {
+                tracing::warn!("get_resume on connect: {other:?}");
+                true
+            }
+        }
+    };
+    if resume_ok {
+        run(&mut socket, &state, &user, &device, &mut rx).await;
+    }
     state.hub.leave(&user, &device.device_id, conn_id);
     tracing::info!(%user, device = %device.device_id, "device offline");
 }
@@ -152,6 +180,7 @@ async fn run(
     let mut shutdown = state.shutdown.clone();
     let mut last_seen = Instant::now();
     let mut last_ping = Instant::now();
+    let mut auto_resume = AutoResume::default();
     let mut tick = tokio::time::interval(Duration::from_secs(5));
     loop {
         tokio::select! {
@@ -160,7 +189,7 @@ async fn run(
                 last_seen = Instant::now();
                 match msg {
                     Message::Text(t) => {
-                        for reply in dispatch(state, user, device, t.as_str()).await {
+                        for reply in dispatch(state, user, device, &mut auto_resume, t.as_str()).await {
                             if socket.send(text(reply)).await.is_err() {
                                 return;
                             }
@@ -203,7 +232,13 @@ async fn run(
 }
 
 /// Handles one text frame; returns the frames to send back to the sender.
-async fn dispatch(state: &AppState, user: &str, device: &DeviceInfo, raw: &str) -> Vec<String> {
+async fn dispatch(
+    state: &AppState,
+    user: &str,
+    device: &DeviceInfo,
+    auto_resume: &mut AutoResume,
+    raw: &str,
+) -> Vec<String> {
     let Ok(msg) = serde_json::from_str::<Value>(raw) else {
         return vec![error_json("bad-message", "not JSON")];
     };
@@ -212,16 +247,114 @@ async fn dispatch(state: &AppState, user: &str, device: &DeviceInfo, raw: &str) 
     };
     match kind {
         "state" => {
-            state.hub.relay_state(user, &device.device_id, msg);
+            state.hub.relay_state(user, &device.device_id, msg.clone());
+            maybe_auto_save_resume(state, user, device, auto_resume, &msg);
             vec![]
         }
         "command" => match state.hub.relay_command(user, &device.device_id, &msg) {
             Ok(()) => vec![],
             Err(m) => vec![error_json("bad-command", &m)],
         },
+        "sessions.refresh" => state.hub.session_frames(user, &device.device_id),
         "listening.push" => listening_push(state, user, device, &msg).await,
         "listening.pull" => listening_pull(state, user, device, &msg).await,
+        "resume.save" => resume_save(state, user, device, &msg).await,
+        "resume.get" => resume_get(state, user).await,
         _ => vec![],
+    }
+}
+
+fn resume_state_json(row: Option<&crate::db::ResumeRow>) -> String {
+    match row {
+        Some(r) => json!({
+            "type": "resume.state",
+            "deviceId": r.device_id,
+            "deviceName": r.device_name,
+            "platform": r.platform,
+            "updatedAt": r.updated_at,
+            "state": r.state,
+        })
+        .to_string(),
+        None => json!({"type": "resume.state", "state": Value::Null}).to_string(),
+    }
+}
+
+fn maybe_auto_save_resume(
+    state: &AppState,
+    user: &str,
+    device: &DeviceInfo,
+    auto: &mut AutoResume,
+    msg: &Value,
+) {
+    let Some(song) = msg.get("song").filter(|v| v.is_object()) else {
+        return;
+    };
+    let song_id = song.get("id").and_then(Value::as_str).map(str::to_string);
+    let song_changed = song_id != auto.last_song_id;
+    let paused = msg.get("isPlaying").and_then(Value::as_bool) == Some(false);
+    let due = auto.last_at.is_none_or(|t| t.elapsed() >= AUTO_RESUME_EVERY);
+    if !(song_changed || paused || due) {
+        return;
+    }
+    auto.last_song_id = song_id;
+    auto.last_at = Some(Instant::now());
+
+    let mut clean = serde_json::Map::new();
+    if let Some(obj) = msg.as_object() {
+        for key in RESUME_STATE_KEYS {
+            if let Some(v) = obj.get(key) {
+                clean.insert(key.into(), v.clone());
+            }
+        }
+    }
+    let text = Value::Object(clean).to_string();
+    if text.len() > MAX_RESUME_BYTES {
+        return;
+    }
+    let (db, u, d) = (state.db.clone(), user.to_string(), device.clone());
+    tokio::spawn(async move {
+        let _ = tokio::task::spawn_blocking(move || db.save_resume(&u, &d, &text)).await;
+    });
+}
+
+async fn resume_save(state: &AppState, user: &str, device: &DeviceInfo, msg: &Value) -> Vec<String> {
+    let Some(state_val) = msg.get("state").filter(|v| v.is_object()) else {
+        return vec![error_json("bad-message", "state must be an object")];
+    };
+    let text = state_val.to_string();
+    if text.len() > MAX_RESUME_BYTES {
+        return vec![error_json("too-large", "resume state is over 512 KiB")];
+    }
+    let (db, u, d) = (state.db.clone(), user.to_string(), device.clone());
+    match tokio::task::spawn_blocking(move || db.save_resume(&u, &d, &text)).await {
+        Ok(Ok(ts)) => {
+            let broadcast = json!({
+                "type": "resume.state",
+                "deviceId": device.device_id,
+                "deviceName": device.device_name,
+                "platform": device.platform,
+                "updatedAt": ts,
+                "state": state_val,
+            })
+            .to_string();
+            state.hub.notify_others(user, &device.device_id, &broadcast);
+            vec![json!({"type": "resume.ack", "updatedAt": ts}).to_string()]
+        }
+        other => {
+            tracing::error!("resume.save failed: {other:?}");
+            vec![error_json("bad-message", "server error")]
+        }
+    }
+}
+
+async fn resume_get(state: &AppState, user: &str) -> Vec<String> {
+    let (db, u) = (state.db.clone(), user.to_string());
+    match tokio::task::spawn_blocking(move || db.get_resume(&u)).await {
+        Ok(Ok(row)) => vec![resume_state_json(row.as_ref())],
+        other => {
+            tracing::error!("resume.get failed: {other:?}");
+            vec![error_json("bad-message", "server error")]
+        }
     }
 }
 

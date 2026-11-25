@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.0 — 2026-11-25
+
+### Added
+- **Spotify Connect-style sync & switching (Phone, Desktop & Hub).** Connected devices refresh active sessions every 5 s, default to whichever device is already playing on the same account, and switch audio/control in one tap (`Écoute sur <appareil>`).
+- **Cross-device offline resume (Phone, Desktop & Hub).** Playback state (track, queue, position) is saved on the hub server (`resume.save` / `resume.state`) so you can resume from another device even after the first one closes or sleeps.
+- **Remote Downtify proxy via Hub (Phone, Desktop & Hub).** Download and browse Downtify away from home through `/api/downtify/*` using your Navidrome login without exposing port 8087 on your router.
+- **Desktop Wrapped parity & audio polish.** Added the *Rétrospective* view (day/week/month/year/custom, drillable chart, top albums, canvas share card) pulling synced hub weeks, plus ReplayGain volume normalization and a 10 s sleep-timer fade-out.
+- **Mobile smart offline cache & Wi-Fi pre-caching.** Added a configurable auto-cache size limit with LRU eviction (never touching manual downloads, active tracks, kept playlists, or favorites) and upcoming queue pre-caching on Wi-Fi.
+- **Widget & Wear OS Tile quick actions.** Added *Like*, *Mix aléatoire*, and *Titres aimés* buttons to the Android home-screen widget and Wear OS Tile.
+- **Hub Admin & Gate improvements.** Added read-only container logs viewer, disk/temperature/container/Navidrome health alerts (with optional Discord/ntfy webhook), daily `hub.db` hot backups (`VACUUM INTO`), and a `/gate` service launcher.
+- **Settings shortcut (Phone).** Linked *Serveur Hub & Contrôle à distance* directly from *Réglages → Appareils et sécurité*.
+
 ## 3.5.0 — 2026-11-25
 
 ### Added

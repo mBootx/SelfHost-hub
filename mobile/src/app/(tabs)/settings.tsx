@@ -1,6 +1,6 @@
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Cloud, SlidersHorizontal, Download, Palette, Car, Watch, ImageUp, Lock, HardDriveDownload, Info } from 'lucide-react-native'
+import { Cloud, SlidersHorizontal, Download, Palette, Car, Watch, ImageUp, Lock, HardDriveDownload, Info, Cast } from 'lucide-react-native'
 import { installedVersion } from '@/services/appUpdate'
 import WrappedSection from '@/components/settings/WrappedSection'
 import { useUpdateStore } from '@/store/updateStore'
@@ -29,9 +29,13 @@ export default function SettingsTab() {
   const navidromeStatus = useNavidromeStore((s) => s.status)
   const fileBrowserStatus = useFileBrowserStore((s) => s.status)
   const downtifyStatus = useDowntifyStore((s) => s.status)
+  const downtifyViaHub = useDowntifyStore((s) => s.viaHub)
   const downtifyQueue = useDowntifyStore((s) => s.queue)
   const remoteEnabled = useRemoteStore((s) => s.enabled)
   const remoteStatus = useRemoteStore((s) => s.status)
+  const serverUrl = useRemoteStore((s) => s.serverUrl)
+  const serverUser = useRemoteStore((s) => s.serverUser)
+  const serverName = useRemoteStore((s) => s.serverName)
   const availableUpdate = useUpdateStore((s) => s.update)
   const checkForUpdate = useUpdateStore((s) => s.check)
   const crossfadeSeconds = useAudioSettingsStore((s) => s.crossfadeSeconds)
@@ -45,6 +49,18 @@ export default function SettingsTab() {
   const accentName = ACCENT_PRESETS.find((p) => p.hex.toLowerCase() === appearance.accent.toLowerCase())?.label ?? 'Perso'
   const connectedServices = [navidromeStatus, fileBrowserStatus, downtifyStatus].filter((s) => s === 'connected').length
   const activeDownloads = downtifyQueue.filter((q) => q.status === 'downloading' || q.status === 'queued').length
+  const remoteMeta =
+    remoteEnabled && remoteStatus === 'connected'
+      ? serverUrl
+        ? serverUser
+          ? `Connecté · ${serverUser}`
+          : serverName
+            ? `Connecté · ${serverName}`
+            : 'Connecté au serveur Hub'
+        : 'Connecté au PC'
+      : remoteEnabled && remoteStatus === 'connecting'
+        ? 'Connexion en cours…'
+        : 'Configurer le serveur ou le PC'
 
   function open(section: SettingsSectionId): void {
     router.push({ pathname: '/settings/[section]', params: { section } })
@@ -88,7 +104,13 @@ export default function SettingsTab() {
               icon={Download}
               tone={colors.downtify}
               title={SETTINGS_SECTIONS.downtify.title}
-              meta={activeDownloads > 0 ? `${activeDownloads} en cours · format et qualité` : 'File d’attente, format et qualité'}
+              meta={
+                activeDownloads > 0
+                  ? `${activeDownloads} en cours${downtifyViaHub ? ' · via serveur Hub' : ' · format et qualité'}`
+                  : downtifyViaHub
+                    ? 'Connecté via serveur Hub · file d’attente'
+                    : 'File d’attente, format et qualité'
+              }
               onPress={() => open('downtify')}
             />
           ) : null}
@@ -110,6 +132,7 @@ export default function SettingsTab() {
 
         <GroupLabel>Appareils et sécurité</GroupLabel>
         <SettingsCard>
+          <SettingsRow icon={Cast} title="Serveur Hub & Contrôle à distance" meta={remoteMeta} onPress={() => router.push('/devices')} />
           <SettingsRow icon={Watch} title={SETTINGS_SECTIONS.montre.title} meta="Envoyer la bibliothèque à la montre" onPress={() => open('montre')} />
           <SettingsRow icon={ImageUp} title={SETTINGS_SECTIONS.photos.title} meta="Envoi automatique vers FileBrowser" onPress={() => open('photos')} />
           <SettingsRow icon={Lock} title={SETTINGS_SECTIONS.verrouillage.title} meta="Code, schéma ou empreinte à l'ouverture" onPress={() => open('verrouillage')} />
