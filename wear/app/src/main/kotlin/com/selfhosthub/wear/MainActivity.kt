@@ -6,21 +6,27 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.wear.ambient.AmbientLifecycleObserver
 import com.selfhosthub.wear.core.LinkProtocol
 import com.selfhosthub.wear.service.WatchGraph
 import com.selfhosthub.wear.service.WatchGraphProvider
 import com.selfhosthub.wear.service.link.LinkLeases
+import com.selfhosthub.wear.service.update.PendingConfirm
 import com.selfhosthub.wear.ui.WatchApp
 import com.selfhosthub.wear.ui.common.AmbientState
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -66,6 +72,7 @@ class MainActivity : ComponentActivity() {
         lifecycle.addObserver(AmbientLifecycleObserver(this, callback))
 
         askForPermissionsOnce()
+        showUpdateConfirmations()
 
         setContent {
             val state by ambient.collectAsStateWithLifecycle()
@@ -101,14 +108,36 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
-    /** The notification (the chip with the music playing) is asked for once, not at every launch. */
+    /**
+     * While the app is in front, the installer's "confirm this update" screen is shown as soon as there is one (see
+     * PendingConfirm): from a notification nobody saw, or because the phone opened the app for it.
+     */
+    private fun showUpdateConfirmations() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                PendingConfirm.intent.filterNotNull().collect {
+                    val confirm = PendingConfirm.take() ?: return@collect
+                    try {
+                        startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (e: Exception) {
+                        Log.w("WatchUpdate", "Could not show the update confirmation: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The notification permission (the chip with the music playing, the update confirmation) is asked for once per
+     * version of the app while it is not granted, not at every launch: one refusal must not hide every later update.
+     */
     private fun askForPermissionsOnce() {
         val prefs = getSharedPreferences("selfhost_wear_ui", MODE_PRIVATE)
-        if (prefs.getBoolean("permissionsAsked", false)) return
+        if (prefs.getLong("permissionsAskedFor", -1L) == BuildConfig.VERSION_CODE.toLong()) return
         val wanted = buildList {
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-        prefs.edit { putBoolean("permissionsAsked", true) }
+        prefs.edit { putLong("permissionsAskedFor", BuildConfig.VERSION_CODE.toLong()) }
         if (wanted.isNotEmpty()) permissions.launch(wanted.toTypedArray())
     }
 }

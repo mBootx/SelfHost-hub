@@ -321,4 +321,20 @@ class SubsonicApiTest {
         }
         assertEquals(listOf("Seule"), api.playlists().map { it.name })
     }
+
+    @Test
+    fun `lrc timestamps are parsed and active line is found`() {
+        val parsed = com.selfhosthub.wear.data.net.LrcParser.parse(
+            "[00:12.50] Première ligne\n[01:05.00][02:10.250] Refrain"
+        )
+        assertEquals(3, parsed.size)
+        assertEquals(12.5, parsed[0].timeSeconds, 1e-6)
+        assertEquals("Première ligne", parsed[0].text)
+        assertEquals(65.0, parsed[1].timeSeconds, 1e-6)
+        assertEquals(130.25, parsed[2].timeSeconds, 1e-6)
+        assertEquals(-1, com.selfhosthub.wear.data.net.LrcParser.activeIndex(parsed, 5.0))
+        assertEquals(0, com.selfhosthub.wear.data.net.LrcParser.activeIndex(parsed, 20.0))
+        assertEquals(1, com.selfhosthub.wear.data.net.LrcParser.activeIndex(parsed, 90.0))
+        assertEquals(2, com.selfhosthub.wear.data.net.LrcParser.activeIndex(parsed, 140.0))
+    }
 }

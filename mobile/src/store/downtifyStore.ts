@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { describeError, logEvent } from '@/services/diagnostics'
 import { DowntifyClient, DowntifySong, QueueItem } from '@/services/downtify'
+import { scanLibrary } from '@/services/libraryScan'
 import { storage } from '@/services/storage'
 import { ConnectionStatus } from '@/types'
 
@@ -15,8 +16,11 @@ interface DowntifyState {
   error: string | null
 
   queue: QueueItem[]
+  completedSongs: DowntifySong[]
   /** Songs fired at the server but not yet reflected by a queue poll - see startPolling. */
   activeDownloads: number
+  /** Timestamp bumped whenever a Downtify download finishes and Navidrome has scanned it. */
+  lastCompletedAt: number
   pollHandle: ReturnType<typeof setInterval> | null
 
   connect: (url: string, remember: boolean) => Promise<void>
@@ -36,7 +40,9 @@ export const useDowntifyStore = create<DowntifyState>((set, get) => ({
   status: 'disconnected',
   error: null,
   queue: [],
+  completedSongs: [],
   activeDownloads: 0,
+  lastCompletedAt: 0,
   pollHandle: null,
 
   connect: async (url, remember) => {
@@ -80,11 +86,22 @@ export const useDowntifyStore = create<DowntifyState>((set, get) => ({
   },
 
   refreshQueue: async () => {
-    const { client } = get()
+    const { client, queue: prevQueue } = get()
     if (!client) return
     try {
+      const prevDone = new Set(prevQueue.filter((q) => q.status === 'done').map((q) => q.song.song_id))
       const queue = await client.getQueue()
       set({ queue })
+      const newlyDoneItems = queue.filter((q) => q.status === 'done' && !prevDone.has(q.song.song_id))
+      if (newlyDoneItems.length > 0) {
+        set((s) => {
+          const existing = new Set(s.completedSongs.map((c) => c.song_id))
+          const added = newlyDoneItems.map((q) => q.song).filter((c) => !existing.has(c.song_id))
+          return added.length > 0 ? { completedSongs: [...added, ...s.completedSongs] } : {}
+        })
+        await scanLibrary().catch(() => {})
+        set({ lastCompletedAt: Date.now() })
+      }
     } catch {
       // transient network hiccup, keep the last known queue
     }
@@ -123,6 +140,14 @@ export const useDowntifyStore = create<DowntifyState>((set, get) => ({
     setTimeout(() => get().refreshQueue(), 500)
     setTimeout(() => set((s) => ({ activeDownloads: Math.max(0, s.activeDownloads - 1) })), 5000)
     await client.downloadByUrl(song.url)
+    set((s) =>
+      s.completedSongs.some((c) => c.song_id === song.song_id)
+        ? {}
+        : { completedSongs: [song, ...s.completedSongs] }
+    )
+    await get().refreshQueue()
+    await scanLibrary().catch(() => {})
+    set({ lastCompletedAt: Date.now() })
   },
 
   requestDownload: async (query, type) => {

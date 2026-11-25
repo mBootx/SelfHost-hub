@@ -22,17 +22,24 @@ class InstallResultReceiver : BroadcastReceiver() {
         val code = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         val systemMessage = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
         Log.i(TAG, "The installer answered $code ($systemMessage)")
-        val status = InstallOutcomes.statusOf(code, systemMessage) ?: return
-        if (status.state == UpdateState.CONFIRM) {
-            // Android hands over the screen that asks for the confirmation; a notification is how it gets to the person
-            // (a receiver in the background cannot open a screen by itself).
-            confirmation(intent)?.let { Notifications.updateConfirm(context, it) }
+        var status = InstallOutcomes.statusOf(code, systemMessage) ?: return
+        // Android hands over the screen that asks for the confirmation. A receiver in the background cannot open a
+        // screen by itself: it is kept for the app's activity, announced by a notification when notifications are on,
+        // and the phone is asked to open the app on the watch, which then shows it straight away.
+        val confirm = if (status.state == UpdateState.CONFIRM) confirmation(intent) else null
+        if (confirm != null) {
+            PendingConfirm.offer(confirm)
+            if (!Notifications.updateConfirm(context, confirm)) {
+                Log.w(TAG, "Notifications are off: the confirmation is only shown when the app is opened")
+                status = status.copy(message = NO_NOTIFICATION)
+            }
         }
         val pending: PendingResult? = goAsync()
         val graph = context.watchGraph()
         graph.scope.launch {
             try {
                 graph.updates.report(status)
+                if (confirm != null) graph.updates.askPhoneToOpenApp()
             } finally {
                 pending?.finish()
             }
@@ -46,6 +53,8 @@ class InstallResultReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION = "com.selfhosthub.wear.action.INSTALL_RESULT"
         private const val TAG = "WatchUpdate"
+        const val NO_NOTIFICATION =
+            "Les notifications de SelfHost Hub sont désactivées sur la montre : ouvrez l’application sur la montre pour confirmer la mise à jour"
     }
 }
 
@@ -58,6 +67,7 @@ class PackageReplacedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         Notifications.cancel(context, Notifications.ID_UPDATE)
+        PendingConfirm.clear()
         val pending: PendingResult? = goAsync()
         val graph = context.watchGraph()
         graph.scope.launch {

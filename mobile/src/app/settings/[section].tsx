@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { View, Text, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native'
+import { View, Text, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, Switch, StyleSheet } from 'react-native'
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
-import { Music, FolderOpen, Download, HardDriveDownload, Check, Cast, RefreshCw, Sparkles, Server, Activity, ListMusic } from 'lucide-react-native'
+import { Music, FolderOpen, Download, HardDriveDownload, Heart, Check, Cast, RefreshCw, Sparkles, Server, Activity, ListMusic } from 'lucide-react-native'
 import { installedVersion } from '@/services/appUpdate'
+import { syncKeptPlaylists } from '@/services/keptPlaylists'
 import { useIsOwner } from '@/hooks/useIsOwner'
 import { useWhatsNewStore } from '@/store/whatsNewStore'
 import AppearanceSection from '@/components/settings/AppearanceSection'
@@ -229,6 +230,8 @@ function AppearancePage() {
 function StoragePage() {
   const offlineTracks = useOfflineStore((s) => s.tracks)
   const removeOffline = useOfflineStore((s) => s.removeOffline)
+  const keepFavorites = useOfflineStore((s) => s.keepFavorites)
+  const setKeepFavorites = useOfflineStore((s) => s.setKeepFavorites)
   const offlineIds = Object.keys(offlineTracks)
   const keptCount = useOfflineStore((s) => Object.keys(s.keptPlaylists).length)
   // The room the downloaded songs take: measured again when the list changes.
@@ -263,6 +266,23 @@ function StoragePage() {
             (keptCount > 0 ? ` · ${plural(keptCount, 'playlist gardée', 'playlists gardées')}` : '')
           }
           right={offlineIds.length > 0 ? <RowButton label="Vider" danger onPress={confirmClearOffline} accessibilityLabel="Vider les titres hors ligne" /> : undefined}
+        />
+        <SettingsRow
+          icon={Heart}
+          title="Garder les titres aimés hors ligne"
+          meta="Télécharge automatiquement vos favoris en Wi-Fi."
+          right={
+            <Switch
+              value={keepFavorites}
+              onValueChange={(next) => {
+                setKeepFavorites(next)
+                if (next) void syncKeptPlaylists(true)
+              }}
+              trackColor={{ false: colors.hover, true: colors.accent }}
+              thumbColor="#ffffff"
+              accessibilityLabel="Garder les titres aimés hors ligne"
+            />
+          }
         />
       </SettingsCard>
       <GroupLabel>Pochettes</GroupLabel>

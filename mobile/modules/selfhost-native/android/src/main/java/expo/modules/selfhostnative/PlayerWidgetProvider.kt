@@ -80,17 +80,19 @@ class PlayerWidgetProvider : AppWidgetProvider() {
       views.setOnClickPendingIntent(R.id.widget_toggle, command(context, "toggle", 1))
       views.setOnClickPendingIntent(R.id.widget_next, command(context, "next", 2))
       views.setOnClickPendingIntent(R.id.widget_previous, command(context, "previous", 3))
-      views.setImageViewResource(R.id.widget_cover, R.drawable.widget_cover_placeholder)
       val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
       if (open != null) {
         views.setOnClickPendingIntent(R.id.widget_root, PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
       }
+      // The cover is left out of this update: a partial update keeps the picture already on the widget, so a
+      // play/pause or a text change does not flash the placeholder before the cover is put back.
       manager.updateAppWidget(ids, views)
 
-      // The cover comes in later (it may need downloading); a second update puts it in.
       if (cover.isNotEmpty() && title.isNotEmpty()) {
+        // The cover comes in later (it may need downloading); a second update puts it in.
         NowPlayingArtwork.request(cover) { art ->
           if (art == null) return@request
+          // The widget may have been removed while the cover was on its way.
           val currentIds = ids(context)
           if (currentIds.isEmpty()) return@request
           val side = COVER_SIDE_PX
@@ -98,6 +100,10 @@ class PlayerWidgetProvider : AppWidgetProvider() {
           views.setImageViewBitmap(R.id.widget_cover, scaled)
           manager.updateAppWidget(currentIds, views)
         }
+      } else {
+        // Nothing playing: only now does the placeholder take the cover's place.
+        views.setImageViewResource(R.id.widget_cover, R.drawable.widget_cover_placeholder)
+        manager.updateAppWidget(ids, views)
       }
     }
   }

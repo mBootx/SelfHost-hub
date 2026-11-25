@@ -27,8 +27,11 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
@@ -103,9 +106,18 @@ fun ListScreen(
             state = state,
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Top)
+            verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.Top)
         ) {
-            item { ListHeader { Text(title, maxLines = 1) } }
+            item {
+                ListHeader {
+                    Text(
+                        title,
+                        maxLines = 1,
+                        style = MaterialTheme.typography.title3.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                        color = WatchColors.OnSurface
+                    )
+                }
+            }
             content()
         }
     }
@@ -202,10 +214,14 @@ fun MediaRow(
     val longPress = Modifier.onHold(onLongClick) { haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
     Chip(
         onClick = onClick,
-        label = { Text(title, maxLines = 1) },
-        secondaryLabel = subtitle?.let { { Text(it, maxLines = 1) } },
-        icon = { CoverBox(graph, coverId, ArtworkSize.THUMBNAIL, Modifier.size(32.dp), RoundedCornerShape(6.dp)) },
-        colors = ChipDefaults.secondaryChipColors(),
-        modifier = modifier.fillMaxWidth().height(if (subtitle != null) 52.dp else 44.dp).then(longPress)
+        label = { Text(title, maxLines = 1, fontWeight = FontWeight.Medium) },
+        secondaryLabel = subtitle?.let { { Text(it, maxLines = 1, color = WatchColors.OnSurfaceMuted) } },
+        icon = { CoverBox(graph, coverId, ArtworkSize.THUMBNAIL, Modifier.size(34.dp), RoundedCornerShape(8.dp)) },
+        colors = ChipDefaults.chipColors(
+            backgroundColor = Color(0xFF18191C),
+            contentColor = WatchColors.OnSurface,
+            secondaryContentColor = WatchColors.OnSurfaceMuted
+        ),
+        modifier = modifier.fillMaxWidth().height(if (subtitle != null) 52.dp else 46.dp).then(longPress)
     )
 }

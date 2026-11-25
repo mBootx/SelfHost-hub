@@ -17,14 +17,18 @@ import com.selfhosthub.wear.ui.library.AlbumRoute
 import com.selfhosthub.wear.ui.library.AllAlbumsRoute
 import com.selfhosthub.wear.ui.library.ArtistAlbumsRoute
 import com.selfhosthub.wear.ui.library.ArtistsRoute
+import com.selfhosthub.wear.ui.library.FavoritesRoute
 import com.selfhosthub.wear.ui.library.LibraryHomeContent
 import com.selfhosthub.wear.ui.library.PlaylistRoute
 import com.selfhosthub.wear.ui.library.PlaylistsRoute
 import com.selfhosthub.wear.ui.library.SearchRoute
+import com.selfhosthub.wear.ui.library.rememberMediaSender
 import com.selfhosthub.wear.ui.nowplaying.AmbientNowPlayingRoute
 import com.selfhosthub.wear.ui.nowplaying.ArtRoute
+import com.selfhosthub.wear.ui.nowplaying.LyricsRoute
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingPage
 import com.selfhosthub.wear.ui.nowplaying.NowPlayingRoute
+import com.selfhosthub.wear.ui.nowplaying.QueueRoute
 import com.selfhosthub.wear.ui.nowplaying.VolumeRoute
 import com.selfhosthub.wear.ui.settings.SettingsRoute
 import com.selfhosthub.wear.ui.setup.SetupContent
@@ -34,7 +38,10 @@ object Routes {
     const val NOW_PLAYING = "now-playing"
     const val ART = "art"
     const val VOLUME = "volume"
+    const val LYRICS = "lyrics"
+    const val QUEUE = "queue"
     const val LIBRARY = "library"
+    const val FAVORITES = "favorites"
     const val ARTISTS = "artists"
     const val ALBUMS = "albums"
     const val PLAYLISTS = "playlists"
@@ -83,23 +90,32 @@ fun WatchApp(graph: WatchGraph, ambient: AmbientState, versionName: String, play
                     onDevices = { nav.navigate(Routes.DEVICES) },
                     onSettings = { nav.navigate(Routes.SETTINGS) },
                     onArt = { nav.navigate(Routes.ART) },
-                    onVolume = { nav.navigate(Routes.VOLUME) }
+                    onVolume = { nav.navigate(Routes.VOLUME) },
+                    onLyrics = { nav.navigate(Routes.LYRICS) },
+                    onQueue = { nav.navigate(Routes.QUEUE) }
                 )
             }
             composable(Routes.ART) { ArtRoute(graph, onClose = { nav.popBackStack() }) }
             composable(Routes.VOLUME) { VolumeRoute(graph) }
+            composable(Routes.LYRICS) { LyricsRoute(graph) }
+            composable(Routes.QUEUE) { QueueRoute(graph) }
             composable(Routes.LIBRARY) {
                 if (setup == null) {
                     SetupContent()
                 } else {
+                    val sender = rememberMediaSender(graph)
                     LibraryHomeContent(
                         onArtists = { nav.navigate(Routes.ARTISTS) },
                         onAlbums = { nav.navigate(Routes.ALBUMS) },
                         onPlaylists = { nav.navigate(Routes.PLAYLISTS) },
-                        onSearch = { nav.navigate(Routes.SEARCH) }
+                        onSearch = { nav.navigate(Routes.SEARCH) },
+                        onFavorites = { nav.navigate(Routes.FAVORITES) },
+                        onShuffleAll = { sender.playShuffleAll() }
                     )
+                    sender.Host()
                 }
             }
+            composable(Routes.FAVORITES) { FavoritesRoute(graph) }
             composable(Routes.ARTISTS) { ArtistsRoute(graph) { artist -> nav.navigate(Routes.artist(artist.id)) } }
             composable(Routes.ALBUMS) { AllAlbumsRoute(graph) { album -> nav.navigate(Routes.album(album.id)) } }
             composable(Routes.PLAYLISTS) { PlaylistsRoute(graph) { playlist -> nav.navigate(Routes.playlist(playlist.id)) } }

@@ -349,7 +349,40 @@ export class NavidromeClient {
   async search(query: string): Promise<{ artists: NDArtist[]; albums: NDAlbum[]; songs: NDSong[] }> {
     const body = await this.call<any>('search3', { query, artistCount: '10', albumCount: '10', songCount: '20' })
     const r = body.searchResult3 || {}
-    return { artists: r.artist || [], albums: r.album || [], songs: r.song || [] }
+    const artists: NDArtist[] = r.artist || []
+    const albums: NDAlbum[] = r.album || []
+    let songs: NDSong[] = r.song || []
+    if (songs.length === 0) {
+      const norm = (s: string): string =>
+        s
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+      const tokens = norm(query)
+        .split(/[^a-z0-9]+/)
+        .filter((t) => t.length >= 2)
+      if (tokens.length >= 2) {
+        const probes = [...tokens].sort((a, b) => b.length - a.length).slice(0, 2)
+        const probeResults = await Promise.allSettled(
+          probes.map((p) => this.call<any>('search3', { query: p, artistCount: '0', albumCount: '0', songCount: '30' }))
+        )
+        const byId = new Map<string, NDSong>()
+        for (const pr of probeResults) {
+          if (pr.status === 'fulfilled') {
+            for (const s of (pr.value?.searchResult3?.song || []) as NDSong[]) {
+              byId.set(s.id, s)
+            }
+          }
+        }
+        const candidates = Array.from(byId.values())
+        const matched = candidates.filter((s) => {
+          const hay = norm(`${s.title} ${s.artist} ${s.album || ''}`)
+          return tokens.every((t) => hay.includes(t))
+        })
+        songs = matched.length > 0 ? matched.slice(0, 20) : candidates.slice(0, 20)
+      }
+    }
+    return { artists, albums, songs }
   }
 
   async star(id: string): Promise<void> {

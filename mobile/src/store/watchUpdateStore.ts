@@ -64,7 +64,8 @@ export const useWatchUpdate = create<WatchUpdateState>((set, get) => ({
         if (FROM_WATCH.includes(phase)) set({ phase: 'installing', progress: 1, message: null })
         return
       case 'confirm':
-        if (FROM_WATCH.includes(phase)) set({ phase: 'confirm', message: 'Confirmez la mise à jour sur la montre.' })
+        // The watch opens its app to show the confirmation; it says so when its notifications are off.
+        if (FROM_WATCH.includes(phase)) set({ phase: 'confirm', message: status.message ? `${status.message}.` : 'Confirmez la mise à jour sur la montre.' })
         return
       case 'refused': {
         if (!FROM_WATCH.includes(phase)) return

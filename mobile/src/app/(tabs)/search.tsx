@@ -13,6 +13,7 @@ import { Screen, SectionTitle, EmptyState } from '@/components/Screen'
 import SelectButton from '@/components/navidrome/SelectButton'
 import { useSelectionPool } from '@/hooks/useSelectionPool'
 import { NDAlbum, NDArtist, NDSong } from '@/services/navidrome'
+import { scanLibrary } from '@/services/libraryScan'
 import { prefetchCoverArt } from '@/services/imagePrefetch'
 import { DowntifySong } from '@/services/downtify'
 import { colors, layout, radius, spacing } from '@/constants/theme'
@@ -29,12 +30,15 @@ function SearchContent() {
   const currentSongId = useNavidromeStore((s) => s.queue[s.queueIndex]?.id)
   const isPlaying = useNavidromeStore((s) => s.isPlaying)
   const downtify = useDowntifyStore((s) => s.client)
+  const lastCompletedAt = useDowntifyStore((s) => s.lastCompletedAt)
   const loadLibrary = useNavidromeStore((s) => s.loadLibrary)
 
   const inputRef = useRef<TextInput>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Results>(EMPTY)
   const [downloadable, setDownloadable] = useState<DowntifySong[]>([])
+  const downloadableRef = useRef<DowntifySong[]>([])
+  downloadableRef.current = downloadable
   const [searching, setSearching] = useState(false)
   // Why the library could not be searched (the server out of reach): not the same as finding nothing.
   const [localError, setLocalError] = useState<string | null>(null)
@@ -46,20 +50,47 @@ function SearchContent() {
 
   /** Searches the library and Downtify for `term` and shows what comes back, unless a newer search has started since. */
   const runSearch = useCallback(
-    async (term: string): Promise<void> => {
+    async (term: string, localOnly = false): Promise<void> => {
       if (!client) return
       const mine = ++ticket.current
+      const currentDownloadableIds = new Set(downloadableRef.current.map((s) => s.song_id))
+      const dtState = useDowntifyStore.getState()
+      const doneSongs = [
+        ...dtState.completedSongs,
+        ...dtState.queue.filter((q) => q.status === 'done').map((q) => q.song)
+      ].filter((s) => currentDownloadableIds.has(s.song_id))
+      const doneTitles = Array.from(new Set(doneSongs.map((s) => s.name))).filter(
+        (name) => name && name.toLowerCase() !== term.toLowerCase()
+      )
+
       // Local library and Downtify are searched together; allSettled so a
       // sleeping Downtify box never costs us the Navidrome results.
-      const [local, remote] = await Promise.allSettled([
+      const [local, remote, ...extraLocals] = await Promise.allSettled([
         client.search(term),
-        downtify ? downtify.searchSongs(term) : Promise.resolve([] as DowntifySong[])
+        !localOnly && downtify ? downtify.searchSongs(term) : Promise.resolve(downloadableRef.current),
+        ...doneTitles.slice(0, 3).map((title) => client.search(title))
       ])
       if (ticket.current !== mine) return
-      const localResults = local.status === 'fulfilled' ? local.value : EMPTY
+      const baseLocal = local.status === 'fulfilled' ? local.value : EMPTY
+      const songMap = new Map<string, NDSong>()
+      for (const s of baseLocal.songs) songMap.set(s.id, s)
+      for (const extra of extraLocals) {
+        if (extra.status === 'fulfilled') {
+          for (const s of extra.value.songs) {
+            if (!songMap.has(s.id)) songMap.set(s.id, s)
+          }
+        }
+      }
+      const localResults: Results = {
+        artists: baseLocal.artists,
+        albums: baseLocal.albums,
+        songs: Array.from(songMap.values())
+      }
       setResults(localResults)
       setLocalError(local.status === 'rejected' ? (local.reason instanceof Error ? local.reason.message : 'Serveur injoignable') : null)
-      setDownloadable(remote.status === 'fulfilled' ? remote.value : [])
+      if (!localOnly) {
+        setDownloadable(remote.status === 'fulfilled' ? remote.value : [])
+      }
       setSearching(false)
       prefetchCoverArt(client, localResults.albums.map((a) => a.coverArt), 300)
       prefetchCoverArt(client, localResults.artists.map((a) => a.coverArt), 100)
@@ -84,13 +115,24 @@ function SearchContent() {
     return () => clearTimeout(timer)
   }, [query, client, runSearch])
 
-  // Pulled down: the same search again, with what is on the server now (a scan, a finished Downtify download), and
-  // the library lists read again. The results stay on screen meanwhile.
+  // Whenever a Downtify download finishes and Navidrome has scanned it, refresh the local hits automatically.
+  useEffect(() => {
+    if (!lastCompletedAt) return
+    const term = query.trim()
+    if (client && term.length >= MIN_QUERY) {
+      void runSearch(term, downloadableRef.current.length > 0)
+    }
+  }, [lastCompletedAt, client, query, runSearch])
+
+  // Pulled down: scan the server for any newly downloaded files, reload library lists, and re-run the search.
   async function handleRefresh(): Promise<void> {
     setRefreshing(true)
     try {
       const term = query.trim()
-      await Promise.all([loadLibrary(), term.length >= MIN_QUERY ? runSearch(term) : Promise.resolve()])
+      await scanLibrary().catch(() => loadLibrary())
+      if (term.length >= MIN_QUERY) {
+        await runSearch(term, downloadableRef.current.length > 0)
+      }
     } finally {
       setRefreshing(false)
     }

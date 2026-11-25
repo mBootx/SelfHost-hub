@@ -23,8 +23,6 @@ const TABS: Record<string, { icon: IconComponent; label: string; name: string }>
 }
 
 interface TabItemProps {
-  routeKey: string
-  routeName: string
   focused: boolean
   tab: { icon: IconComponent; label: string; name: string }
   duration: number
@@ -34,42 +32,22 @@ interface TabItemProps {
 
 function TabItem({ focused, tab, duration, animationType, onPress }: TabItemProps) {
   const Icon = tab.icon
+  const animated = animationType !== 'none'
+  const span = Math.min(duration, 220)
 
-  const pillStyle = useAnimatedStyle(() => {
-    if (animationType === 'none') {
-      return { opacity: focused ? 1 : 0 }
-    }
-    return {
-      opacity: withTiming(focused ? 1 : 0, { duration: Math.min(duration, 220) })
-    }
-  }, [focused, animationType, duration])
-
-  const iconStyle = useAnimatedStyle(() => {
-    if (animationType === 'none') {
-      return { transform: [{ scale: 1 }] }
-    }
-    return {
-      transform: [
-        {
-          scale: withTiming(focused ? 1.08 : 1.0, { duration: Math.min(duration, 220) })
-        }
-      ]
-    }
-  }, [focused, animationType, duration])
-
-  const labelStyle = useAnimatedStyle(() => {
-    if (animationType === 'none') {
-      return { opacity: focused ? 1 : 0, transform: [{ translateY: 0 }] }
-    }
-    return {
-      opacity: withTiming(focused ? 1 : 0, { duration: Math.min(duration, 200) }),
-      transform: [
-        {
-          translateY: withTiming(focused ? 0 : 2, { duration: Math.min(duration, 200) })
-        }
-      ]
-    }
-  }, [focused, animationType, duration])
+  // Each style is a value that is animated to its target; with the animations off it simply is the target.
+  const pillStyle = useAnimatedStyle(() => ({ opacity: animated ? withTiming(focused ? 1 : 0, { duration: span }) : focused ? 1 : 0 }), [focused, animated, span])
+  const iconStyle = useAnimatedStyle(
+    () => ({ transform: [{ scale: animated ? withTiming(focused ? 1.08 : 1, { duration: span }) : 1 }] }),
+    [focused, animated, span]
+  )
+  const labelStyle = useAnimatedStyle(
+    () => ({
+      opacity: animated ? withTiming(focused ? 1 : 0, { duration: span }) : focused ? 1 : 0,
+      transform: [{ translateY: animated ? withTiming(focused ? 0 : 2, { duration: span }) : 0 }]
+    }),
+    [focused, animated, span]
+  )
 
   return (
     <Pressable
@@ -86,13 +64,12 @@ function TabItem({ focused, tab, duration, animationType, onPress }: TabItemProp
           <Icon size={23} color={focused ? colors.accent : colors.textMuted} strokeWidth={focused ? 2.4 : 1.9} />
         </Animated.View>
       </View>
-      {focused && (
-        <Animated.View style={labelStyle}>
-          <Text style={styles.label} numberOfLines={1}>
-            {tab.label}
-          </Text>
-        </Animated.View>
-      )}
+      {/* Always there, so that it can fade out as well as in; hidden from screen readers while it is invisible. */}
+      <Animated.View style={labelStyle} importantForAccessibility="no-hide-descendants">
+        <Text style={styles.label} numberOfLines={1}>
+          {tab.label}
+        </Text>
+      </Animated.View>
     </Pressable>
   )
 }
@@ -119,8 +96,6 @@ export default function TabBar({ state, navigation, insets }: BottomTabBarProps)
         return (
           <TabItem
             key={route.key}
-            routeKey={route.key}
-            routeName={route.name}
             focused={focused}
             tab={tab}
             duration={durationMs}

@@ -3,6 +3,8 @@ import * as Device from 'expo-device'
 import { describeError, logEvent } from '@/services/diagnostics'
 import { useNavidromeStore, RepeatMode } from './navidromeStore'
 import { engine, seekTo } from '@/services/playbackEngine'
+import { primeResumePosition } from '@/services/playbackMemory'
+import { useSleepTimerStore } from '@/services/sleepTimer'
 import { storage } from '@/services/storage'
 import {
   RemoteHubClient,
@@ -88,6 +90,10 @@ interface RemoteControlState {
   disconnect: () => void
   selectDevice: (id: string) => void
   sendCommand: (action: string, payload?: unknown) => void
+  /** Pulls playback (song, upNext, playhead, shuffle, repeatMode) from `fromDeviceId` onto this phone. */
+  handoffToHere: (fromDeviceId?: string) => boolean
+  /** Pushes this phone's current playback to `targetDeviceId` and switches control to it. */
+  handoffToDevice: (targetDeviceId: string) => boolean
 }
 
 let subscribedToPlayback = false
@@ -109,6 +115,35 @@ function navidromeAuth(nonce: string): { user: string; token: string } | null {
   if (!client) return null
   const login = client.sharedLogin(nonce)
   return { user: login.username, token: login.token }
+}
+
+function applyHandoff(payload: any): void {
+  if (!payload?.song?.id) return
+  const s = useNavidromeStore.getState()
+  const toSong = (item: any) => ({
+    id: String(item.id),
+    title: String(item.title || 'Sans titre'),
+    artist: String(item.artist || 'Artiste inconnu'),
+    album: item.album ? String(item.album) : undefined,
+    albumId: item.albumId ? String(item.albumId) : undefined,
+    coverArt: item.coverArt ? String(item.coverArt) : undefined,
+    duration: Number.isFinite(Number(item.duration)) ? Number(item.duration) : 0
+  })
+  const songs = [toSong(payload.song), ...(Array.isArray(payload.upNext) ? payload.upNext.filter((x: any) => x?.id).map(toSong) : [])]
+  const seconds = Number(payload.currentTime)
+  const resumeAt = Number.isFinite(seconds) && seconds > 0 ? seconds : 0
+  s.playQueue(songs, 0)
+  if (payload.repeatMode === 'off' || payload.repeatMode === 'all' || payload.repeatMode === 'one') {
+    s.setRepeatMode(payload.repeatMode as RepeatMode)
+  }
+  if (typeof payload.shuffle === 'boolean' && useNavidromeStore.getState().shuffle !== payload.shuffle) {
+    useNavidromeStore.getState().toggleShuffle()
+  }
+  if (resumeAt > 0) {
+    useNavidromeStore.setState({ currentTime: resumeAt })
+    primeResumePosition(songs[0].id, resumeAt)
+    seekTo(resumeAt)
+  }
 }
 
 /** Plays what another device asked for. Anything out of range or of an unknown kind is ignored. */
@@ -151,6 +186,18 @@ export function applyCommandLocally(action: string, payload: any): void {
     case 'setRepeatMode':
       if (payload?.mode === 'off' || payload?.mode === 'all' || payload?.mode === 'one') s.setRepeatMode(payload.mode as RepeatMode)
       break
+    case 'setSleepTimer': {
+      const minutes = Number(payload?.minutes)
+      if (!Number.isFinite(minutes)) break
+      const sleep = useSleepTimerStore.getState()
+      if (minutes === 0) sleep.cancel()
+      else if (minutes === -1) sleep.stopAfterTrack()
+      else if (minutes > 0) sleep.startTimer(minutes)
+      break
+    }
+    case 'handoff':
+      applyHandoff(payload)
+      break
   }
 }
 
@@ -167,6 +214,15 @@ function setPlaying(playing: boolean): void {
 export function currentStatePayload(): RemoteDeviceState {
   const state = useNavidromeStore.getState()
   const song = state.queue[state.queueIndex] || null
+  const upNext = state.queue.slice(state.queueIndex + 1, state.queueIndex + 11).map((s) => ({
+    id: s.id,
+    title: s.title,
+    artist: s.artist,
+    album: s.album,
+    albumId: s.albumId,
+    coverArt: s.coverArt,
+    duration: s.duration
+  }))
   return {
     song: song
       ? {
@@ -184,7 +240,8 @@ export function currentStatePayload(): RemoteDeviceState {
     duration: state.duration,
     shuffle: state.shuffle,
     repeatMode: state.repeatMode,
-    volume: state.volume
+    volume: state.volume,
+    ...(upNext.length > 0 ? { upNext } : {})
   }
 }
 
@@ -516,6 +573,33 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
         return
       }
       client?.sendCommand(selectedDeviceId, action, payload)
+    },
+
+    handoffToHere: (fromDeviceId) => {
+      const { selectedDeviceId, devices, client } = get()
+      const sourceId =
+        fromDeviceId ||
+        (selectedDeviceId !== LOCAL_DEVICE_ID ? selectedDeviceId : Object.keys(devices).find((id) => devices[id]?.song))
+      const remoteState = sourceId ? devices[sourceId] : null
+      if (!sourceId || !remoteState?.song) return false
+      client?.sendCommand(sourceId, 'pause')
+      set({ selectedDeviceId: LOCAL_DEVICE_ID })
+      applyHandoff(remoteState)
+      return true
+    },
+
+    handoffToDevice: (targetDeviceId) => {
+      const { client } = get()
+      if (!targetDeviceId || targetDeviceId === LOCAL_DEVICE_ID || !client) return false
+      const payload = currentStatePayload()
+      if (!payload.song) {
+        get().selectDevice(targetDeviceId)
+        return false
+      }
+      if (useNavidromeStore.getState().isPlaying) setPlaying(false)
+      client.sendCommand(targetDeviceId, 'handoff', payload)
+      set({ selectedDeviceId: targetDeviceId })
+      return true
     }
   }
 })

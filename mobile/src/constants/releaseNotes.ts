@@ -9,6 +9,70 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.5.0',
+    items: [
+      {
+        title: 'Mise à jour de la montre réparée',
+        text: 'La confirmation de mise à jour s’affiche maintenant dès que l’application est ouverte sur la montre, même quand ses notifications sont désactivées, et le téléphone vous indique quoi faire.'
+      },
+      {
+        title: 'Serveur SelfHost Hub',
+        text: 'Connectez l’application au serveur du hub (Appareils) pour synchroniser votre historique d’écoute et piloter vos autres appareils à distance.'
+      },
+      {
+        title: 'Wrapped repensé',
+        text: 'Choisissez la période (semaine, mois, année ou dates précises) et touchez le graphique pour explorer vos écoutes.'
+      },
+      {
+        title: 'Réglages réorganisés et lecture plus stable',
+        text: 'Les réglages sont classés en sous-pages, et la lecture ne coupe plus quand l’écran est éteint.'
+      }
+    ]
+  },
+  {
+    version: '3.4.0',
+    items: [
+      {
+        title: 'Playlists hors ligne sans connexion au serveur',
+        text: 'Lorsque Navidrome ou Internet est coupé, l’application s’ouvre directement sur vos playlists téléchargées, vos favoris en cache et la playlist « Titres téléchargés » au lieu de bloquer sur l’écran de reconnexion.'
+      },
+      {
+        title: 'Recherche mise à jour après téléchargement Downtify',
+        text: 'Dès qu’un téléchargement Downtify se termine ou que vous rafraîchissez la recherche, Navidrome scanne automatiquement le nouveau fichier et l’affiche immédiatement parmi vos titres locaux prêts à être écoutés.'
+      }
+    ]
+  },
+  {
+    version: '3.3.0',
+    items: [
+      {
+        title: 'Montre : paroles, file d’attente, favoris, radio et minuteur',
+        text: 'Nouvel écran de paroles synchronisées (LRC) avec saut tactile, vue de la file d’attente, accès rapide « Titres aimés » et « Mix aléatoire », lancement de radio à partir d’un titre et minuteur de veille pilotable depuis la montre.'
+      },
+      {
+        title: 'Transfert de lecture instantané (PC ↔ Téléphone)',
+        text: 'Reprenez la lecture en cours (titre, file d’attente et position exacte) sur votre téléphone ou transférez-la vers votre PC en un geste depuis l’écran Appareils.'
+      },
+      {
+        title: 'Favoris hors ligne et récap enrichi',
+        text: 'Option pour garder automatiquement tous vos titres aimés hors ligne en Wi-Fi, et récap hebdomadaire enrichi avec le top albums, la série de semaines consécutives et le partage.'
+      }
+    ]
+  },
+  {
+    version: '3.2.1',
+    items: [
+      {
+        title: 'Montre : lecteur corrigé',
+        text: 'Les longs titres ne passent plus sous le bord rond de l’écran, l’anneau de progression ne saute plus de la fin au début du titre en passant par midi et garde la position demandée jusqu’à ce que le PC l’ait rejointe, et l’heure est plus fine et ne bouge plus d’un chiffre à l’autre.'
+      },
+      {
+        title: 'Widget et onglets',
+        text: 'La pochette du widget ne clignote plus à chaque pause ou changement de titre, le nom de l’onglet actif s’efface en douceur, et le curseur de vitesse des animations n’enregistre qu’une fois relâché.'
+      }
+    ]
+  },
+  {
     version: '3.2.0',
     items: [
       {

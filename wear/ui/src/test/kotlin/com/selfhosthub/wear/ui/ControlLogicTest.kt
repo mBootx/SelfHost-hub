@@ -34,6 +34,32 @@ class ControlMathTest {
     }
 
     @Test
+    fun `a point round the seek ring is a fraction clockwise from 12 o'clock`() {
+        assertEquals(0f, ControlMath.ringFraction(0f, -10f), 1e-4f)
+        assertEquals(0.25f, ControlMath.ringFraction(10f, 0f), 1e-4f)
+        assertEquals(0.5f, ControlMath.ringFraction(0f, 10f), 1e-4f)
+        assertEquals(0.75f, ControlMath.ringFraction(-10f, 0f), 1e-4f)
+    }
+
+    @Test
+    fun `a finger crossing 12 o'clock stops at the end of the song instead of jumping to the other end`() {
+        // Forward past the top from 0.97: the raw reading is 0.02, but the song is at its end.
+        assertEquals(1f, ControlMath.ringFractionFrom(0.97f, 0.02f), 0f)
+        // Backward past the top from 0.03: the raw reading is 0.98, but the song is at its start.
+        assertEquals(0f, ControlMath.ringFractionFrom(0.03f, 0.98f), 0f)
+        // An ordinary move is kept as it is.
+        assertEquals(0.40f, ControlMath.ringFractionFrom(0.35f, 0.40f), 0f)
+    }
+
+    @Test
+    fun `only the band of the ring takes touches, not the corners of its square or its middle`() {
+        assertTrue(ControlMath.onSeekRing(37f, 37f, 12f, 10f))
+        assertTrue(ControlMath.onSeekRing(26f, 37f, 12f, 10f))
+        assertFalse(ControlMath.onSeekRing(20f, 37f, 12f, 10f))
+        assertFalse(ControlMath.onSeekRing(52f, 37f, 12f, 10f))
+    }
+
+    @Test
     fun `the crown's small pieces add up to whole steps and the rest is carried`() {
         assertEquals(0 to 30f, ControlMath.crownSteps(0f, 30f))
         assertEquals(1 to 5f, ControlMath.crownSteps(30f, 15f))

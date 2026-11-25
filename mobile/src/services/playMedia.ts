@@ -4,7 +4,7 @@
  * carries nothing that could point it at another server.
  */
 
-export type PlayMediaKind = 'song' | 'album' | 'playlist'
+export type PlayMediaKind = 'song' | 'album' | 'playlist' | 'favorites' | 'shuffleAll' | 'radio'
 export type PlayMediaMode = 'now' | 'next' | 'last'
 
 export interface PlayMediaRequest {
@@ -17,7 +17,7 @@ export interface PlayMediaRequest {
   mode: PlayMediaMode
 }
 
-const KINDS: readonly string[] = ['song', 'album', 'playlist']
+const KINDS: readonly string[] = ['song', 'album', 'playlist', 'favorites', 'shuffleAll', 'radio']
 const MODES: readonly string[] = ['now', 'next', 'last']
 const MAX_ID = 200
 const MAX_INDEX = 100_000
@@ -48,6 +48,8 @@ export interface MediaLibrary<S extends { id: string }> {
   getSong(id: string): Promise<S>
   getAlbum(id: string): Promise<{ songs: S[] }>
   getPlaylist(id: string): Promise<{ songs: S[] }>
+  getStarred?: () => Promise<{ songs: S[] }>
+  getRandomSongs?: (count?: number, genre?: string) => Promise<S[]>
 }
 
 /** What the player can do with a queue. */
@@ -55,14 +57,28 @@ export interface QueueActions<S> {
   playQueue(songs: S[], startIndex: number): void
   playNext(song: S): unknown
   addToQueue(songs: S[]): void
+  startRadio?: (seed: S) => Promise<'started' | 'empty' | number>
 }
 
 /** Looks the request up and queues it. Returns false when there was nothing to play. */
 export async function runPlayMedia<S extends { id: string }>(request: PlayMediaRequest, library: MediaLibrary<S>, queue: QueueActions<S>): Promise<boolean> {
+  if (request.kind === 'radio') {
+    const seed = await library.getSong(request.id)
+    if (!seed) return false
+    if (queue.startRadio) {
+      const outcome = await queue.startRadio(seed)
+      return outcome === 'started' || (typeof outcome === 'number' && outcome > 0)
+    }
+    queue.playQueue([seed], 0)
+    return true
+  }
+
   let songs: S[]
   if (request.kind === 'song') songs = [await library.getSong(request.id)]
   else if (request.kind === 'album') songs = (await library.getAlbum(request.id)).songs
-  else songs = (await library.getPlaylist(request.id)).songs
+  else if (request.kind === 'playlist') songs = (await library.getPlaylist(request.id)).songs
+  else if (request.kind === 'favorites') songs = library.getStarred ? (await library.getStarred()).songs : []
+  else songs = library.getRandomSongs ? await library.getRandomSongs(50) : []
   if (!songs || songs.length === 0) return false
 
   let start = 0

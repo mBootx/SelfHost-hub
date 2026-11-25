@@ -15,7 +15,7 @@ import { colors, radius, spacing, tint } from '@/constants/theme'
 
 interface Props {
   song: NDSong
-  client: NavidromeClient
+  client: NavidromeClient | null
   isCurrent: boolean
   isPlaying: boolean
   onPress: () => void
@@ -112,7 +112,7 @@ export default function TrackRow({ song, client, isCurrent, isPlaying, onPress, 
         )}
         <View style={styles.thumbWrap}>
           <CoverImage
-            uri={coverId ? client.coverArtUrl(coverId, 100) : null}
+            uri={coverId && client ? client.coverArtUrl(coverId, 100) : null}
             style={styles.thumb}
             iconSize={16}
             recyclingKey={song.id}

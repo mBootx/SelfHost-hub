@@ -141,6 +141,17 @@ class LibraryRepository(
 
     suspend fun stats(): LibraryStats = LibraryStats(dao.artistCount(), dao.albumCount(), dao.trackCount(), dao.playlistCount())
 
+    /** The songs in the account's favourites (`getStarred2`), loaded from the server. */
+    suspend fun starredTracks(): Pair<List<TrackEntity>, LoadResult> {
+        var tracks: List<TrackEntity> = emptyList()
+        val result = guarded {
+            val at = now()
+            tracks = api.starredSongs().map { it.toEntity(at) }
+            LoadResult.Fetched
+        }
+        return tracks to result
+    }
+
     /** Forgets the stored library (the covers and the sync history are separate). */
     suspend fun clear() = dao.clearLibrary()
 

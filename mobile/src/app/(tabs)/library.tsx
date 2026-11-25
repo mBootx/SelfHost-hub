@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { View, Text, Pressable, FlatList, RefreshControl, StyleSheet, Alert } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Disc3, ListMusic, Users, Plus, FolderOpen, Trash2, Tags, ChevronRight, UserCog } from 'lucide-react-native'
 import { useIsOwner } from '@/hooks/useIsOwner'
 import { useNavidromeStore } from '@/store/navidromeStore'
+import { OFFLINE_PLAYLIST_ID, offlinePlaylist, useOfflineStore } from '@/store/offlineStore'
 import { useToastStore } from '@/store/toastStore'
 import { NDAlbum, NDGenre, NDPlaylist } from '@/services/navidrome'
 import { prefetchCoverArt } from '@/services/imagePrefetch'
@@ -43,14 +44,43 @@ function LibraryContent() {
   const artists = useNavidromeStore((s) => s.artists)
   const recentAlbums = useNavidromeStore((s) => s.recentAlbums)
   const client = useNavidromeStore((s) => s.client)
+  const status = useNavidromeStore((s) => s.status)
   const playlists = useNavidromeStore((s) => s.playlists)
   const loadLibrary = useNavidromeStore((s) => s.loadLibrary)
   const createPlaylist = useNavidromeStore((s) => s.createPlaylist)
   const deletePlaylist = useNavidromeStore((s) => s.deletePlaylist)
+  const offlineTracks = useOfflineStore((s) => s.tracks)
+  const playlistCache = useOfflineStore((s) => s.playlistCache)
+  const keptPlaylists = useOfflineStore((s) => s.keptPlaylists)
   const showToast = useToastStore((s) => s.show)
   const isOwner = useIsOwner()
 
-  const [subTab, setSubTab] = useState<SubTab>('albums')
+  const [subTab, setSubTab] = useState<SubTab>(() => (status !== 'connected' ? 'playlists' : 'albums'))
+
+  const allPlaylists = useMemo(() => {
+    const list: NDPlaylist[] = []
+    if (Object.keys(offlineTracks).length > 0) list.push(offlinePlaylist(offlineTracks))
+    const seen = new Set<string>(list.map((p) => p.id))
+    for (const p of playlists) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id)
+        list.push(p)
+      }
+    }
+    for (const [id, cached] of Object.entries(playlistCache)) {
+      if (!seen.has(id) && cached?.playlist) {
+        seen.add(id)
+        list.push(cached.playlist)
+      }
+    }
+    for (const [id, name] of Object.entries(keptPlaylists)) {
+      if (!seen.has(id)) {
+        seen.add(id)
+        list.push({ id, name, songCount: 0, duration: 0 })
+      }
+    }
+    return list
+  }, [offlineTracks, playlists, playlistCache, keptPlaylists])
   const [refreshing, setRefreshing] = useState(false)
   const [showNewPlaylist, setShowNewPlaylist] = useState(false)
   const [creatingPlaylist, setCreatingPlaylist] = useState(false)
@@ -60,6 +90,12 @@ function LibraryContent() {
   // The whole library's albums, newest first. Until they are in, the newest ones already loaded for Home stand in.
   const [albums, setAlbums] = useState<NDAlbum[] | null>(null)
   const [albumError, setAlbumError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (status === 'error' && subTab === 'albums' && !albums && recentAlbums.length === 0) {
+      setSubTab('playlists')
+    }
+  }, [status, subTab, albums, recentAlbums.length])
 
   useEffect(() => {
     if (subTab !== 'albums' || albums !== null || !client) return
@@ -249,7 +285,7 @@ function LibraryContent() {
         <FlatList
           key="playlists"
           contentContainerStyle={styles.list}
-          data={playlists}
+          data={allPlaylists}
           keyExtractor={(p) => p.id}
           numColumns={2}
           columnWrapperStyle={styles.column}
@@ -257,7 +293,9 @@ function LibraryContent() {
           showsVerticalScrollIndicator={false}
           {...LIST_PERF}
           ListEmptyComponent={<EmptyState icon={ListMusic} title="Aucune playlist" hint="Appuyez sur + pour en créer une." />}
-          renderItem={({ item }) => <PlaylistTile playlist={item} onLongPress={() => setMenuPlaylist(item)} />}
+          renderItem={({ item }) => (
+            <PlaylistTile playlist={item} onLongPress={item.id === OFFLINE_PLAYLIST_ID ? undefined : () => setMenuPlaylist(item)} />
+          )}
         />
       ) : (
         <FlatList

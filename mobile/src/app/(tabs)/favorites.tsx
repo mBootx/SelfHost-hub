@@ -11,13 +11,19 @@ import SelectButton from '@/components/navidrome/SelectButton'
 import { useSelectionPool } from '@/hooks/useSelectionPool'
 import { NDAlbum, NDSong } from '@/services/navidrome'
 import { prefetchCoverArt } from '@/services/imagePrefetch'
+import { storage } from '@/services/storage'
+import { useOfflineStore } from '@/store/offlineStore'
 import { colors, layout, spacing } from '@/constants/theme'
+
+const FAVORITES_CACHE_KEY = 'navidrome.cachedFavorites'
 
 function FavoritesContent() {
   const client = useNavidromeStore((s) => s.client)
+  const status = useNavidromeStore((s) => s.status)
   const playQueue = useNavidromeStore((s) => s.playQueue)
   const currentSongId = useNavidromeStore((s) => s.queue[s.queueIndex]?.id)
   const isPlaying = useNavidromeStore((s) => s.isPlaying)
+  const offlineTracks = useOfflineStore((s) => s.tracks)
 
   const [favorites, setFavorites] = useState<{ albums: NDAlbum[]; songs: NDSong[] }>({ albums: [], songs: [] })
   const [loading, setLoading] = useState(true)
@@ -26,15 +32,25 @@ function FavoritesContent() {
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
-    if (!client) return
+    if (!client) {
+      const cached = await storage.loadPref<{ albums: NDAlbum[]; songs: NDSong[] }>(FAVORITES_CACHE_KEY).catch(() => null)
+      if (cached) setFavorites({ albums: cached.albums ?? [], songs: cached.songs ?? [] })
+      return
+    }
     setError(null)
     try {
       const res = await client.getStarred()
       setFavorites({ albums: res.albums, songs: res.songs })
+      storage.savePref(FAVORITES_CACHE_KEY, { albums: res.albums, songs: res.songs }).catch(() => {})
       prefetchCoverArt(client, res.albums.map((a) => a.coverArt), 300)
       prefetchCoverArt(client, res.songs.map((s) => s.coverArt || s.albumId), 100)
     } catch (err: any) {
-      setError(err?.message || 'Impossible de charger les favoris')
+      const cached = await storage.loadPref<{ albums: NDAlbum[]; songs: NDSong[] }>(FAVORITES_CACHE_KEY).catch(() => null)
+      if (cached && (cached.albums?.length || cached.songs?.length)) {
+        setFavorites({ albums: cached.albums ?? [], songs: cached.songs ?? [] })
+      } else {
+        setError(err?.message || 'Impossible de charger les favoris')
+      }
     }
   }, [client])
 
@@ -105,17 +121,25 @@ function FavoritesContent() {
           }
           data={favorites.songs}
           keyExtractor={(s) => s.id}
-          renderItem={({ item, index }) =>
-            client ? (
-              <TrackRow
-                song={item}
-                client={client}
-                isCurrent={item.id === currentSongId}
-                isPlaying={isPlaying}
-                onPress={() => playQueue(favorites.songs, index)}
-              />
-            ) : null
-          }
+          renderItem={({ item, index }) => (
+            <TrackRow
+              song={item}
+              client={client}
+              isCurrent={item.id === currentSongId}
+              isPlaying={isPlaying}
+              onPress={() => {
+                if (status !== 'connected') {
+                  const playable = favorites.songs.filter((s) => s.id in offlineTracks)
+                  if (playable.length > 0 && playable.length < favorites.songs.length) {
+                    const idx = Math.max(0, playable.findIndex((s) => s.id === item.id))
+                    playQueue(playable, idx)
+                    return
+                  }
+                }
+                playQueue(favorites.songs, index)
+              }}
+            />
+          )}
         />
       )}
     </Screen>

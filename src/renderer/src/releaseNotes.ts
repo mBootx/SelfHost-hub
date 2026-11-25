@@ -9,6 +9,33 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '3.5.0',
+    items: [
+      {
+        title: 'Serveur SelfHost Hub',
+        text: "Connectez l'application au serveur du hub (Réglages) pour synchroniser votre historique d'écoute avec le téléphone et piloter vos autres appareils à distance."
+      }
+    ]
+  },
+  {
+    version: '3.4.0',
+    items: [
+      {
+        title: 'Playlists hors ligne et recherche actualisée après téléchargement',
+        text: "Accédez directement à vos playlists en cache et à « Titres téléchargés » même lorsque le serveur Navidrome est injoignable, et retrouvez immédiatement vos titres téléchargés via Downtify dans les résultats locaux après actualisation."
+      }
+    ]
+  },
+  {
+    version: '3.3.0',
+    items: [
+      {
+        title: 'Lancer la radio et transfert de lecture (PC ↔ Téléphone)',
+        text: "Lancez une radio infinie à partir de n'importe quel titre via le menu contextuel, et transférez ou reprenez la lecture en cours (file d'attente et position exacte) entre votre PC et votre téléphone."
+      }
+    ]
+  },
+  {
     version: '3.0.0',
     items: [
       {

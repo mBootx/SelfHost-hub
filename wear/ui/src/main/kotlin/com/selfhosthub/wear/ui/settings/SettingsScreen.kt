@@ -2,18 +2,20 @@ package com.selfhosthub.wear.ui.settings
 
 import android.content.Intent
 import android.provider.Settings as SystemSettings
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,8 +26,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -127,7 +131,7 @@ fun SettingsContent(ui: SettingsUi, now: Long, actions: SettingsActions) {
                 }
             }
             item {
-                ActionChip(Icons.Filled.Sync, stringResource(if (ui.syncing) R.string.syncing else R.string.sync_now), enabled = !ui.syncing) {
+                ActionChip(R.drawable.ic_spotify_sync, stringResource(if (ui.syncing) R.string.syncing else R.string.sync_now), enabled = !ui.syncing) {
                     haptics.confirm()
                     actions.onSync()
                 }
@@ -147,7 +151,7 @@ fun SettingsContent(ui: SettingsUi, now: Long, actions: SettingsActions) {
         }
         if (ui.phoneStatus != LinkStatus.CONNECTED) {
             item {
-                ActionChip(Icons.Filled.Refresh, stringResource(R.string.retry)) {
+                ActionChip(R.drawable.ic_spotify_sync, stringResource(R.string.retry)) {
                     haptics.tap()
                     actions.onRetryPhone()
                 }
@@ -182,7 +186,7 @@ fun SettingsContent(ui: SettingsUi, now: Long, actions: SettingsActions) {
         if (ui.autoLaunch) {
             item { InfoCard(stringResource(R.string.builtin_player), stringResource(R.string.builtin_player_hint)) }
             item {
-                ActionChip(Icons.Filled.Settings, stringResource(R.string.watch_settings)) {
+                ActionChip(R.drawable.ic_spotify_settings, stringResource(R.string.watch_settings)) {
                     haptics.tap()
                     actions.onSystemSettings()
                 }
@@ -192,13 +196,13 @@ fun SettingsContent(ui: SettingsUi, now: Long, actions: SettingsActions) {
         // --- Storage ---
         item { InfoCard(stringResource(R.string.cache), stringResource(R.string.cache_size, formatBytes(ui.cacheBytes))) }
         item {
-            ActionChip(Icons.Filled.DeleteSweep, stringResource(R.string.clear_cache)) {
+            ActionChip(R.drawable.ic_spotify_trash, stringResource(R.string.clear_cache)) {
                 haptics.tap()
                 confirm = Confirm.ClearCache
             }
         }
         item {
-            ActionChip(Icons.Filled.Delete, stringResource(R.string.forget_setup), danger = true) {
+            ActionChip(R.drawable.ic_spotify_trash, stringResource(R.string.forget_setup), danger = true) {
                 haptics.tap()
                 confirm = Confirm.Forget
             }
@@ -247,21 +251,59 @@ private enum class Confirm { ClearCache, Forget }
 
 @Composable
 private fun InfoCard(title: String, text: String) {
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, style = MaterialTheme.typography.caption1, color = WatchColors.Accent, textAlign = TextAlign.Center)
-        Text(text, style = MaterialTheme.typography.body2, textAlign = TextAlign.Center, color = WatchColors.OnSurface, modifier = Modifier.fillMaxWidth())
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF141518), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.caption1.copy(fontWeight = FontWeight.SemiBold),
+            color = WatchColors.Accent,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text,
+            style = MaterialTheme.typography.body2,
+            textAlign = TextAlign.Center,
+            color = WatchColors.OnSurface,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
 @Composable
-private fun ActionChip(icon: ImageVector, label: String, enabled: Boolean = true, danger: Boolean = false, onClick: () -> Unit) {
+private fun ActionChip(@DrawableRes iconRes: Int, label: String, enabled: Boolean = true, danger: Boolean = false, onClick: () -> Unit) {
     Chip(
         onClick = onClick,
         enabled = enabled,
-        label = { Text(label, maxLines = 1) },
-        icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = if (danger) WatchColors.Danger else WatchColors.OnSurface) },
-        colors = ChipDefaults.secondaryChipColors(),
-        modifier = Modifier.fillMaxWidth().height(44.dp)
+        label = { Text(label, maxLines = 1, fontWeight = FontWeight.Medium) },
+        icon = {
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .background(
+                        if (danger) WatchColors.Danger.copy(alpha = 0.16f) else WatchColors.Accent.copy(alpha = 0.14f),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (danger) WatchColors.Danger else WatchColors.Accent
+                )
+            }
+        },
+        colors = ChipDefaults.chipColors(
+            backgroundColor = Color(0xFF18191C),
+            contentColor = if (danger) WatchColors.Danger else WatchColors.OnSurface
+        ),
+        modifier = Modifier.fillMaxWidth().height(46.dp)
     )
 }
 

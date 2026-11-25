@@ -8,9 +8,11 @@ interface Props {
   retrying?: boolean
   /** Shows the login form instead, to sign in to another server or account. */
   onSwitch?: () => void
+  /** Opens the view in offline mode without waiting for the server. */
+  onOffline?: () => void
 }
 
-export default function ServiceUnavailable({ serviceName, message, onRetry, retrying, onSwitch }: Props): JSX.Element {
+export default function ServiceUnavailable({ serviceName, message, onRetry, retrying, onSwitch, onOffline }: Props): JSX.Element {
   const [busy, setBusy] = useState(false)
   const spinning = retrying || busy
 
@@ -42,6 +44,14 @@ export default function ServiceUnavailable({ serviceName, message, onRetry, retr
         <RotateCw className={`h-4 w-4 ${spinning ? 'animate-spin' : ''}`} />
         Réessayer
       </button>
+      {onOffline && (
+        <button
+          onClick={onOffline}
+          className="rounded-full border border-surface-border bg-surface-elevated px-5 py-2 text-xs font-semibold text-gray-200 transition-colors hover:border-accent hover:text-accent"
+        >
+          Accéder aux playlists hors ligne
+        </button>
+      )}
       {onSwitch && (
         <button onClick={onSwitch} className="text-xs text-gray-400 underline hover:text-white">
           Se connecter à un autre serveur ou compte

@@ -4,7 +4,7 @@ import { useOfflineStore } from '@renderer/store/offlineStore'
 
 interface Props {
   song: NDSong
-  client: NavidromeClient
+  client: NavidromeClient | null
 }
 
 export default function OfflineButton({ song, client }: Props): JSX.Element {
@@ -37,6 +37,8 @@ export default function OfflineButton({ song, client }: Props): JSX.Element {
       </button>
     )
   }
+
+  if (!client) return <></>
 
   return (
     <button

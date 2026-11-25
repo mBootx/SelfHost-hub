@@ -250,6 +250,28 @@ test('a server that stops answering is offline even with the phone on Wi-Fi', as
   assert.strictEqual(m.useNetworkStore.getState().reason, 'serveur injoignable')
 })
 
+test('offline playlists: cached playlists and downloaded tracks playlist work without server access', () => {
+  const tracks = {
+    t1: { id: 't1', title: 'Un', artist: 'A', album: 'Alb', duration: 120, uri: 'file:///t1.mp3', size: 1000, downloadedAt: 100 },
+    t2: { id: 't2', title: 'Deux', artist: 'B', album: 'Alb', duration: 180, uri: 'file:///t2.mp3', size: 2000, downloadedAt: 200 }
+  }
+  const builtIn = m.offlinePlaylist(tracks)
+  assert.strictEqual(builtIn.id, m.OFFLINE_PLAYLIST_ID)
+  assert.strictEqual(builtIn.songCount, 2)
+  assert.strictEqual(builtIn.duration, 300)
+  assert.strictEqual(m.offlineTrackToSong(tracks.t1).title, 'Un')
+
+  const pl = { id: 'pl-1', name: 'Mes trajets', songCount: 2, duration: 300 }
+  const songs = [song('t1'), song('t2')]
+  m.useOfflineStore.getState().cachePlaylist('pl-1', pl, songs)
+  const cached = m.useOfflineStore.getState().playlistCache['pl-1']
+  assert.ok(cached, 'playlist is cached in offlineStore')
+  assert.strictEqual(cached.playlist.name, 'Mes trajets')
+  assert.strictEqual(cached.songs.length, 2)
+  m.useOfflineStore.getState().removeCachedPlaylist('pl-1')
+  assert.strictEqual(m.useOfflineStore.getState().playlistCache['pl-1'], undefined)
+})
+
 let finished = false
 process.on('exit', () => {
   if (!finished) {
@@ -270,7 +292,7 @@ process.on('exit', () => {
     [
       "export * from '@/services/offlineMode'",
       "export { useNavidromeStore } from '@/store/navidromeStore'",
-      "export { useOfflineStore } from '@/store/offlineStore'",
+      "export { useOfflineStore, OFFLINE_PLAYLIST_ID, offlinePlaylist, offlineTrackToSong } from '@/store/offlineStore'",
       "export { useAudioSettingsStore } from '@/store/audioSettingsStore'",
       "export { useToastStore } from '@/store/toastStore'",
       "export * as Network from 'expo-network'",

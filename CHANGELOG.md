@@ -1,5 +1,41 @@
 # Changelog
 
+## 3.5.0 — 2026-11-25
+
+### Added
+- **SelfHost Hub server (Phone & Desktop).** Sign in to the hub server with your Navidrome account to sync listening history (Wrapped) between devices and relay remote control. The server also ships an admin panel (system, containers, devices, and a TOTP-protected terminal).
+- **Wrapped rework (Phone).** Week, month, year or custom range, a drillable chart, top albums and sharing for any period.
+- **Settings sub-pages (Phone).** Settings are grouped into pages; *Garder les titres aimés hors ligne* lives under Stockage.
+
+### Fixed
+- **Watch updates.** The install confirmation was only announced by a notification, so with the watch app's notifications off the update never appeared. The confirmation is now kept and shown as soon as the app is open, the phone asks the watch to open the app, and it tells you when the watch's notifications are off. The watch asks for the notification permission again after each update.
+- **Phone playback glitches** with the screen off (ExoPlayer wake mode).
+
+## 3.4.0 — 2026-10-23
+
+### Added
+- **Offline Playlists & Library Access Without Server Connection (Phone & Desktop).** When Navidrome or the internet is unreachable, the app no longer blocks on the *"Navidrome injoignable"* screen when offline tracks or cached playlists exist. Instead, it opens with a non-intrusive offline status bar, lists your downloaded/cached playlists and a built-in *Titres téléchargés* playlist, and plays local tracks directly from disk.
+- **Instant Local Search Refresh After Downtify Downloads (Phone & Desktop).** Completing a Downtify download (or pulling to refresh / clicking *Actualiser* on Search) now automatically triggers a Navidrome library scan (`startScan`), probes multi-word (`Artist + Title`) and downloaded song titles, and immediately promotes the newly downloaded song into your playable local library results.
+
+## 3.3.0 — 2026-10-21
+
+### Added
+- **Watch: Synced Lyrics (LRC) & Up-Next Queue.** Open *Paroles* from the watch options page to view time-synced LRC lyrics (via LRCLIB with Navidrome fallback) that auto-scroll with the active line and support tap-to-seek, or open *File d'attente* to browse and jump to upcoming tracks in the phone or PC queue.
+- **Watch: Library Quick-Rows, Two-Way Favorites, Song Radio & Sleep Timer.** Added *Titres aimés* and *Mix aléatoire* at the top of the watch library, two-way star/unstar toggling with live liked state in options, *Lancer la radio* from any track or the options sheet, and a *Minuteur de veille* picker (`15`, `30`, `45`, `60` min, or end of track) controlling the phone's sleep timer.
+- **Desktop & Watch: Infinite Song Radio.** Start a continuous radio queue seeded from any track (*Lancer la radio* in the desktop context menu and on the watch), automatically extending as the queue nears its end.
+- **Seamless Playback Handoff (PC ↔ Phone).** Transfer or pull the active playback session (current track, upcoming queue, exact seek position, shuffle, and repeat mode) between Desktop and Phone in one tap from the Devices view.
+- **Phone: Auto-Download Liked Tracks & Enhanced Weekly Wrapped.** Toggle *Garder les titres aimés hors ligne* under Storage settings to keep starred tracks cached on Wi-Fi automatically, and view Top Albums, consecutive listening week streaks, active days, and a native share card in Weekly Wrapped.
+
+## 3.2.1 — 2026-10-19
+
+### Fixed
+- **Watch player: long titles no longer run under the round bezel.** The title and artist are padded to the width the screen really has near its top edge; the title still scrolls. Tapping them (or the clock page) for the full cover now has a spoken label, and the clock page's tap does nothing when no song is playing.
+- **Watch player: the circular seek ring.** It takes touches only on the ring itself (it used to take them in the whole square around it, corners included), sliding past 12 o'clock stops at the end or the start of the song instead of jumping to the other end, and the position you asked for stays on the ring until the PC has moved, instead of snapping back to the old one for a moment.
+- **Watch: the clock is now light, large and set in fixed-width digits**, so it no longer shifts sideways as the minutes change.
+- **Watch: per-cover download locks are back.** 3.2.0 shared 32 locks between all covers, so a cover waiting on a slow or offline server could hold up unrelated ones in a list. The cover blur is also no longer computed on the main thread.
+- **Android: the home-screen widget no longer flashes its placeholder cover** on each play/pause or text change; the placeholder only shows when nothing is playing.
+- **Android: tab bar and tab animation settings.** The active tab's label now fades out as well as in, and the speed slider saves the setting once when released instead of on every tick of the drag.
+
 ## 3.2.0 — 2026-10-16
 
 ### Added

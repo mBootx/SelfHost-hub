@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ListEnd, ListStart, ListPlus, Heart } from 'lucide-react'
+import { ListEnd, ListStart, ListPlus, Heart, Radio } from 'lucide-react'
 import { useNavidromeStore } from '@renderer/store/navidromeStore'
 import { useToastStore } from '@renderer/store/toastStore'
 import { NDSong } from '@renderer/services/navidrome'
@@ -16,6 +16,7 @@ export function useTrackMenu(): {
 } {
   const playNext = useNavidromeStore((s) => s.playNext)
   const addToQueue = useNavidromeStore((s) => s.addToQueue)
+  const startRadio = useNavidromeStore((s) => s.startRadio)
   const client = useNavidromeStore((s) => s.client)
   const showToast = useToastStore((s) => s.show)
   const [state, setState] = useState<{ x: number; y: number; song: NDSong } | null>(null)
@@ -50,6 +51,15 @@ export function useTrackMenu(): {
                 onClick: () => {
                   addToQueue([state.song])
                   showToast('Ajouté à la file de lecture')
+                }
+              },
+              {
+                label: 'Lancer la radio',
+                icon: Radio,
+                onClick: async () => {
+                  const song = state.song
+                  const outcome = await startRadio(song)
+                  showToast(outcome === 'started' ? `Radio lancée depuis « ${song.title} »` : 'Aucun titre similaire trouvé')
                 }
               },
               { label: 'Ajouter à une playlist', icon: ListPlus, onClick: () => setAddToPlaylistSong(state.song) },

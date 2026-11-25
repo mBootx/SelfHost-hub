@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { View, Text, ScrollView, FlatList, Pressable, RefreshControl, StyleSheet } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { ListMusic, Music } from 'lucide-react-native'
 import { useNavidromeStore } from '@/store/navidromeStore'
+import { offlinePlaylist, useOfflineStore } from '@/store/offlineStore'
 import { useHistoryStore, HistoryEntry } from '@/store/historyStore'
 import { NDPlaylist } from '@/services/navidrome'
 import NavidromeGate from '@/components/navidrome/NavidromeGate'
@@ -104,6 +105,9 @@ function HomeContent() {
   const playlists = useNavidromeStore((s) => s.playlists)
   const artists = useNavidromeStore((s) => s.artists)
   const loadLibrary = useNavidromeStore((s) => s.loadLibrary)
+  const offlineTracks = useOfflineStore((s) => s.tracks)
+  const playlistCache = useOfflineStore((s) => s.playlistCache)
+  const keptPlaylists = useOfflineStore((s) => s.keptPlaylists)
   const history = useHistoryStore((s) => s.entries)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -120,8 +124,33 @@ function HomeContent() {
     setRefreshing(false)
   }
 
-  const quickPlaylists = playlists.slice(0, 6)
-  const isEmpty = recentAlbums.length === 0 && playlists.length === 0 && artists.length === 0
+  const allPlaylists = useMemo(() => {
+    const list: NDPlaylist[] = []
+    if (Object.keys(offlineTracks).length > 0) list.push(offlinePlaylist(offlineTracks))
+    const seen = new Set<string>(list.map((p) => p.id))
+    for (const p of playlists) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id)
+        list.push(p)
+      }
+    }
+    for (const [id, cached] of Object.entries(playlistCache)) {
+      if (!seen.has(id) && cached?.playlist) {
+        seen.add(id)
+        list.push(cached.playlist)
+      }
+    }
+    for (const [id, name] of Object.entries(keptPlaylists)) {
+      if (!seen.has(id)) {
+        seen.add(id)
+        list.push({ id, name, songCount: 0, duration: 0 })
+      }
+    }
+    return list
+  }, [offlineTracks, playlists, playlistCache, keptPlaylists])
+
+  const quickPlaylists = allPlaylists.slice(0, 6)
+  const isEmpty = recentAlbums.length === 0 && allPlaylists.length === 0 && artists.length === 0 && history.length === 0
 
   return (
     <Screen>

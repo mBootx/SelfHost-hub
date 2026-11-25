@@ -33,7 +33,7 @@ export interface NDSong {
   albumId?: string
   coverArt?: string
   duration: number
-  track?: number
+  track?: number; artistId?: string; genre?: string
   starred?: string
   /** The file's extension on the server (mp3, flac...). */
   suffix?: string
@@ -198,6 +198,29 @@ export class NavidromeClient {
     return { album: body.album, songs: body.album?.song || [] }
   }
 
+  async getSong(id: string): Promise<NDSong> {
+    const body = await this.call<any>('getSong', { id })
+    if (!body.song) throw new ApiError('Titre introuvable', 404, 70)
+    return body.song
+  }
+
+  async getSimilarSongs(id: string, count = 40): Promise<NDSong[]> {
+    const body = await this.call<any>('getSimilarSongs', { id, count: String(count) })
+    return body.similarSongs?.song || []
+  }
+
+  async getSimilarSongs2(artistId: string, count = 40): Promise<NDSong[]> {
+    const body = await this.call<any>('getSimilarSongs2', { id: artistId, count: String(count) })
+    return body.similarSongs2?.song || []
+  }
+
+  async getRandomSongs(count = 40, genre?: string): Promise<NDSong[]> {
+    const params: Record<string, string> = { size: String(count) }
+    if (genre) params.genre = genre
+    const body = await this.call<any>('getRandomSongs', params)
+    return body.randomSongs?.song || []
+  }
+
   /** Every album of the library, the newest first (the server gives at most 500 at a time). */
   async getAllAlbums(): Promise<NDAlbum[]> {
     const PAGE = 500
@@ -279,7 +302,40 @@ export class NavidromeClient {
   async search(query: string): Promise<{ artists: NDArtist[]; albums: NDAlbum[]; songs: NDSong[] }> {
     const body = await this.call<any>('search3', { query, artistCount: '10', albumCount: '10', songCount: '20' })
     const r = body.searchResult3 || {}
-    return { artists: r.artist || [], albums: r.album || [], songs: r.song || [] }
+    const artists: NDArtist[] = r.artist || []
+    const albums: NDAlbum[] = r.album || []
+    let songs: NDSong[] = r.song || []
+    if (songs.length === 0) {
+      const norm = (s: string): string =>
+        s
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+      const tokens = norm(query)
+        .split(/[^a-z0-9]+/)
+        .filter((t) => t.length >= 2)
+      if (tokens.length >= 2) {
+        const probes = [...tokens].sort((a, b) => b.length - a.length).slice(0, 2)
+        const probeResults = await Promise.allSettled(
+          probes.map((p) => this.call<any>('search3', { query: p, artistCount: '0', albumCount: '0', songCount: '30' }))
+        )
+        const byId = new Map<string, NDSong>()
+        for (const pr of probeResults) {
+          if (pr.status === 'fulfilled') {
+            for (const s of (pr.value?.searchResult3?.song || []) as NDSong[]) {
+              byId.set(s.id, s)
+            }
+          }
+        }
+        const candidates = Array.from(byId.values())
+        const matched = candidates.filter((s) => {
+          const hay = norm(`${s.title} ${s.artist} ${s.album || ''}`)
+          return tokens.every((t) => hay.includes(t))
+        })
+        songs = matched.length > 0 ? matched.slice(0, 20) : candidates.slice(0, 20)
+      }
+    }
+    return { artists, albums, songs }
   }
 
   async star(id: string): Promise<void> {

@@ -2,6 +2,7 @@ package com.selfhosthub.wear.service.update
 
 import android.content.pm.PackageInstaller
 import android.util.Log
+import com.selfhosthub.wear.core.LinkProtocol
 import com.selfhosthub.wear.core.UpdateCodec
 import com.selfhosthub.wear.core.UpdateProtocol
 import com.selfhosthub.wear.core.UpdateState
@@ -55,10 +56,26 @@ class WatchUpdates(val host: UpdateHost, private val transport: LinkTransport) {
         }
     }
 
+    /**
+     * Asks the phone to open the app on the watch (Android does not let it open its own screen from the background),
+     * so the installer's confirmation can be shown (see PendingConfirm). Nothing here may throw.
+     */
+    suspend fun askPhoneToOpenApp() {
+        try {
+            val phone = transport.phones().firstOrNull() ?: return
+            transport.send(phone, LinkProtocol.OPEN_PATH, OPEN_BODY)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not ask the phone to open the app: ${e.message}")
+        }
+    }
+
     private fun reportBlocking(status: UpdateStatus) = runBlocking { report(status) }
 
     private companion object {
         const val TAG = "WatchUpdate"
+        val OPEN_BODY = "{\"v\":${LinkProtocol.VERSION}}".toByteArray(Charsets.UTF_8)
     }
 }
 

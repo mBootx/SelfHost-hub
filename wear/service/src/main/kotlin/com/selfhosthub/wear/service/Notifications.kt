@@ -45,8 +45,9 @@ object Notifications {
      * Android wants the person wearing the watch to confirm the update the phone sent: this is how it gets to them.
      * `confirm` is the screen Android's installer handed over for that.
      */
-    fun updateConfirm(context: Context, confirm: Intent) {
+    fun updateConfirm(context: Context, confirm: Intent): Boolean {
         ensureChannels(context)
+        if (!canShow(context, CHANNEL_UPDATE)) return false
         confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val tap = PendingIntent.getActivity(context, ID_UPDATE, confirm, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = NotificationCompat.Builder(context, CHANNEL_UPDATE)
@@ -58,7 +59,15 @@ object Notifications {
             .setAutoCancel(true)
             .setContentIntent(tap)
             .build()
-        notifyIfAllowed(context, ID_UPDATE, notification)
+        return notifyIfAllowed(context, ID_UPDATE, notification)
+    }
+
+    /** Whether a notification on `channel` would be seen: the app's notifications are on and the channel is not muted. */
+    fun canShow(context: Context, channel: String): Boolean {
+        val manager = NotificationManagerCompat.from(context)
+        if (!manager.areNotificationsEnabled()) return false
+        val importance = context.getSystemService(NotificationManager::class.java).getNotificationChannel(channel)?.importance
+        return importance != NotificationManager.IMPORTANCE_NONE
     }
 
     /** The app's own screen, from a tap on a notification. */
@@ -121,13 +130,16 @@ object Notifications {
         return builder.build()
     }
 
-    fun notifyIfAllowed(context: Context, id: Int, notification: Notification) {
+    /** Posts it if notifications are allowed; says whether it was posted. */
+    fun notifyIfAllowed(context: Context, id: Int, notification: Notification): Boolean {
         val manager = NotificationManagerCompat.from(context)
-        if (!manager.areNotificationsEnabled()) return
-        try {
+        if (!manager.areNotificationsEnabled()) return false
+        return try {
             manager.notify(id, notification)
+            true
         } catch (_: SecurityException) {
             // The notification permission was withdrawn between the check and the call.
+            false
         }
     }
 

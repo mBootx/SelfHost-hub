@@ -21,6 +21,7 @@ export default function DownloadRow({ song }: { song: DowntifySong }) {
   const client = useDowntifyStore((s) => s.client)
   const queueDownload = useDowntifyStore((s) => s.queueDownload)
   const queued = useDowntifyStore((s) => s.queue.find((q) => q.song.song_id === song.song_id))
+  const completed = useDowntifyStore((s) => s.completedSongs.some((c) => c.song_id === song.song_id))
   const [pending, setPending] = useState(false)
 
   async function handleDownload(): Promise<void> {
@@ -60,7 +61,7 @@ export default function DownloadRow({ song }: { song: DowntifySong }) {
         )}
       </View>
 
-      {queued?.status === 'done' ? (
+      {queued?.status === 'done' || completed ? (
         <CircleCheck size={18} color={colors.accent} />
       ) : queued?.status === 'error' ? (
         <CircleAlert size={18} color={colors.danger} />

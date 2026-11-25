@@ -6,7 +6,7 @@ import { colors } from '@/constants/theme'
 
 interface Props {
   song: NDSong
-  client: NavidromeClient
+  client: NavidromeClient | null
   /** Icon size; the default suits a list row. */
   size?: number
   /** Colour of the not-yet-downloaded icon: the muted grey is too dim over a coloured backdrop. */
@@ -51,6 +51,8 @@ export default function OfflineButton({ song, client, size = 18, idleColor = col
       </Pressable>
     )
   }
+
+  if (!client) return null
 
   return (
     <Pressable
