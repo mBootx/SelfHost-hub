@@ -549,7 +549,9 @@ test('other devices are added to what is shown, kept apart, and forgotten on req
   assert.strictEqual(m.useListeningStore.getState().weeks['2026-09-28'], undefined)
   assert.deepStrictEqual(m.useListeningStore.getState().devices, [])
   assert.strictEqual(fake.prefs['listening.others'], undefined)
-  assert.ok(m.takeDirtyWeeks(100).weeks[key], 'every week of this phone is to upload to the next server')
+  const ownWeeks = Object.keys(m.useListeningStore.getState().weeks).sort()
+  assert.ok(ownWeeks.length > 0)
+  assert.deepStrictEqual(Object.keys(m.takeDirtyWeeks(100).weeks).sort(), ownWeeks, 'every week of this phone is to upload to the next server')
 })
 
 test('the other devices\' weeks are pruned like the phone\'s own', async () => {
