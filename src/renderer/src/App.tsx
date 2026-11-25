@@ -22,6 +22,7 @@ import { useHistoryStore } from '@renderer/store/historyStore'
 import { useWhatsNewStore } from '@renderer/store/whatsNewStore'
 import { startPlaybackMemory } from '@renderer/services/playbackMemory'
 import { startScrobbler } from '@renderer/services/scrobbler'
+import { startListeningLog } from '@renderer/services/listeningLog'
 import { startDownloadWatcher } from '@renderer/services/downloadWatcher'
 import { useIsOwner } from '@renderer/hooks/useIsOwner'
 
@@ -65,6 +66,7 @@ export default function App(): JSX.Element {
     // Before the player mounts (it waits for Navidrome), so it opens on the restored track.
     startPlaybackMemory()
     startScrobbler()
+    startListeningLog()
     startDownloadWatcher()
     checkWhatsNew()
   }, [])

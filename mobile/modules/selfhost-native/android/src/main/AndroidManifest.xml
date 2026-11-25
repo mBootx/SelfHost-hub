@@ -7,6 +7,8 @@
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-feature android:name="android.hardware.camera.front" android:required="false" />
   <uses-feature android:name="android.hardware.camera" android:required="false" />
+  <!-- The music players keep the phone awake while they play (setWakeMode in patches/expo-audio/AudioPlayer.kt). -->
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
 
   <application>
     <!--

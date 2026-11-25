@@ -31,7 +31,7 @@ export function retryDownServices(withPc = false): void {
   if (downtify.status === 'error') void downtify.restoreSession()
   if (withPc) {
     const remote = useRemoteStore.getState()
-    if (remote.enabled && remote.pairing && (remote.status === 'disconnected' || remote.status === 'error')) {
+    if (remote.enabled && (remote.pairing || remote.serverUrl) && (remote.status === 'disconnected' || remote.status === 'error')) {
       remote.autoConnect().catch(() => {})
     }
   }

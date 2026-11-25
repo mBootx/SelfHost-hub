@@ -1,0 +1,43 @@
+[package]
+name = "selfhost-hub-server"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "selfhost_hub_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "selfhost-hub-server"
+path = "src/main.rs"
+
+[dependencies]
+getrandom = "0.4.3"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+rusqlite = { version = "0.43.0", features = ["bundled"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync"] }
+tracing = "0.1.44"
+axum = { version = "0.8.9", features = ["ws"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+russh = { version = "0.65.4", default-features = false, features = ["ring", "flate2"] }
+hmac = "0.13.0"
+sha1 = "0.11.0"
+data-encoding = "2.11.1"
+qrcode = { version = "0.15.0", default-features = false, features = ["svg"] }
+sha2 = "0.11.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+futures-util = "0.3.34"
+tokio-tungstenite = "0.30.0"
+

@@ -5,9 +5,17 @@ import { Laptop, Smartphone, Play, Pause, SkipBack, SkipForward, Cast } from 'lu
 import { useRemoteStore, LOCAL_DEVICE_ID } from '@/store/remoteStore'
 import { EmptyState } from '@/components/Screen'
 import { colors, radius, spacing } from '@/constants/theme'
+import { checkHealth, HealthResult, isValidServerUrl, normalizeServerUrl } from '@/services/hubServer'
+import { useListeningStore } from '@/services/listeningLog'
 
-function statusLabel(enabled: boolean, status: string, error: string | null): string {
+function statusLabel(enabled: boolean, status: string, error: string | null, serverUrl = '', serverUser: string | null = null): string {
   if (!enabled) return 'Désactivé'
+  if (serverUrl) {
+    if (status === 'connected') return serverUser ? `Connecté en tant que ${serverUser}` : 'Connecté au serveur'
+    if (status === 'connecting') return 'Connexion…'
+    if (status === 'error') return `Refusé : ${error || 'connexion impossible'}`
+    return 'Non connecté'
+  }
   if (status === 'connected') return 'Connecté au PC'
   if (status === 'connecting') return 'Recherche du PC sur le réseau…'
   if (status === 'error') return error || 'Connexion impossible'
@@ -32,7 +40,15 @@ export default function DevicesScreen() {
   const unpair = useRemoteStore((s) => s.unpair)
   const selectDevice = useRemoteStore((s) => s.selectDevice)
   const sendCommand = useRemoteStore((s) => s.sendCommand)
+  const serverUrl = useRemoteStore((s) => s.serverUrl)
+  const serverUser = useRemoteStore((s) => s.serverUser)
+  const setServerUrl = useRemoteStore((s) => s.setServerUrl)
+  const syncedDevices = useListeningStore((s) => s.devices)
 
+  const [serverDraft, setServerDraft] = useState(serverUrl)
+  const [testing, setTesting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [testResult, setTestResult] = useState<HealthResult | null>(null)
   const [nameDraft, setNameDraft] = useState(deviceName)
   const [manualIp, setManualIp] = useState('')
   const [codeDraft, setCodeDraft] = useState('')
@@ -43,6 +59,46 @@ export default function DevicesScreen() {
   }, [])
 
   useEffect(() => setNameDraft(deviceName), [deviceName])
+  useEffect(() => setServerDraft(serverUrl), [serverUrl])
+
+  async function handleTestServer(): Promise<void> {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      setTestResult(await checkHealth(serverDraft))
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  async function handleSaveServer(): Promise<void> {
+    const url = normalizeServerUrl(serverDraft)
+    if (!url || !isValidServerUrl(url)) {
+      setTestResult({ ok: false, error: 'Adresse invalide' })
+      return
+    }
+    setSaving(true)
+    try {
+      const ok = await setServerUrl(url)
+      if (ok) setServerDraft(url)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function confirmRemoveServer(): void {
+    Alert.alert('Retirer le serveur ?', "Le contrôle à distance repasse par le réseau local, et le récap d'écoute n'est plus partagé avec les autres appareils.", [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Retirer',
+        style: 'destructive',
+        onPress: () => {
+          setTestResult(null)
+          void setServerUrl('')
+        }
+      }
+    ])
+  }
 
   const otherDevices = deviceList.filter((d) => d.deviceId !== LOCAL_DEVICE_ID)
   const selected = selectedDeviceId !== LOCAL_DEVICE_ID ? devices[selectedDeviceId] : null
@@ -75,10 +131,77 @@ export default function DevicesScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <View style={styles.card}>
+        <Text style={styles.fieldLabel}>Serveur SelfHost Hub</Text>
+        <Text style={styles.pairHint}>
+          Avec un serveur, le contrôle à distance et le récap d'écoute passent par votre serveur, chez vous comme à l'extérieur. Sans
+          serveur, le PC et le téléphone se trouvent sur le réseau local.
+        </Text>
+        <TextInput
+          style={styles.input}
+          value={serverDraft}
+          onChangeText={(text) => {
+            setServerDraft(text)
+            setTestResult(null)
+          }}
+          placeholder="https://hub.mondomaine.fr ou http://192.168.1.10:51823"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          accessibilityLabel="Adresse du serveur SelfHost Hub"
+        />
+        <View style={styles.serverButtons}>
+          <Pressable
+            style={({ pressed }) => [styles.connectButton, styles.serverButton, (testing || pressed) && styles.pressed]}
+            onPress={handleTestServer}
+            disabled={testing || !serverDraft.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Tester le serveur"
+          >
+            {testing ? <ActivityIndicator color="#000" /> : <Text style={styles.connectButtonText}>Tester</Text>}
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.connectButton, styles.serverButton, (saving || pressed) && styles.pressed]}
+            onPress={handleSaveServer}
+            disabled={saving || !serverDraft.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Enregistrer le serveur"
+          >
+            {saving ? <ActivityIndicator color="#000" /> : <Text style={styles.connectButtonText}>Enregistrer</Text>}
+          </Pressable>
+          {serverUrl !== '' && (
+            <Pressable
+              style={({ pressed }) => [styles.removeButton, styles.serverButton, pressed && styles.pressed]}
+              onPress={confirmRemoveServer}
+              accessibilityRole="button"
+              accessibilityLabel="Retirer le serveur"
+            >
+              <Text style={styles.removeButtonText}>Retirer</Text>
+            </Pressable>
+          )}
+        </View>
+        {testResult && (
+          <Text style={[styles.serverStatus, testResult.ok ? styles.serverOk : styles.serverBad]}>
+            {testResult.ok
+              ? `Serveur trouvé : ${testResult.name || 'SelfHost Hub'}${testResult.version ? ` (version ${testResult.version})` : ''}`
+              : testResult.error}
+          </Text>
+        )}
+        {serverUrl !== '' && (
+          <>
+            <Text style={styles.serverStatus}>{statusLabel(enabled, status, error, serverUrl, serverUser)}</Text>
+            <Text style={styles.serverStatus}>
+              Synchronisé avec : {syncedDevices.length > 0 ? syncedDevices.map((d) => d.deviceName).join(', ') : 'aucun autre appareil pour l\'instant'}
+            </Text>
+          </>
+        )}
+      </View>
+
       <View style={styles.row}>
         <View style={styles.rowInfo}>
           <Text style={styles.rowTitle}>Activer le contrôle à distance</Text>
-          <Text style={styles.rowMeta}>{statusLabel(enabled, status, error)}</Text>
+          <Text style={styles.rowMeta}>{statusLabel(enabled, status, error, serverUrl, serverUser)}</Text>
         </View>
         <Switch
           value={enabled}
@@ -102,7 +225,7 @@ export default function DevicesScreen() {
             />
           </View>
 
-          {!pairing && (
+          {!pairing && !serverUrl && (
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>Appairer avec le PC</Text>
               <Text style={styles.pairHint}>
@@ -148,7 +271,7 @@ export default function DevicesScreen() {
             </View>
           )}
 
-          {pairing && (status === 'error' || status === 'disconnected') && (
+          {pairing && !serverUrl && (status === 'error' || status === 'disconnected') && (
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>PC introuvable automatiquement ? Son adresse IP (laisser vide pour le chercher de nouveau)</Text>
               <View style={styles.manualRow}>
@@ -176,7 +299,7 @@ export default function DevicesScreen() {
             </View>
           )}
 
-          {pairing && (
+          {pairing && !serverUrl && (
             <Pressable onPress={confirmUnpair} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dissocier ce téléphone du PC">
               <Text style={styles.unpair}>Appairé avec un PC · Dissocier</Text>
             </Pressable>
@@ -272,6 +395,20 @@ export default function DevicesScreen() {
 }
 
 const styles = StyleSheet.create({
+  serverButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  serverButton: { paddingVertical: spacing.sm, minHeight: 36 },
+  removeButton: {
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border
+  },
+  removeButtonText: { color: colors.textSecondary, fontWeight: '600', fontSize: 13 },
+  serverStatus: { color: colors.textSecondary, fontSize: 12, marginTop: spacing.sm },
+  serverOk: { color: colors.accent },
+  serverBad: { color: colors.textSecondary },
   pairHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginBottom: spacing.sm },
   codeInput: { fontFamily: 'monospace', letterSpacing: 2, marginBottom: spacing.sm },
   pairButton: { alignSelf: 'flex-start', marginTop: spacing.sm },

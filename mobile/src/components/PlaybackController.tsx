@@ -10,6 +10,7 @@ import { useArtworkStore } from '@/store/artworkStore'
 import { useHistoryStore } from '@/store/historyStore'
 import { useAudioSettingsStore } from '@/store/audioSettingsStore'
 import { noteStall, useNetworkStore } from '@/services/offlineMode'
+import { logEvent } from '@/services/diagnostics'
 import { streamBitrate } from '@/services/offlinePriority'
 import SelfHostNative from '../../modules/selfhost-native'
 
@@ -100,7 +101,8 @@ export default function PlaybackController(): null {
         const state = useNavidromeStore.getState()
         const current = state.queue[state.queueIndex]
         if (!buffering || (current && !useOfflineStore.getState().isOffline(current.id))) noteStall(buffering)
-      }
+      },
+      onLog: (message, level) => logEvent('music', message, level)
     })
     SelfHostNative?.getEqualizerBands(engine.decks[0])
       .then(setEqBands)

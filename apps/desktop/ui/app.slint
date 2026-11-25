@@ -1,0 +1,100 @@
+// Desktop app shell: the sidebar and an empty page per destination.
+// Destinations follow the Electron app's sidebar (src/renderer/src/components/Sidebar.tsx).
+import { Theme } from "@hub-ui/theme.slint";
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback clicked;
+
+    height: 40px;
+    border-radius: Theme.radius;
+    background: root.active || touch.has-hover ? Theme.surface-hover : transparent;
+    animate background { duration: 150ms; }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    Text {
+        x: 12px;
+        text: root.label;
+        font-size: 14px;
+        font-weight: 500;
+        color: root.active || touch.has-hover ? Theme.text : Theme.text-muted;
+        vertical-alignment: center;
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "SelfHost Hub";
+    preferred-width: 1200px;
+    preferred-height: 760px;
+    min-width: 800px;
+    min-height: 500px;
+    background: Theme.surface-base;
+
+    in-out property <int> page: 0;
+    property <[string]> pages: ["Navidrome", "FileBrowser", "Serveur", "Réglages"];
+
+    HorizontalLayout {
+        Rectangle {
+            width: 220px;
+            background: Theme.surface-raised;
+
+            // Right-hand border.
+            Rectangle {
+                x: parent.width - 1px;
+                width: 1px;
+                background: Theme.surface-border;
+            }
+
+            VerticalLayout {
+                padding: 8px;
+                spacing: 4px;
+                alignment: start;
+
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-top: 12px;
+                    padding-bottom: 16px;
+                    Text {
+                        text: "SelfHost Hub";
+                        font-size: 15px;
+                        font-weight: 600;
+                        color: Theme.text;
+                    }
+                }
+
+                for name[i] in root.pages: NavItem {
+                    label: name;
+                    active: root.page == i;
+                    clicked => {
+                        root.page = i;
+                    }
+                }
+            }
+        }
+
+        VerticalLayout {
+            padding: 32px;
+            spacing: 8px;
+            alignment: start;
+
+            Text {
+                text: root.pages[root.page];
+                font-size: 28px;
+                font-weight: 700;
+                color: Theme.text;
+            }
+
+            Text {
+                text: "Réécriture Rust, phase 0 : coquille de l'application.";
+                font-size: 14px;
+                color: Theme.text-muted;
+            }
+        }
+    }
+}

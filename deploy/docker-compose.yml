@@ -1,0 +1,73 @@
+# SelfHost Hub server. Run from this folder:  docker compose up -d --build
+services:
+  selfhost-hub:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      # Build with the host's network: on hosts whose DNS is systemd-resolved (127.0.0.53),
+      # build containers otherwise cannot resolve deb.debian.org or crates.io.
+      network: host
+    image: selfhost-hub-server
+    container_name: selfhost-hub
+    restart: unless-stopped
+    ports:
+      - "51823:51823"
+    volumes:
+      # A named volume: Docker gives it the image's /data ownership (uid 65532), so no chown is needed.
+      # Back up with: docker run --rm -v selfhost-hub_hub-data:/data -v "$PWD":/out alpine cp /data/hub.db /out/
+      - hub-data:/data
+      # Administration (/admin) : surveillance du serveur, en LECTURE SEULE. Voir README, section "Administration".
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      # rslave : les disques montés sur l'hôte apparaissent aussi dans le conteneur.
+      - /:/hostfs:ro,rslave
+    environment:
+      # How the hub reaches Navidrome.
+      #  - Navidrome container on a shared Docker network (as below): http://navidrome:4533
+      #  - Navidrome elsewhere on the LAN: http://192.168.1.10:4533
+      #  - Navidrome on the Docker host itself: http://host.docker.internal:4533
+      NAVIDROME_URL: "http://navidrome:4533"
+      SERVER_NAME: "Maison"
+      # "true" only behind a reverse proxy that sets X-Forwarded-For (Nginx Proxy Manager does).
+      TRUST_PROXY: "true"
+      RUST_LOG: "info"
+      # Surveillance de l'hôte (tout est optionnel ; sans ces variables, la page Système lit le conteneur seul).
+      HOST_PROC: "/host/proc"
+      HOST_SYS: "/host/sys"
+      HOST_ROOT: "/hostfs"
+      DOCKER_URL: "http://docker-proxy:2375"
+      # Terminal d'administration (SSH vers l'hôte, protégé par TOTP). Voir README, section "Terminal".
+      SHELL_ENABLED: "true"
+      SHELL_SSH_USER: "mboot"
+    # Needed for host.docker.internal on Linux.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - navidrome
+
+  # Liste les conteneurs et leurs stats pour la page Services, rien d'autre.
+  # Pourquoi un proxy : donner le socket Docker brut au hub équivaudrait à lui donner root sur toute la machine
+  # (un conteneur qui parle à l'API peut en lancer un autre avec / monté en écriture). Ce proxy n'autorise que
+  # les GET sur /containers (CONTAINERS=1, POST=0) ; tout le reste est refusé par défaut.
+  # Aucun port publié : seul le hub, sur le réseau par défaut de ce compose, peut l'atteindre.
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: selfhost-hub-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - default
+
+volumes:
+  hub-data:
+
+networks:
+  # The network of the Navidrome compose project (`docker network ls`), so the hub can reach it by name.
+  navidrome:
+    external: true
+    name: navidrome_default

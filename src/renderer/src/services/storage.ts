@@ -33,5 +33,8 @@ export const storage = {
   },
   async loadPref<T>(key: string): Promise<T | null> {
     return (await window.api.store.get(`prefs.${key}`)) as T | null
+  },
+  async removePref(key: string): Promise<void> {
+    await window.api.store.delete(`prefs.${key}`)
   }
 }

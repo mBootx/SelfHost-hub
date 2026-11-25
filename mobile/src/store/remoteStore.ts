@@ -14,6 +14,9 @@ import {
   normalizeCode,
   REMOTE_CONTROL_PORT
 } from '@/services/remoteControl'
+import { HubServerClient, isValidServerUrl, loadOrCreateDeviceId, normalizeServerUrl } from '@/services/hubServer'
+import { attachListeningSync } from '@/services/listeningSync'
+import { clearOtherDevices } from '@/services/listeningLog'
 
 /**
  * LAN remote control ("pick an output device and drive it from another",
@@ -27,6 +30,10 @@ import {
  * A phone is paired with its PC once, by typing the code the PC shows. The
  * code is kept in the secure store and only ever used to answer the PC's
  * challenge, never sent.
+ *
+ * With a hub server address set (`serverUrl`, docs/server-protocol.md) none of that applies: the phone connects to the
+ * server with its Navidrome account, the PC is a device like any other in the list (there is no "hub" device), and the
+ * rest of the app sees the same shape either way (devices, states, sendCommand).
  */
 export const LOCAL_DEVICE_ID = 'local'
 
@@ -40,14 +47,26 @@ export interface Pairing {
   code: string
 }
 
+/** What the rest of the app needs of a connection, LAN hub or server alike. */
+export interface RemoteLink {
+  sendCommand: (targetId: string, action: string, payload?: unknown) => void
+  sendState: (state: RemoteDeviceState) => void
+  close: () => void
+}
+
 interface RemoteControlState {
   enabled: boolean
   status: RemoteStatus
   error: string | null
-  client: RemoteHubClient | null
+  client: RemoteLink | null
   deviceId: string
   deviceName: string
   pairing: Pairing | null
+  /** The hub server's address, normalised; empty means the LAN mode with the PC as hub. */
+  serverUrl: string
+  /** The Navidrome user the server signed this phone in as, while connected to a server. */
+  serverUser: string | null
+  serverName: string | null
   deviceList: RemoteDeviceSummary[]
   devices: Record<string, RemoteDeviceState>
   selectedDeviceId: string
@@ -61,6 +80,11 @@ interface RemoteControlState {
   /** Pairs with the PC showing this code - found on the network, or at `ip` - and connects to it. */
   pair: (code: string, ip?: string) => Promise<boolean>
   unpair: () => Promise<void>
+  /**
+   * Sets (or, with an empty address, removes) the hub server and connects to it. False when the address cannot be
+   * dialled. Turns remote control on when a server is set.
+   */
+  setServerUrl: (url: string) => Promise<boolean>
   disconnect: () => void
   selectDevice: (id: string) => void
   sendCommand: (action: string, payload?: unknown) => void
@@ -71,9 +95,20 @@ let lastStatePush = 0
 /** A link to the PC that dropped is looked for again after this long (the PC restarting, the Wi-Fi switching). */
 const RECONNECT_DELAY_MS = 3000
 
-function generateDeviceId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return `device-${Date.now()}-${Math.random().toString(36).slice(2)}`
+/** The listening sync of the current server connection, if there is one. */
+let detachListeningSync: (() => void) | null = null
+
+function stopServerLink(): void {
+  detachListeningSync?.()
+  detachListeningSync = null
+}
+
+/** The user and token the server asks for: Navidrome's own Subsonic token (md5(password + salt)) with the server's nonce as salt. */
+function navidromeAuth(nonce: string): { user: string; token: string } | null {
+  const client = useNavidromeStore.getState().client
+  if (!client) return null
+  const login = client.sharedLogin(nonce)
+  return { user: login.username, token: login.token }
 }
 
 /** Plays what another device asked for. Anything out of range or of an unknown kind is ignored. */
@@ -163,23 +198,25 @@ async function loadPairing(): Promise<Pairing | null> {
   }
 }
 
-function wireClient(
-  client: RemoteHubClient,
-  set: StoreApi<RemoteControlState>['setState'],
-  get: StoreApi<RemoteControlState>['getState']
-): void {
-  client.onDevices((devices) => {
-    const knownIds = new Set(devices.map((d) => d.deviceId))
-    const nextDevices = { ...get().devices }
-    for (const id of Object.keys(nextDevices)) {
-      if (!knownIds.has(id)) delete nextDevices[id]
-    }
-    const selectedDeviceId =
-      get().selectedDeviceId === LOCAL_DEVICE_ID || knownIds.has(get().selectedDeviceId)
-        ? get().selectedDeviceId
-        : LOCAL_DEVICE_ID
-    set({ deviceList: devices, devices: nextDevices, selectedDeviceId })
-  })
+type SetState = StoreApi<RemoteControlState>['setState']
+type GetState = StoreApi<RemoteControlState>['getState']
+
+/** A new list of devices: the states and the selection of those that left are dropped. */
+function applyDeviceList(devices: RemoteDeviceSummary[], set: SetState, get: GetState): void {
+  const knownIds = new Set(devices.map((d) => d.deviceId))
+  const nextDevices = { ...get().devices }
+  for (const id of Object.keys(nextDevices)) {
+    if (!knownIds.has(id)) delete nextDevices[id]
+  }
+  const selectedDeviceId =
+    get().selectedDeviceId === LOCAL_DEVICE_ID || knownIds.has(get().selectedDeviceId)
+      ? get().selectedDeviceId
+      : LOCAL_DEVICE_ID
+  set({ deviceList: devices, devices: nextDevices, selectedDeviceId })
+}
+
+function wireClient(client: RemoteHubClient, set: SetState, get: GetState): void {
+  client.onDevices((devices) => applyDeviceList(devices, set, get))
   client.onState((state) => {
     const { deviceId, ...rest } = state
     set({ devices: { ...get().devices, [deviceId]: rest as RemoteDeviceState } })
@@ -225,6 +262,57 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
     return { hubId: hub.hubId }
   }
 
+  /** Connects to the hub server (its address is `serverUrl`), replacing whatever link there was. */
+  function connectServer(): void {
+    stopServerLink()
+    const previous = get().client
+    set({ client: null })
+    previous?.close()
+
+    const { serverUrl, deviceId, deviceName } = get()
+    const client = new HubServerClient({ baseUrl: serverUrl, deviceId, deviceName, getAuth: navidromeAuth })
+    client.onDevices((devices) => {
+      if (get().client !== client) return
+      // The server lists every device of the account, this phone included.
+      applyDeviceList(
+        devices.filter((d) => d.deviceId !== get().deviceId),
+        set,
+        get
+      )
+    })
+    client.onState((state) => {
+      if (get().client !== client) return
+      const { deviceId: from, ...rest } = state as { deviceId: string } & RemoteDeviceState & { type?: string }
+      delete rest.type
+      set({ devices: { ...get().devices, [from]: rest as RemoteDeviceState } })
+    })
+    client.onCommand((command) => {
+      if (get().client === client) applyCommandLocally(command.action, command.payload)
+    })
+    client.onStatus((status, info) => {
+      // A connection replaced since (turned off and on, another server) reporting late must not undo the new one.
+      if (get().client !== client) return
+      if (status === 'connected') {
+        set({ status: 'connected', error: null, serverUser: info.user ?? null, serverName: info.serverName ?? null })
+        logEvent('remote', `Connecté au serveur${info.user ? ` (${info.user})` : ''}`)
+        client.sendState(currentStatePayload())
+        return
+      }
+      const gone = { deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID, serverUser: null }
+      if (status === 'refused') {
+        set({ ...gone, status: 'error', error: info.message ?? 'Connexion refusée par le serveur' })
+        logEvent('remote', `Serveur : ${info.message ?? 'connexion refusée'}`, 'warn')
+      } else if (status === 'connecting') {
+        set({ ...gone, status: 'connecting', error: null })
+      } else {
+        set({ ...gone, status: 'disconnected', error: null })
+      }
+    })
+    detachListeningSync = attachListeningSync(client)
+    set({ client, status: 'connecting', error: null, deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID, serverUser: null })
+    client.start()
+  }
+
   return {
     enabled: false,
     status: 'disconnected',
@@ -233,22 +321,28 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
     deviceId: '',
     deviceName: '',
     pairing: null,
+    serverUrl: '',
+    serverUser: null,
+    serverName: null,
     deviceList: [],
     devices: {},
     selectedDeviceId: LOCAL_DEVICE_ID,
 
     init: async () => {
-      let deviceId = await storage.loadPref<string>('remote.deviceId')
-      if (!deviceId) {
-        deviceId = generateDeviceId()
-        await storage.savePref('remote.deviceId', deviceId)
-      }
-      const [enabled, deviceName, pairing] = await Promise.all([
+      const deviceId = await loadOrCreateDeviceId()
+      const [enabled, deviceName, pairing, serverUrl] = await Promise.all([
         storage.loadPref<boolean>('remote.enabled'),
         storage.loadPref<string>('remote.deviceName'),
-        loadPairing()
+        loadPairing(),
+        storage.loadPref<string>('remote.serverUrl')
       ])
-      set({ deviceId, deviceName: deviceName || Device.modelName || 'Téléphone', enabled: !!enabled, pairing })
+      set({
+        deviceId,
+        deviceName: deviceName || Device.modelName || 'Téléphone',
+        enabled: !!enabled,
+        pairing,
+        serverUrl: normalizeServerUrl(serverUrl ?? '')
+      })
 
       if (!subscribedToPlayback) {
         subscribedToPlayback = true
@@ -268,6 +362,11 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
           lastStatePush = now
           client.sendState(currentStatePayload())
         })
+        // The Navidrome login arrives (or changes) after the server refused for lack of one: no waiting for the next try.
+        useNavidromeStore.subscribe((state, prev) => {
+          const { client } = get()
+          if (state.client && state.client !== prev.client && client instanceof HubServerClient) client.retryNow(true)
+        })
       }
 
       if (get().enabled) await get().autoConnect()
@@ -286,6 +385,13 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
     },
 
     autoConnect: async () => {
+      if (get().serverUrl) {
+        // Server mode: the connection retries by itself; this only hurries it up (or starts it).
+        const { client } = get()
+        if (client instanceof HubServerClient) client.retryNow()
+        else connectServer()
+        return
+      }
       if (get().status === 'connecting' || get().status === 'connected') return
       const { pairing } = get()
       if (!pairing) {
@@ -366,9 +472,30 @@ export const useRemoteStore = create<RemoteControlState>((set, get) => {
       set({ pairing: null })
     },
 
+    setServerUrl: async (input) => {
+      const url = normalizeServerUrl(input)
+      if (url && !isValidServerUrl(url)) return false
+      const previous = get().serverUrl
+      get().disconnect()
+      await storage.savePref('remote.serverUrl', url)
+      // Another server (or none) does not know the revisions and devices of the last: they are forgotten, and every week
+      // of this phone is to be uploaded again.
+      if (url !== previous) clearOtherDevices()
+      set({ serverUrl: url, serverUser: null, serverName: null, error: null })
+      if (url) {
+        await storage.savePref('remote.enabled', true)
+        set({ enabled: true })
+        connectServer()
+      } else if (get().enabled) {
+        await get().autoConnect()
+      }
+      return true
+    },
+
     disconnect: () => {
       const { client } = get()
-      set({ client: null, status: 'disconnected', deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID, error: null })
+      stopServerLink()
+      set({ client: null, status: 'disconnected', deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID, error: null, serverUser: null })
       client?.close()
     },
 

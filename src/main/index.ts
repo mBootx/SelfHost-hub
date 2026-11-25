@@ -19,6 +19,7 @@ import {
   PairingStore,
   REMOTE_CONTROL_PORT
 } from './remoteHub'
+import * as hubServer from './hubServerClient'
 import { initAutoUpdates } from './updater'
 import { HIDDEN_ARG, initTray, showWindow } from './tray'
 import { sendMagicPacket } from './wakeOnLan'
@@ -139,6 +140,18 @@ app.whenReady().then(() => {
     callback({ responseHeaders })
   })
 
+  hubServer.initHubServer({
+    getWindow: () => mainWindow,
+    storeGet: (key) => store.get(key),
+    storeSet: (key, value) => store.set(key, value),
+    // The Navidrome account the renderer saved at login: the password is read only to compute the sign-in token.
+    getCredentials: () => {
+      const conn = store.get('navidrome.connection') as { username?: unknown } | undefined
+      const user = typeof conn?.username === 'string' ? conn.username : ''
+      const password = readSecret('navidrome.password')
+      return user && password ? { user, password } : null
+    }
+  })
   registerIpc()
   // Before the window exists: the tray also decides what closing the window does.
   initTray(() => mainWindow, store)
@@ -152,6 +165,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   stopHub()
+  hubServer.disconnect()
   // localStorage reaches disk lazily; this makes sure the playback position saved on close is kept.
   session.defaultSession.flushStorageData()
   if (process.platform !== 'darwin') app.quit()
@@ -445,14 +459,31 @@ function registerIpc(): void {
   })
   ipcMain.handle('remote:status', () => ({ running: isRunning(), address: localLanAddress(), port: REMOTE_CONTROL_PORT }))
   ipcMain.handle('remote:pushState', (_e, state: Record<string, unknown>) => {
-    pushLocalState(state)
+    if (hubServer.isActive()) hubServer.pushState(state)
+    else pushLocalState(state)
     return true
   })
   ipcMain.handle('remote:sendCommand', (_e, args: { targetId: string; command: unknown }) => {
-    sendToDevice(args.targetId, args.command)
+    if (hubServer.isActive()) hubServer.sendCommand(args.targetId, args.command)
+    else sendToDevice(args.targetId, args.command)
     return true
   })
   ipcMain.handle('remote:getDevices', () => currentDeviceList())
+
+  // Hub server mode (docs/server-protocol.md): the PC is a device of the server and runs no LAN hub of its own.
+  ipcMain.handle('hubServer:connect', (_e, args: { url: string }) => {
+    stopHub()
+    return hubServer.connect(String(args?.url ?? ''))
+  })
+  ipcMain.handle('hubServer:disconnect', () => {
+    hubServer.disconnect()
+    return true
+  })
+  ipcMain.handle('hubServer:status', () => hubServer.getStatus())
+  ipcMain.handle('hubServer:pushListening', (_e, weeks: Record<string, unknown>) => {
+    if (!weeks || typeof weeks !== 'object') return []
+    return hubServer.pushListening(weeks)
+  })
 
   ipcMain.handle('wol:wake', (_e, args: { mac: string; broadcast: string }) => sendMagicPacket(args.mac, args.broadcast))
 }

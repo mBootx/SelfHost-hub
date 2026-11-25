@@ -1,0 +1,17 @@
+﻿# Rust rewrite of SelfHost Hub. See docs/rust-rewrite.md.
+# The old apps (src/, mobile/, wear/) stay in place until each Rust replacement ships.
+
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/desktop", "apps/server"]
+
+[workspace.package]
+edition = "2024"
+license = "UNLICENSED"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

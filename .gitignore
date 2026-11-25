@@ -6,3 +6,7 @@ release
 *.log
 *.tsbuildinfo
 .claude/
+target/
+spikes/android/.gradle/
+spikes/android/app/build/
+spikes/android/app/src/main/jniLibs/

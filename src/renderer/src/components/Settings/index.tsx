@@ -16,6 +16,7 @@ import AppearanceSection from './AppearanceSection'
 import ConfirmModal from '@renderer/components/ConfirmModal'
 import { plural } from '@renderer/services/plural'
 import PlaybackSection from './PlaybackSection'
+import HubServerSection from './HubServerSection'
 import { Card, Fold, GroupLabel, Hero, PillButton, Row } from './kit'
 
 type UpdateState = 'idle' | 'checking' | 'current' | 'downloading' | 'ready' | 'dev' | 'error'
@@ -122,6 +123,7 @@ export default function SettingsModule(): JSX.Element {
   const remotePairingCode = useRemoteStore((s) => s.pairingCode)
   const newRemotePairingCode = useRemoteStore((s) => s.newPairingCode)
   const remoteError = useRemoteStore((s) => s.error)
+  const hubServerUrl = useRemoteStore((s) => s.serverUrl)
   const [confirmClearOffline, setConfirmClearOffline] = useState(false)
   const [deviceNameDraft, setDeviceNameDraft] = useState(remoteDeviceName)
   useEffect(() => setDeviceNameDraft(remoteDeviceName), [remoteDeviceName])
@@ -173,6 +175,12 @@ export default function SettingsModule(): JSX.Element {
           </Card>
         </section>
 
+        <section>
+          <GroupLabel>Serveur SelfHost Hub</GroupLabel>
+          <HubServerSection />
+        </section>
+
+        {!hubServerUrl && (
         <section>
           <GroupLabel>Contrôle à distance</GroupLabel>
           <Card>
@@ -247,6 +255,7 @@ export default function SettingsModule(): JSX.Element {
             )}
           </Card>
         </section>
+        )}
 
         {/* Downtify has no tab of its own any more: connecting, the queue and the
             download options all live here, and its search results surface inside

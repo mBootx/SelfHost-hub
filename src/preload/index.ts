@@ -16,6 +16,13 @@ export interface TraySettings {
   openAtLogin: boolean
 }
 
+export interface HubServerStatus {
+  state: 'off' | 'connecting' | 'connected' | 'refused' | 'error'
+  user?: string
+  serverName?: string
+  reason?: string
+}
+
 export type TrayCommand = 'toggle' | 'next' | 'prev'
 
 const api = {
@@ -136,6 +143,20 @@ const api = {
       const listener = (_event: unknown, command: Record<string, any>): void => callback(command)
       ipcRenderer.on('remote:command', listener)
       return () => ipcRenderer.removeListener('remote:command', listener)
+    }
+  },
+  hubServer: {
+    connect: (url: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('hubServer:connect', { url }),
+    disconnect: (): Promise<boolean> => ipcRenderer.invoke('hubServer:disconnect'),
+    status: (): Promise<HubServerStatus> => ipcRenderer.invoke('hubServer:status'),
+    /** Uploads up to 8 listening weeks; resolves with the ones the server acknowledged. */
+    pushListening: (weeks: Record<string, unknown>): Promise<string[]> => ipcRenderer.invoke('hubServer:pushListening', weeks),
+    onStatus: (callback: (status: HubServerStatus) => void) => {
+      const listener = (_event: unknown, status: HubServerStatus): void => callback(status)
+      ipcRenderer.on('hubServer:status', listener)
+      return (): void => {
+        ipcRenderer.removeListener('hubServer:status', listener)
+      }
     }
   }
 }

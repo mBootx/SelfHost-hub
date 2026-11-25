@@ -33,6 +33,8 @@ export interface RemoteDeviceState {
   volume: number
 }
 
+export type HubServerStatus = Awaited<ReturnType<typeof window.api.hubServer.status>>
+
 export interface RemoteDeviceSummary {
   deviceId: string
   deviceName: string
@@ -51,8 +53,13 @@ interface RemoteState {
   deviceList: RemoteDeviceSummary[]
   devices: Record<string, RemoteDeviceState>
   selectedDeviceId: string
+  /** The hub server's address (empty: the LAN mode, the PC being the hub). */
+  serverUrl: string
+  serverStatus: HubServerStatus
 
   init: () => Promise<void>
+  /** Sets (or, empty, removes) the hub server address and switches mode at once. */
+  setServerUrl: (url: string) => Promise<void>
   setEnabled: (enabled: boolean) => Promise<void>
   setDeviceName: (name: string) => Promise<void>
   /** Replaces the pairing code: phones paired with the old one are disconnected and must enter the new one. */
@@ -84,14 +91,14 @@ function applyCommandLocally(action: string, payload: any): void {
       s.prev()
       break
     case 'seek': {
-      const seconds = Number(payload?.seconds)
+      const seconds = Number(typeof payload === 'number' ? payload : payload?.seconds)
       if (!Number.isFinite(seconds) || seconds < 0) break
       seekTo(seconds)
       useNavidromeStore.setState({ currentTime: seconds })
       break
     }
     case 'setVolume': {
-      const volume = Number(payload?.volume)
+      const volume = Number(typeof payload === 'number' ? payload : payload?.volume)
       if (!Number.isFinite(volume)) break
       s.setVolume(Math.min(1, Math.max(0, volume)))
       break
@@ -115,13 +122,16 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
   deviceList: [],
   devices: {},
   selectedDeviceId: LOCAL_DEVICE_ID,
+  serverUrl: '',
+  serverStatus: { state: 'off' },
 
   init: async () => {
-    const [enabled, deviceName] = await Promise.all([
+    const [enabled, deviceName, serverUrl] = await Promise.all([
       storage.loadPref<boolean>('remote.enabled'),
-      storage.loadPref<string>('remote.deviceName')
+      storage.loadPref<string>('remote.deviceName'),
+      storage.loadPref<string>('hubServerUrl')
     ])
-    set({ enabled: !!enabled, deviceName: deviceName || 'PC' })
+    set({ enabled: !!enabled, deviceName: deviceName || 'PC', serverUrl: typeof serverUrl === 'string' ? serverUrl : '' })
 
     if (!listenersWired) {
       listenersWired = true
@@ -147,12 +157,23 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
       window.api.remote.onCommand((command) => {
         applyCommandLocally(command.action, command.payload)
       })
+      window.api.hubServer.onStatus((serverStatus) => {
+        if (!get().serverUrl) return
+        const connected = serverStatus.state === 'connected'
+        set((st) => ({
+          serverStatus,
+          running: connected,
+          // Out of reach, the other devices are unknown: back to this PC.
+          ...(connected ? {} : { deviceList: [], devices: {}, selectedDeviceId: LOCAL_DEVICE_ID }),
+          error: st.error
+        }))
+      })
     }
 
     if (!subscribedToPlayback) {
       subscribedToPlayback = true
       useNavidromeStore.subscribe((state, prev) => {
-        if (!get().enabled) return
+        if (!get().enabled && !get().serverUrl) return
         const song = state.queue[state.queueIndex] || null
         const prevSong = prev.queue[prev.queueIndex] || null
         const changed =
@@ -186,6 +207,22 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
       })
     }
 
+    // With a hub server address, the PC is a device of that server and runs no LAN hub of its own.
+    if (get().serverUrl) {
+      const signedIn = await storage.loadConnection('navidrome')
+      if (signedIn) {
+        const res = await window.api.hubServer.connect(get().serverUrl)
+        const current = await window.api.hubServer.status()
+        set({ error: res.ok ? null : res.error || 'adresse invalide', serverStatus: current, running: current.state === 'connected' })
+      } else {
+        await window.api.hubServer.disconnect()
+        set({ running: false, error: null })
+      }
+      set({ pairingCode: null, address: null })
+      return
+    }
+    await window.api.hubServer.disconnect()
+
     // The hub only makes sense with a player to drive: off, or logged out of Navidrome, it is stopped.
     const loggedIn = get().enabled ? await storage.loadConnection('navidrome') : null
     if (loggedIn) {
@@ -201,6 +238,22 @@ export const useRemoteStore = create<RemoteState>((set, get) => ({
   setEnabled: async (enabled) => {
     await storage.savePref('remote.enabled', enabled)
     set({ enabled })
+    await get().init()
+  },
+
+  setServerUrl: async (url) => {
+    const clean = url.trim()
+    await storage.savePref('hubServerUrl', clean)
+    // Leaving the LAN mode (or coming back to it): the LAN hub is stopped, then init starts whichever mode applies.
+    if (clean) await window.api.remote.stop()
+    set({
+      serverUrl: clean,
+      serverStatus: { state: 'off' },
+      running: false,
+      deviceList: [],
+      devices: {},
+      selectedDeviceId: LOCAL_DEVICE_ID
+    })
     await get().init()
   },
 

@@ -1,0 +1,19 @@
+// Colours and sizes shared by all apps.
+// Defaults match the Electron app (src/renderer/src/styles/globals.css). The accent can be recoloured from Settings.
+export global Theme {
+    in-out property <color> accent: #1db954;
+    in-out property <color> accent-hover: #1ed760;
+    in-out property <color> accent-dark: #169c46;
+
+    out property <color> surface-base: #0a0a0a;
+    out property <color> surface-raised: #121212;
+    out property <color> surface-elevated: #181818;
+    out property <color> surface-hover: #282828;
+    out property <color> surface-border: #2a2a2a;
+
+    out property <color> text: #ffffff;
+    // Tailwind gray-400, the Electron app's secondary text.
+    out property <color> text-muted: #9ca3af;
+
+    out property <length> radius: 6px;
+}

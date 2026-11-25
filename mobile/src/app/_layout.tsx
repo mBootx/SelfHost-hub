@@ -168,6 +168,7 @@ export default function RootLayout() {
         <Stack.Screen name="downtify/connect" options={detailHeader} />
         <Stack.Screen name="devices/index" options={detailHeader} />
         <Stack.Screen name="server/index" options={detailHeader} />
+        <Stack.Screen name="settings/[section]" options={detailHeader} />
         <Stack.Screen name="shares" options={detailHeader} />
         <Stack.Screen name="diagnostics" options={detailHeader} />
         <Stack.Screen name="trash" options={detailHeader} />

@@ -39,6 +39,8 @@ export interface EngineHandlers {
   onStopAfterTrack?: () => void
   /** The current track started or stopped waiting for data while it should be playing (a stall, when streaming). */
   onBuffering?: (buffering: boolean) => void
+  /** Something worth a line in the Diagnostic journal: a stall, a focus change, a crossfade cut short, a player error. */
+  onLog?: (message: string, level: 'info' | 'warn') => void
 }
 
 /** How long before the fade window the next track starts buffering. */
@@ -100,6 +102,10 @@ class DeckEngine {
   private handlers: EngineHandlers | null = null
   /** What onBuffering last said, so it is only told about changes. */
   private stalled = false
+  /** When the current stall began, for its length in the journal. */
+  private stalledAt = 0
+  /** The last error each deck reported, so one error is logged once. */
+  private errors: [string | null, string | null] = [null, null]
   /**
    * Another app has the sound for a moment (a call, a voice message): the music is paused and comes back by itself.
    * The person did not pause, so nothing the decks report meanwhile counts as their choice.
@@ -156,7 +162,16 @@ class DeckEngine {
   }
 
   /** What another app did with the sound, as Android told selfhost-native. */
+  private log(message: string, level: 'info' | 'warn' = 'info'): void {
+    try {
+      this.handlers?.onLog?.(message, level)
+    } catch {
+      // The journal must never get in the way of the music.
+    }
+  }
+
   private onFocusChange(change: string): void {
+    this.log(`Focus audio : ${change}${this.wantPlaying ? '' : ' (en pause)'}`, change === 'lost' ? 'warn' : 'info')
     if (change === 'interrupt') {
       // A call, a voice message: the music pauses and waits. The person still wants it, so nothing else changes.
       if (!this.wantPlaying) return
@@ -373,6 +388,12 @@ class DeckEngine {
   private onStatus(index: DeckIndex, status: AudioStatus): void {
     // Statuses keep coming with the screen off and timers do not: this is what ends a fade whose time is up.
     if (this.fade && Date.now() - this.fade.start >= this.fade.durationMs + FADE_GRACE_MS) this.finishFade()
+    // Sent by the native player (patches/expo-audio onPlayerError), not in every version's typings.
+    const error = (status as { error?: string | null }).error ?? null
+    if (error !== this.errors[index]) {
+      this.errors[index] = error
+      if (error) this.log(`Erreur du lecteur ${index + 1}${index === this.active ? '' : ' (titre suivant)'} : ${error}`, 'warn')
+    }
     const justFinished = status.didJustFinish && !this.finished[index]
     this.finished[index] = status.didJustFinish
     if (status.didJustFinish) this.atEnd[index] = true
@@ -388,6 +409,8 @@ class DeckEngine {
     const stalled = this.wantPlaying && status.isBuffering && !status.didJustFinish
     if (stalled !== this.stalled) {
       this.stalled = stalled
+      if (stalled) this.stalledAt = Date.now()
+      else this.log(`Lecture bloquée ${((Date.now() - this.stalledAt) / 1000).toFixed(1)} s en attente de données, à ${Math.round(status.currentTime)} s`, 'warn')
       this.handlers?.onBuffering?.(stalled)
     }
 
@@ -464,6 +487,7 @@ class DeckEngine {
     this.atEnd[otherIndex] = false
     // Paused first (see the class comment): a deck that finished a track would start this one by itself.
     this.gains[otherIndex] = next.gain ?? 1
+    this.log(`Préchargement du titre suivant (${next.source.startsWith('file:') ? 'local' : 'flux'})`)
     deck.pause()
     deck.volume = 0
     deck.replace(next.source)
@@ -521,6 +545,8 @@ class DeckEngine {
   private finishFade(): void {
     const fade = this.fade
     if (!fade) return
+    const early = Date.now() - fade.start < fade.durationMs
+    if (early) this.log('Fondu enchaîné interrompu avant la fin')
     if (fade.timer) clearInterval(fade.timer)
     else SelfHostNative?.cancelCrossfade?.()
     this.fade = null

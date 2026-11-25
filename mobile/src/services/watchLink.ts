@@ -109,7 +109,8 @@ function pcOf(input: SnapshotInput): WatchSnapshot['pc'] {
   if (!input.enabled) return { state: 'off' }
   if (!input.paired) return { state: 'unpaired' }
   if (input.status === 'connected') {
-    const hub = input.deviceList.find((d) => d.deviceId === HUB_DEVICE_ID)
+    // LAN mode: the PC is the hub. With a hub server there is no "hub" device: the PC is the first desktop in the list.
+    const hub = input.deviceList.find((d) => d.deviceId === HUB_DEVICE_ID) ?? input.deviceList.find((d) => d.platform === 'desktop')
     return hub ? { state: 'connected', name: text(hub.deviceName, 60) } : { state: 'connected' }
   }
   if (input.status === 'connecting') return { state: 'connecting' }
@@ -272,7 +273,8 @@ function currentSnapshot(): WatchSnapshot {
   return buildSnapshot({
     phoneName: remote.deviceName,
     enabled: remote.enabled,
-    paired: remote.pairing !== null,
+    // With a hub server there is nothing to pair: the server address is what the phone is "paired" with.
+    paired: remote.pairing !== null || !!remote.serverUrl,
     status: remote.status,
     error: remote.error,
     ownId: remote.deviceId,
@@ -358,7 +360,7 @@ async function answer(nodeId: string): Promise<void> {
  */
 function reconnectPc(): void {
   const remote = useRemoteStore.getState()
-  if (!remote.enabled || !remote.pairing) return
+  if (!remote.enabled || (!remote.pairing && !remote.serverUrl)) return
   if (remote.status !== 'disconnected' && remote.status !== 'error') return
   const now = Date.now()
   if (now - lastReconnectAt < RECONNECT_PAUSE_MS) return

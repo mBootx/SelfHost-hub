@@ -39,6 +39,10 @@ class AudioPlayer(
     .setAudioAttributes(AudioAttributes.DEFAULT, false)
     .setSeekForwardIncrementMs(SEEK_JUMP_INTERVAL_MS)
     .setSeekBackIncrementMs(SEEK_JUMP_INTERVAL_MS)
+    // Keeps the CPU and the Wi-Fi awake while a deck plays (ExoPlayer holds the locks only then). Without it, with the
+    // screen off, Android could put the phone to sleep between two reads of the stream or the file, and the sound
+    // stuttered, then dropped for a few seconds while the playhead went on. Needs WAKE_LOCK (selfhost-native's manifest).
+    .setWakeMode(C.WAKE_MODE_NETWORK)
     .apply {
       if (bufferDurationMs > 0) {
         setLoadControl(

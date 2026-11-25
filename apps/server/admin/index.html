@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Administration SelfHost Hub</title>
+<style>
+:root{--bg:#0f1318;--panel:#171d25;--panel2:#1e2631;--line:#2a3441;--fg:#e6eaf0;--mute:#8d99a8;--accent:#4aa3ff;--ok:#3fb67a;--warn:#e0a63a;--bad:#e5534b;--track:#2a3441}
+@media (prefers-color-scheme:light){:root{--bg:#f2f4f7;--panel:#fff;--panel2:#f6f8fa;--line:#d9dfe7;--fg:#1b232d;--mute:#64707f;--accent:#0a6cd6;--ok:#1e8a58;--warn:#b57b0c;--bad:#c93a32;--track:#e3e8ee}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:hidden}
+body{min-height:100vh}
+h1{font-size:18px;margin:0}h2{font-size:13px;margin:0 0 8px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+button{font:inherit;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}button:disabled{opacity:.5;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.danger{color:var(--bad)}button.sm{padding:2px 8px;font-size:12px}
+input[type=text],input[type=password]{width:100%;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+label{display:block;margin:10px 0 4px;color:var(--mute);font-size:12px}
+.login{max-width:360px;margin:12vh auto 0;padding:24px 16px}
+.login .card{padding:20px}.login h1{margin-bottom:4px}
+.msg{margin-top:12px;color:var(--bad);min-height:1.4em}
+header.top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:2}
+nav{display:flex;flex-wrap:wrap;gap:4px}
+nav button{border-color:transparent;background:none;color:var(--mute)}
+nav button.on{color:var(--fg);background:var(--panel2);border-color:var(--line)}
+.who{display:flex;gap:10px;align-items:center;color:var(--mute)}
+main{padding:16px;max-width:1200px;margin:0 auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.big{font-size:30px;font-weight:650;line-height:1.1}
+.sub{color:var(--mute);font-size:12px}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.bar{height:8px;background:var(--track);border-radius:4px;overflow:hidden;margin:6px 0;min-width:40px}
+.bar i{display:block;height:100%;background:var(--ok);border-radius:4px}
+.bar i.warn,.fill.warn{background:var(--warn)}.bar i.bad,.fill.bad{background:var(--bad)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+svg.spark{width:100%;height:46px;display:block;margin-top:6px}
+svg.spark .l{fill:none;stroke:var(--accent);stroke-width:1.6;vector-effect:non-scaling-stroke}
+svg.spark .a{fill:var(--accent);opacity:.15;stroke:none}
+svg.spark .l2{fill:none;stroke:var(--ok);stroke-width:1.6;vector-effect:non-scaling-stroke}
+.cores{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px;margin-top:8px}
+.cores div{font-size:11px;color:var(--mute)}.cores .bar{margin:2px 0;height:6px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle;overflow-wrap:anywhere}
+th{color:var(--mute);font-weight:600;font-size:12px;white-space:nowrap}
+th.s{cursor:pointer;user-select:none}th.s.on{color:var(--accent)}
+td.n{text-align:right;white-space:nowrap}th.n{text-align:right}
+.tw{overflow-x:auto}
+.note{padding:12px;border:1px dashed var(--line);border-radius:10px;color:var(--mute);background:var(--panel2)}
+.tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);color:var(--mute)}
+.tag.ok{color:var(--ok)}.tag.bad{color:var(--bad)}
+.sec{margin-bottom:16px}.sec>h2{margin-top:4px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mute);margin-right:6px}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}
+.mini{width:70px;display:inline-block;vertical-align:middle}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px}.kv span:nth-child(odd){color:var(--mute)}
+.hidden{display:none!important}
+.upd{color:var(--mute);font-size:12px}
+pre.key{white-space:pre-wrap;word-break:break-all;font:12px/1.4 ui-monospace,Consolas,monospace;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0}
+.qr svg{width:220px;height:220px;display:block;margin:8px 0;border-radius:8px}
+.cf input{max-width:170px;letter-spacing:.25em;font-variant-numeric:tabular-nums}
+.cf .row{justify-content:flex-start;align-items:center}
+#xt{height:min(70vh,640px);margin-top:8px;background:#0b0e12;border-radius:8px;padding:4px;overflow:hidden}
+@media (max-width:520px){main{padding:10px}.big{font-size:26px}th,td{padding:5px 4px}}
+</style>
+</head>
+<body>
+<section id="login" class="login hidden">
+  <div class="card">
+    <h1>SelfHost Hub</h1>
+    <div class="sub">Administration : compte Navidrome administrateur</div>
+    <form id="form" autocomplete="on">
+      <label for="u">Utilisateur</label><input id="u" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      <label for="p">Mot de passe</label><input id="p" type="password" autocomplete="current-password" required>
+      <div style="margin-top:14px"><button class="primary" id="go" type="submit">Se connecter</button></div>
+      <div class="msg" id="msg" role="alert"></div>
+    </form>
+  </div>
+</section>
+
+<section id="app" class="hidden">
+  <header class="top">
+    <h1>SelfHost Hub</h1>
+    <nav id="nav"></nav>
+    <div class="who"><span id="who"></span><span class="upd" id="upd"></span><button id="out" class="sm">Déconnexion</button></div>
+  </header>
+  <main>
+    <div id="view"></div>
+    <div id="termv" class="hidden">
+      <div id="tstat"></div>
+      <div id="tbox" class="card hidden"><div class="row"><span id="tline" class="sub"></span><button class="sm danger" data-t="close">Fermer la session</button></div><div id="xt"></div></div>
+      <div id="tmeta"></div>
+    </div>
+  </main>
+</section>
+
+<script>
+"use strict";
+// ---------- md5 (Subsonic token = md5(password + salt)) ----------
+function md5(str){
+  const bytes=new TextEncoder().encode(str),n=bytes.length;
+  const S=[7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21],K=new Int32Array(64);
+  for(let i=0;i<64;i++)K[i]=Math.floor(Math.abs(Math.sin(i+1))*4294967296)|0;
+  const total=(((n+8)>>>6)+1)*64,buf=new Uint8Array(total);
+  buf.set(bytes);buf[n]=0x80;
+  const dv=new DataView(buf.buffer);
+  dv.setUint32(total-8,(n*8)>>>0,true);dv.setUint32(total-4,Math.floor(n*8/4294967296),true);
+  let a0=0x67452301|0,b0=0xefcdab89|0,c0=0x98badcfe|0,d0=0x10325476|0;
+  for(let off=0;off<total;off+=64){
+    let A=a0,B=b0,C=c0,D=d0;
+    for(let i=0;i<64;i++){
+      let F,g;
+      if(i<16){F=(B&C)|(~B&D);g=i}
+      else if(i<32){F=(D&B)|(~D&C);g=(5*i+1)%16}
+      else if(i<48){F=B^C^D;g=(3*i+5)%16}
+      else{F=C^(B|~D);g=(7*i)%16}
+      F=(F+A+K[i]+dv.getInt32(off+g*4,true))|0;
+      A=D;D=C;C=B;
+      const s=S[(i>>4)*4+(i&3)];
+      B=(B+((F<<s)|(F>>>(32-s))))|0;
+    }
+    a0=(a0+A)|0;b0=(b0+B)|0;c0=(c0+C)|0;d0=(d0+D)|0;
+  }
+  const out=new DataView(new ArrayBuffer(16));
+  [a0,b0,c0,d0].forEach((w,i)=>out.setInt32(i*4,w,true));
+  return Array.from(new Uint8Array(out.buffer),b=>b.toString(16).padStart(2,"0")).join("");
+}
+const MD5_VECTORS=[["","d41d8cd98f00b204e9800998ecf8427e"],["a","0cc175b9c0f1b6a831c399e269772661"],["abc","900150983cd24fb0d6963f7d28e17f72"],["message digest","f96b697d7cb7938d525a2f31aaf161d0"],["The quick brown fox jumps over the lazy dog","9e107d9d372bb6826bd81d3542a419d6"],["12345678901234567890123456789012345678901234567890123456789012345678901234567890","57edf4a22be3c955ac49da2e2107b67a"]];
+const md5Ok=MD5_VECTORS.every(([s,h])=>md5(s)===h);
+
+// ---------- helpers ----------
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const nf=(x,d=1)=>x==null||isNaN(x)?"?":Number(x).toLocaleString("fr-FR",{maximumFractionDigits:d,minimumFractionDigits:0});
+function bytes(b){if(b==null)return"?";const u=["o","Ko","Mo","Go","To"];let i=0,x=b;while(x>=1024&&i<4){x/=1024;i++}return nf(x,i>=3?2:i?1:0)+" "+u[i]}
+const rate=b=>bytes(b)+"/s";
+function dur(s){if(s==null)return"?";s=Math.floor(s);const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d} j ${h} h`:h?`${h} h ${m} min`:`${m} min ${s%60} s`}
+function ago(t){if(!t)return"jamais";const s=Math.max(0,Date.now()/1000-t);return s<60?"à l'instant":"il y a "+dur(s)}
+const lvl=p=>p>=90?"bad":p>=70?"warn":"";
+const clamp=p=>Math.max(0,Math.min(100,p||0));
+const bar=(p,cls=lvl(p))=>`<div class="bar"><i class="${cls}" style="width:${clamp(p)}%"></i></div>`;
+const note=t=>`<div class="note">${esc(t)}</div>`;
+function spark(vals,max,cls="l"){
+  const v=(vals||[]).map(x=>x==null?null:Number(x));
+  if(v.filter(x=>x!=null).length<2)return `<svg class="spark" viewBox="0 0 100 30"></svg>`;
+  const m=max||Math.max(1,...v.filter(x=>x!=null)),w=100/(Math.max(v.length-1,1));
+  let pts=[];v.forEach((x,i)=>{if(x!=null)pts.push([i*w,30-Math.min(x,m)/m*28-1])});
+  const line=pts.map(p=>p[0].toFixed(2)+","+p[1].toFixed(2)).join(" ");
+  const area=`${pts[0][0]},30 ${line} ${pts[pts.length-1][0]},30`;
+  return `<svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none">${cls==="l"?`<polygon class="a" points="${area}"/>`:""}<polyline class="${cls}" points="${line}"/></svg>`;
+}
+function tempLevel(c,s){const hi=s&&s.high,cr=s&&s.crit;if(cr!=null&&c>=cr-5)return"bad";if(hi!=null&&c>=hi-5)return"warn";if(cr==null&&hi==null){return c>=85?"bad":c>=70?"warn":"ok"}return"ok"}
+
+// ---------- state / api ----------
+const TABS=[["sys","Système"],["svc","Services"],["proc","Processus"],["disk","Disques"],["net","Réseau"],["hub","Hub"],["term","Terminal"]];
+let tab="sys",sys=null,hub=null,sortKey="cpu",showVirtual=false,busy=false,timer=null;
+try{tab=localStorage.getItem("hubAdminTab")||"sys";if(!TABS.some(t=>t[0]===tab))tab="sys"}catch(e){}
+async function api(path,body){
+  const o={credentials:"same-origin",headers:{}};
+  if(body!==undefined){o.method="POST";o.headers["Content-Type"]="application/json";o.headers["X-Requested-With"]="hub-admin";o.body=JSON.stringify(body)}
+  const r=await fetch(path,o);let j=null;try{j=await r.json()}catch(e){}
+  return {status:r.status,body:j};
+}
+function show(app){$("#login").classList.toggle("hidden",app);$("#app").classList.toggle("hidden",!app);if(!app){stop();termClose();$("#u").focus()}}
+
+// ---------- login ----------
+const ERR={401:"Identifiants invalides.",403:"Réservé aux administrateurs Navidrome",429:"Trop de tentatives : réessayez dans 10 minutes.",502:"Navidrome est injoignable depuis le serveur.",400:"Requête refusée, réessayez."};
+$("#form").addEventListener("submit",async e=>{
+  e.preventDefault();const msg=$("#msg");msg.textContent="";
+  if(!md5Ok){msg.textContent="Auto-test MD5 échoué : connexion désactivée.";return}
+  $("#go").disabled=true;
+  try{
+    const c=await api("/api/admin/challenge");
+    if(c.status!==200){msg.textContent=ERR[c.status]||"Erreur serveur.";return}
+    const nonce=c.body.nonce,pw=$("#p").value;
+    const r=await api("/api/admin/login",{user:$("#u").value.trim(),token:md5(pw+nonce),nonce});
+    if(r.status===200){$("#p").value="";enter(r.body.user)}
+    else msg.textContent=ERR[r.status]||"Erreur serveur ("+r.status+").";
+  }catch(err){msg.textContent="Serveur injoignable."}
+  finally{$("#go").disabled=!md5Ok}
+});
+$("#out").addEventListener("click",async()=>{try{await api("/api/admin/logout",{})}catch(e){}sys=hub=null;show(false)});
+function enter(user){$("#who").textContent=user;show(true);buildNav();applyTab();start()}
+function applyTab(){
+  const t=tab==="term";
+  $("#view").classList.toggle("hidden",t);$("#termv").classList.toggle("hidden",!t);
+  if(t){termRefresh();setTimeout(fitTerm,0)}else refresh();
+}
+
+// ---------- refresh loop ----------
+function start(){stop();timer=setInterval(()=>{if(!document.hidden)refresh()},3000)}
+function stop(){if(timer){clearInterval(timer);timer=null}}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&timer)refresh()});
+async function refresh(){
+  if(busy||tab==="term")return;busy=true;
+  try{
+    const r=await api(tab==="hub"?"/api/admin/hub":"/api/admin/system");
+    if(r.status===401){show(false);$("#msg").textContent="Session expirée.";return}
+    if(r.status===200){if(tab==="hub")hub=r.body;else sys=r.body;$("#upd").textContent=new Date().toLocaleTimeString("fr-FR");render()}
+  }catch(e){$("#upd").textContent="hors ligne"}
+  finally{busy=false}
+}
+function buildNav(){
+  $("#nav").innerHTML=TABS.map(([k,n])=>`<button data-tab="${k}" class="${k===tab?"on":""}">${n}</button>`).join("");
+}
+$("#nav").addEventListener("click",e=>{const b=e.target.closest("button[data-tab]");if(!b)return;tab=b.dataset.tab;try{localStorage.setItem("hubAdminTab",tab)}catch(x){}buildNav();$("#view").innerHTML="";applyTab()});
+
+// ---------- views ----------
+const view=$("#view");
+function render(){
+  if(tab==="hub"){if(hub)view.innerHTML=vHub();return}
+  if(!sys)return;
+  if(!sys.ready){view.innerHTML=note("Première mesure en cours, quelques secondes…");return}
+  view.innerHTML=({sys:vSys,svc:vSvc,proc:vProc,disk:vDisk,net:vNet})[tab]();
+}
+function sec(title,inner){return `<div class="sec"><h2>${title}</h2>${inner}</div>`}
+function vSys(){
+  const h=sys.history||{},c=sys.cpu,m=sys.memory,t=sys.temps,ho=sys.host||{};
+  const cpu=c&&!c.unavailable?`<div class="big ${lvl(c.total)}">${nf(c.total)} %</div><div class="sub">${ho.cores||"?"} cœurs</div>${bar(c.total)}${spark(h.cpu,100)}<div class="cores">${(c.cores||[]).map((p,i)=>`<div>${i}${bar(p)}</div>`).join("")}</div>`:note(c&&c.unavailable||"Indisponible");
+  const mem=m&&!m.unavailable?`<div class="big ${lvl(m.percent)}">${nf(m.percent)} %</div><div class="sub">${bytes(m.used)} utilisés sur ${bytes(m.total)}</div>${bar(m.percent)}${spark(h.mem,100)}<div class="kv sub"><span>Disponible</span><span>${bytes(m.available)}</span><span>Tampons + cache</span><span>${bytes(m.buffersCache)}</span><span>Swap</span><span>${m.swapTotal?bytes(m.swapUsed)+" / "+bytes(m.swapTotal):"aucun"}</span></div>`:note(m&&m.unavailable||"Indisponible");
+  let tmp;
+  if(t&&!t.unavailable){
+    const hot=[...t.sensors].filter(s=>s.celsius===t.max)[0];
+    tmp=`<div class="big ${tempLevel(t.max,hot)}">${nf(t.max)} °C</div><div class="sub">${esc(hot?hot.chip+" "+hot.label:"")}</div>${spark(h.temp,Math.max(100,t.max||0))}<div class="kv sub" style="margin-top:8px">${t.sensors.map(s=>`<span>${esc(s.chip)} · ${esc(s.label)}</span><span class="${tempLevel(s.celsius,s)}">${nf(s.celsius)} °C${s.high!=null?" (haut "+nf(s.high,0)+")":""}${s.crit!=null?" (crit. "+nf(s.crit,0)+")":""}</span>`).join("")}</div>`;
+  }else tmp=note(t&&t.unavailable||"Indisponible");
+  const l=ho.load||[];
+  const up=`<div class="big">${dur(ho.uptime)}</div><div class="sub">${esc(ho.hostname||"?")} · noyau ${esc(ho.kernel||"?")}</div><div class="kv" style="margin-top:8px"><span>Charge 1 min</span><span>${l[0]!=null?nf(l[0],2):"?"}</span><span>5 min</span><span>${l[1]!=null?nf(l[1],2):"?"}</span><span>15 min</span><span>${l[2]!=null?nf(l[2],2):"?"}</span></div>`;
+  return `<div class="grid"><div class="card"><h2>CPU</h2>${cpu}</div><div class="card"><h2>Mémoire</h2>${mem}</div><div class="card"><h2>Température max</h2>${tmp}</div><div class="card"><h2>Uptime et charge</h2>${up}</div></div><div class="upd" style="margin-top:8px">Historique : environ 1 h, un point toutes les ${h.step||10} s.</div>`;
+}
+function vSvc(){
+  const k=sys.containers||{};
+  if(k.configured===false)return sec("Services",note("Conteneurs : non configuré (définissez DOCKER_URL, voir le README)."));
+  let out=k.unavailable?note(k.unavailable):"";
+  const items=[...(k.items||[])];
+  const key={cpu:x=>-(x.cpu??-1),mem:x=>-(x.memUsed??-1),name:x=>x.name.toLowerCase()}[sortKey];
+  items.sort((a,b)=>key(a)<key(b)?-1:key(a)>key(b)?1:0);
+  const hostMem=sys.memory&&sys.memory.total||0;
+  const th=(id,t,n)=>`<th class="s ${n?"n ":""}${sortKey===id?"on":""}" data-sort="${id}">${t}${sortKey===id?" ▾":""}</th>`;
+  const rows=items.map(c=>{
+    const run=c.state==="running",lim=c.memLimit>0&&(!hostMem||c.memLimit<=hostMem)?c.memLimit:hostMem;
+    const mp=run&&lim?c.memUsed/lim*100:0;
+    return `<tr><td><b>${esc(c.name)}</b><div class="sub">${esc(c.image)}${c.project?" · "+esc(c.project):""}</div></td><td><span class="tag ${run?"ok":"bad"}">${esc(c.state)}</span><div class="sub">${esc(c.status)}</div></td><td class="n">${run&&c.cpu!=null?nf(c.cpu)+" %":"–"}${run&&c.cpu!=null?`<div class="mini">${bar(c.cpu)}</div>`:""}</td><td class="n">${run&&c.memUsed!=null?bytes(c.memUsed):"–"}${run?`<div class="mini">${bar(mp)}</div>`:""}</td><td class="n sub">${run&&c.rx!=null?"↓ "+bytes(c.rx)+"<br>↑ "+bytes(c.tx):""}</td></tr>`;
+  }).join("");
+  out+=`<div class="card tw"><table><thead><tr>${th("name","Conteneur")}<th>État</th>${th("cpu","CPU",1)}${th("mem","Mémoire",1)}<th class="n">Réseau (total)</th></tr></thead><tbody>${rows||`<tr><td colspan="5" class="sub">Aucun conteneur.</td></tr>`}</tbody></table></div>`;
+  return sec("Services (actualisés toutes les 15 s)",out);
+}
+function vProc(){
+  const p=sys.processes;if(!p||p.unavailable)return sec("Processus",note(p&&p.unavailable||"Indisponible"));
+  const t=(rows,col)=>`<div class="card tw"><table><thead><tr><th>Processus</th><th class="n">PID</th><th class="n">CPU</th><th class="n">Mémoire</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.comm)}</td><td class="n sub">${r.pid}</td><td class="n ${col==="cpu"?"":"sub"}">${nf(r.cpu)} %</td><td class="n ${col==="rss"?"":"sub"}">${nf(r.rssMb)} Mo</td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="grid"><div>${sec("Top 10 par CPU",t(p.byCpu,"cpu"))}</div><div>${sec("Top 10 par mémoire",t(p.byRss,"rss"))}</div></div>`;
+}
+function vDisk(){
+  const d=sys.disks;if(!d||d.unavailable)return sec("Disques",note((d&&d.unavailable)||"Indisponible")+"");
+  if(!d.items.length)return sec("Disques",note("Aucun système de fichiers lisible. Montez / de l'hôte (HOST_ROOT), voir le README."));
+  return sec("Disques",`<div class="grid">${d.items.map(x=>`<div class="card"><div class="row"><b>${esc(x.mountpoint)}</b><span class="tag">${esc(x.fstype)}</span></div><div class="sub">${esc(x.device)}</div>${bar(x.percent)}<div class="row"><span>${nf(x.percent)} %</span><span class="sub">${bytes(x.used)} / ${bytes(x.total)} · libre ${bytes(x.free)}</span></div></div>`).join("")}</div>`);
+}
+function vNet(){
+  const n=sys.network||{},h=sys.history||{};
+  let out=n.unavailable?note(n.unavailable):"";
+  const list=(n.interfaces||[]).filter(i=>showVirtual||!i.virtual);
+  out+=`<div class="grid"><div class="card"><h2>Réception</h2>${spark(h.rx,0)}<div class="sub">dernière valeur : ${rate((h.rx||[]).slice(-1)[0]||0)}</div></div><div class="card"><h2>Émission</h2>${spark(h.tx,0,"l2")}<div class="sub">dernière valeur : ${rate((h.tx||[]).slice(-1)[0]||0)}</div></div></div>`;
+  out+=`<div class="sec" style="margin-top:12px"><label style="display:inline"><input type="checkbox" id="virt" ${showVirtual?"checked":""}> Afficher les interfaces virtuelles</label></div>`;
+  out+=`<div class="card tw"><table><thead><tr><th>Interface</th><th class="n">↓ Réception</th><th class="n">↑ Émission</th><th class="n">Total ↓ / ↑</th></tr></thead><tbody>${list.map(i=>`<tr><td>${esc(i.name)} ${i.virtual?'<span class="tag">virtuelle</span>':""}</td><td class="n">${rate(i.rxRate)}</td><td class="n">${rate(i.txRate)}</td><td class="n sub">${bytes(i.rxTotal)} / ${bytes(i.txTotal)}</td></tr>`).join("")||`<tr><td colspan="4" class="sub">Aucune interface.</td></tr>`}</tbody></table></div>`;
+  return sec("Réseau de l'hôte",out);
+}
+function vHub(){
+  const s=hub.server,nv=hub.navidrome;
+  const nvs=nv.ok==null?`<span class="tag">pas encore testé</span>`:nv.ok?`<span class="tag ok">joignable</span>`:`<span class="tag bad">injoignable</span>`;
+  let out=`<div class="card" style="margin-bottom:12px"><div class="kv"><span>Serveur</span><span>${esc(s.name)} · v${esc(s.version)}</span><span>En marche depuis</span><span>${dur(s.uptime)}</span><span>Navidrome</span><span>${esc(nv.url)} ${nvs}${nv.checkedAt?` <span class="sub">(${ago(nv.checkedAt)})</span>`:""}</span><span>Base de données</span><span>${hub.dbBytes==null?"?":bytes(hub.dbBytes)}</span></div></div>`;
+  if(!hub.users.length)return out+note("Aucun utilisateur connu pour l'instant.");
+  out+=hub.users.map(u=>{
+    const names={};u.known.forEach(d=>names[d.deviceId]=d.deviceName);u.online.forEach(d=>names[d.deviceId]=d.deviceName);
+    const on=u.online.map(d=>{const st=d.state;const now=st&&st.title?`${st.isPlaying?"▶":"⏸"} ${esc(st.title)}${st.artist?" · "+esc(st.artist):""}`:'<span class="sub">rien</span>';
+      return `<tr><td><span class="dot ok"></span><b>${esc(d.deviceName)}</b><div class="sub">${esc(d.platform)} · ${esc(d.deviceId)}</div></td><td>${esc(d.ip)}<div class="sub">depuis ${ago(d.connectedAt)}</div></td><td>${now}</td><td class="n"><button class="sm danger" data-kick="${esc(d.deviceId)}" data-user="${esc(u.user)}" data-name="${esc(d.deviceName)}">Déconnecter</button></td></tr>`}).join("");
+    const kn=u.known.map(d=>`<tr><td>${esc(d.deviceName)}<div class="sub">${esc(d.deviceId)}</div></td><td>${esc(d.platform)}</td><td class="n sub">${ago(d.lastSeen)}</td></tr>`).join("");
+    const li=u.listening.map(d=>`<tr><td>${esc(names[d.deviceId]||d.deviceId)}</td><td class="n">${d.weeks}</td><td class="n">${nf(d.totalSeconds/3600)} h</td><td class="n sub">${d.rev}</td></tr>`).join("");
+    return `<div class="card" style="margin-bottom:12px"><div class="row"><h2 style="margin:0;font-size:15px;color:var(--fg);text-transform:none">${esc(u.user)}</h2><span class="sub">${u.online.length} en ligne</span></div>
+    <h2 style="margin-top:12px">En ligne</h2>${on?`<div class="tw"><table><thead><tr><th>Appareil</th><th>Adresse</th><th>Lecture</th><th></th></tr></thead><tbody>${on}</tbody></table></div>`:'<div class="sub">Aucun appareil en ligne.</div>'}
+    <h2 style="margin-top:12px">Appareils connus</h2>${kn?`<div class="tw"><table><thead><tr><th>Appareil</th><th>Type</th><th class="n">Dernière vue</th></tr></thead><tbody>${kn}</tbody></table></div>`:'<div class="sub">Aucun.</div>'}
+    <h2 style="margin-top:12px">Données d'écoute</h2>${li?`<div class="tw"><table><thead><tr><th>Appareil</th><th class="n">Semaines</th><th class="n">Écouté</th><th class="n">Rév.</th></tr></thead><tbody>${li}</tbody></table></div>`:'<div class="sub">Aucune donnée.</div>'}</div>`}).join("");
+  return out;
+}
+view.addEventListener("click",async e=>{
+  const th=e.target.closest("th[data-sort]");if(th){sortKey=th.dataset.sort;render();return}
+  const b=e.target.closest("button[data-kick]");if(!b)return;
+  if(!confirm(`Déconnecter « ${b.dataset.name} » (${b.dataset.user}) ? L'appareil se reconnectera tout seul.`))return;
+  b.disabled=true;
+  const r=await api("/api/admin/disconnect",{user:b.dataset.user,deviceId:b.dataset.kick});
+  if(r.status===401){show(false);return}
+  if(r.status!==200)alert(r.status===404?"Cet appareil n'est plus en ligne.":"Échec ("+r.status+").");
+  refresh();
+});
+view.addEventListener("change",e=>{if(e.target.id==="virt"){showVirtual=e.target.checked;render()}});
+
+// ---------- terminal (SSH to the host, behind TOTP) ----------
+let tinfo=null,term=null,fit=null,sock=null,xtLoaded=null,tUntil=0,lastReason="";
+const enc=new TextEncoder();
+const CODE_ERR={"bad-code":"Code incorrect.","code-required":"Entrez d'abord le code actuel.","too-many-attempts":"Trop de tentatives : réessayez dans 10 minutes.","totp-not-set":"La double authentification n'est pas configurée.","no-pending-setup":"Configuration expirée, recommencez.","db-error":"Erreur de base de données.","qr-error":"Impossible de générer le QR code."};
+const SH_ERR={"ssh-unreachable":"Serveur SSH de l'hôte injoignable.","hostkey-mismatch":"La clé SSH de l'hôte a changé : connexion refusée.","ssh-auth-failed":"L'hôte refuse la clé du hub : ajoutez-la dans authorized_keys.","ssh-error":"Erreur SSH."};
+const REASON={"closed-by-client":"fermée","closed-by-host":"fermée par l'hôte","session-ended":"session admin terminée","server-shutdown":"arrêt du serveur","max-duration":"durée maximale atteinte","idle-timeout":"inactivité","ssh-error":"erreur SSH","shell-disabled":"terminal désactivé"};
+const reasonText=r=>!r?"":r.startsWith("connect-failed:")?"échec : "+(SH_ERR[r.slice(15)]||r.slice(15)):(REASON[r]||r);
+function codeErr(r){
+  const e=r.body&&r.body.error;
+  if(r.status===401){show(false);$("#msg").textContent=e==="session-destroyed"?"Trop de codes faux : session fermée.":"Session expirée.";return ""}
+  let t=CODE_ERR[e]||("Erreur ("+r.status+").");
+  if(e==="bad-code"&&r.body.attemptsLeft!=null)t+=` Encore ${r.body.attemptsLeft} essai(s).`;
+  return t;
+}
+const codeForm=(kind,label)=>`<form data-f="${kind}" class="cf" autocomplete="off"><label for="tcode">${label}</label><div class="row"><input id="tcode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required><button class="primary" type="submit">Valider</button></div><div class="msg" id="tmsg" role="alert"></div></form>`;
+function loadXterm(){
+  if(xtLoaded)return xtLoaded;
+  const add=(tag,attrs)=>new Promise((res,rej)=>{const el=document.createElement(tag);Object.assign(el,attrs);el.onload=res;el.onerror=rej;document.head.appendChild(el)});
+  xtLoaded=add("link",{rel:"stylesheet",href:"/admin/vendor/xterm.css"}).then(()=>add("script",{src:"/admin/vendor/xterm.js"})).then(()=>add("script",{src:"/admin/vendor/addon-fit.js"}));
+  xtLoaded.catch(()=>{xtLoaded=null});
+  return xtLoaded;
+}
+function fitTerm(){if(fit&&!$("#tbox").classList.contains("hidden")&&!$("#termv").classList.contains("hidden"))try{fit.fit()}catch(x){}}
+window.addEventListener("resize",fitTerm);
+async function termRefresh(){
+  let r;
+  try{r=await api("/api/admin/shell/info")}catch(x){$("#tstat").innerHTML=note("Serveur injoignable.");return}
+  if(r.status===401){show(false);$("#msg").textContent="Session expirée.";return}
+  if(r.status!==200){$("#tstat").innerHTML=note("Erreur ("+r.status+").");return}
+  tinfo=r.body;tUntil=tinfo.elevatedFor?Date.now()+tinfo.elevatedFor*1000:0;
+  renderTerm();
+  try{const a=await api("/api/admin/shell/audit");if(a.status===200)renderAudit(a.body.sessions)}catch(x){}
+}
+function renderTerm(){
+  const i=tinfo;let h="";
+  if(sock)h="";
+  else if(!i.enabled)h=`<div class="card">${note("Terminal désactivé. Dans deploy/docker-compose.yml, définissez SHELL_ENABLED: \"true\" et SHELL_SSH_USER, ajoutez la clé ci-dessous dans ~/.ssh/authorized_keys de cet utilisateur sur l'hôte, puis relancez le hub.")}</div>`;
+  else if(!i.totp)h=`<div class="card"><h2>Double authentification</h2><div class="sub">Le terminal demande un code TOTP (Aegis, 2FAS, Google Authenticator…). À configurer une seule fois.</div><div style="margin-top:10px"><button class="primary" data-t="setup">Configurer</button></div><div class="msg" id="tmsg" role="alert"></div></div>`;
+  else if(!tUntil||tUntil<=Date.now())h=`<div class="card"><h2>Déverrouiller le terminal</h2>${codeForm("unlock","Code à 6 chiffres de votre application")}</div>`;
+  else h=`<div class="card"><div class="row"><span>Déverrouillé encore <b id="tleft">${dur((tUntil-Date.now())/1000)}</b></span><button class="primary" data-t="open">Ouvrir le terminal</button></div><div class="sub" style="margin-top:6px">${esc(i.sshUser)}@${esc(i.host)}:${i.port} · ${i.active}/${i.max} session(s) ouverte(s) · fermeture après ${dur(i.idleSeconds)} d'inactivité, ${dur(i.maxSeconds)} au plus</div><div class="msg" id="tmsg" role="alert"></div></div>`;
+  $("#tstat").innerHTML=h;
+  const f=$("#tcode");if(f)f.focus();
+  $("#tmeta").innerHTML=`<div class="card" style="margin-top:12px"><h2>Clé SSH du hub</h2><div class="sub">Ligne à ajouter dans ~/.ssh/authorized_keys de « ${esc(i.sshUser||"SHELL_SSH_USER")} » sur l'hôte :</div><pre class="key">${esc(i.authorizedKey||"clé indisponible")}</pre>${i.authorizedKey?`<button class="sm" data-t="copy">Copier</button>`:""}<div class="kv sub" style="margin-top:8px"><span>Empreinte</span><span>${esc(i.keyFingerprint||"?")}</span><span>Clé de l'hôte</span><span>${i.hostKey?esc(i.hostKey):"pas encore épinglée (au premier accès)"}</span></div>${i.totp?`<div style="margin-top:10px"><button class="sm" data-t="rotate">Changer le secret 2FA</button></div>`:""}</div><div id="taudit"></div>`;
+}
+function renderAudit(rows){
+  const R=rows||[],el=$("#taudit");if(!el)return;
+  el.innerHTML=`<div class="card tw" style="margin-top:12px"><h2>Sessions récentes</h2>${R.length?`<table><thead><tr><th>Début</th><th>Utilisateur</th><th>Adresse</th><th class="n">Durée</th><th class="n">Envoyé / reçu</th><th>Fin</th></tr></thead><tbody>${R.map(s=>`<tr><td>${new Date(s.startedAt*1000).toLocaleString("fr-FR")}</td><td>${esc(s.user)}</td><td>${esc(s.ip)}</td><td class="n">${s.endedAt?dur(s.endedAt-s.startedAt):'<span class="ok">en cours</span>'}</td><td class="n sub">${bytes(s.bytesIn)} / ${bytes(s.bytesOut)}</td><td class="sub">${esc(reasonText(s.endReason))}</td></tr>`).join("")}</tbody></table>`:'<div class="sub">Aucune session.</div>'}</div>`;
+}
+function showSetup(b){
+  $("#tstat").innerHTML=`<div class="card"><h2>Scannez ce QR code avec votre application</h2><div class="qr">${b.qrSvg}</div><div class="sub">Ou entrez la clé à la main : <code>${esc(b.secret)}</code></div>${codeForm("confirm","Puis le code qu'elle affiche")}</div>`;
+  $("#tcode").focus();
+}
+setInterval(()=>{
+  if(tab!=="term"||!tinfo||sock||!tUntil)return;
+  const left=(tUntil-Date.now())/1000,el=$("#tleft");
+  if(left<=0){tUntil=0;renderTerm();renderAuditLater()}else if(el)el.textContent=dur(left);
+},1000);
+function renderAuditLater(){api("/api/admin/shell/audit").then(a=>{if(a.status===200)renderAudit(a.body.sessions)}).catch(()=>{})}
+$("#termv").addEventListener("submit",async e=>{
+  const f=e.target.closest("form[data-f]");if(!f)return;e.preventDefault();
+  const kind=f.dataset.f,code=$("#tcode").value,btn=f.querySelector("button");btn.disabled=true;
+  const path={unlock:"/api/admin/shell/unlock",confirm:"/api/admin/totp/confirm",rotate:"/api/admin/totp/setup"}[kind];
+  try{
+    const r=await api(path,{code});
+    if(r.status===200){if(kind==="rotate")showSetup(r.body);else await termRefresh();return}
+    const t=codeErr(r);if(t&&$("#tmsg")){$("#tmsg").textContent=t;$("#tcode").select()}
+  }catch(x){if($("#tmsg"))$("#tmsg").textContent="Serveur injoignable."}
+  finally{btn.disabled=false}
+});
+$("#termv").addEventListener("click",async e=>{
+  const b=e.target.closest("button[data-t]");if(!b)return;
+  const k=b.dataset.t;
+  if(k==="setup"){
+    b.disabled=true;
+    try{const r=await api("/api/admin/totp/setup",{});if(r.status===200)showSetup(r.body);else{const t=codeErr(r);if(t)$("#tmsg").textContent=t}}
+    catch(x){$("#tmsg").textContent="Serveur injoignable."}
+    finally{b.disabled=false}
+  }else if(k==="rotate"){$("#tstat").innerHTML=`<div class="card"><h2>Changer le secret 2FA</h2>${codeForm("rotate","Code actuel de votre application")}</div>`;$("#tcode").focus()}
+  else if(k==="open")termOpen();
+  else if(k==="close")termClose();
+  else if(k==="copy"){try{await navigator.clipboard.writeText(tinfo.authorizedKey);b.textContent="Copié"}catch(x){b.textContent="Copie impossible : sélectionnez le texte"}}
+});
+async function termOpen(){
+  if(sock)return;
+  try{await loadXterm()}catch(x){if($("#tmsg"))$("#tmsg").textContent="Impossible de charger le terminal.";return}
+  $("#tbox").classList.remove("hidden");$("#tstat").innerHTML="";
+  if(!term){
+    term=new Terminal({cursorBlink:true,fontSize:14,fontFamily:'ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace',scrollback:5000,theme:{background:"#0b0e12"}});
+    fit=new FitAddon.FitAddon();term.loadAddon(fit);term.open($("#xt"));
+    term.onData(d=>{if(sock&&sock.readyState===1)sock.send(enc.encode(d))});
+    term.onBinary(d=>{if(sock&&sock.readyState===1)sock.send(Uint8Array.from(d,c=>c.charCodeAt(0)&255))});
+    term.onResize(({cols,rows})=>{if(sock&&sock.readyState===1)sock.send(JSON.stringify({type:"resize",cols,rows}))});
+  }else term.reset();
+  fitTerm();
+  lastReason="";$("#tline").textContent="Connexion…";
+  const ws=new WebSocket(`${location.protocol==="https:"?"wss:":"ws:"}//${location.host}/api/admin/shell/ws?cols=${term.cols}&rows=${term.rows}`);
+  ws.binaryType="arraybuffer";sock=ws;
+  ws.onmessage=ev=>{
+    if(typeof ev.data!=="string"){term.write(new Uint8Array(ev.data));return}
+    let j;try{j=JSON.parse(ev.data)}catch(x){return}
+    if(j.type==="ready"){$("#tline").textContent=`${tinfo.sshUser}@${tinfo.host}`;fitTerm();term.focus()}
+    else if(j.type==="error"){$("#tline").textContent=SH_ERR[j.code]||j.message;term.write(`\r\n\x1b[31m${j.message}\x1b[0m\r\n`)}
+    else if(j.type==="closed")lastReason=j.reason;
+  };
+  ws.onclose=()=>{
+    if(sock!==ws)return;sock=null;
+    term.write(`\r\n\x1b[90m[session terminée : ${reasonText(lastReason)||"connexion refusée ou perdue"}]\x1b[0m\r\n`);
+    $("#tline").textContent="Session fermée";
+    if(!$("#app").classList.contains("hidden"))termRefresh();
+  };
+}
+function termClose(){if(sock)try{sock.close()}catch(x){}}
+
+// ---------- start ----------
+(async()=>{
+  if(!md5Ok){$("#go").disabled=true;$("#msg").textContent="Auto-test MD5 échoué : connexion désactivée."}
+  try{
+    const r=await api("/api/admin/me");
+    if(r.status===200)enter(r.body.user);else show(false);
+  }catch(e){show(false);$("#msg").textContent="Serveur injoignable."}
+  if(!md5Ok)$("#msg").textContent="Auto-test MD5 échoué : connexion désactivée.";
+})();
+</script>
+</body>
+</html>
