@@ -110,6 +110,10 @@ CREATE TABLE IF NOT EXISTS shell_audit (
     bytes_out INTEGER NOT NULL DEFAULT 0,
     end_reason TEXT
 );
+CREATE TABLE IF NOT EXISTS secrets (
+    name TEXT PRIMARY KEY,
+    value BLOB NOT NULL
+);
 ";
 
 impl Db {
@@ -137,6 +141,22 @@ impl Db {
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.conn.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// A secret kept across restarts (the gate's cookie key), made by `make` the first time it is asked for.
+    pub fn secret(&self, name: &str, make: impl FnOnce() -> Vec<u8>) -> rusqlite::Result<Vec<u8>> {
+        let conn = self.lock();
+        let found: Option<Vec<u8>> =
+            conn.query_row("SELECT value FROM secrets WHERE name = ?1", [name], |r| r.get(0)).map(Some).or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                e => Err(e),
+            })?;
+        if let Some(v) = found {
+            return Ok(v);
+        }
+        let v = make();
+        conn.execute("INSERT INTO secrets (name, value) VALUES (?1, ?2)", params![name, v])?;
+        Ok(v)
     }
 
     pub fn touch_device(&self, user: &str, d: &DeviceInfo) -> rusqlite::Result<()> {

@@ -64,7 +64,36 @@ pre.key{white-space:pre-wrap;word-break:break-all;font:12px/1.4 ui-monospace,Con
 .cf input{max-width:170px;letter-spacing:.25em;font-variant-numeric:tabular-nums}
 .cf .row{justify-content:flex-start;align-items:center}
 #xt{height:min(70vh,640px);margin-top:8px;background:#0b0e12;border-radius:8px;padding:4px;overflow:hidden}
-@media (max-width:520px){main{padding:10px}.big{font-size:26px}th,td{padding:5px 4px}}
+svg.chart{width:100%;height:220px;display:block;background:var(--panel2);border:1px solid var(--line);border-radius:6px}
+svg.chart.small{height:38px;border-radius:4px}svg.chart.core{height:70px}svg.chart.hist{height:90px}
+svg.chart .gr line{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+svg.chart polyline{fill:none;stroke-width:1.8;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+svg.chart .l{stroke:var(--accent)}svg.chart .l2{stroke:var(--ok)}svg.chart .l3{stroke:#a371f7}svg.chart .l4{stroke:var(--warn)}
+svg.chart .a{fill:var(--accent);opacity:.18}svg.chart .a2{fill:var(--ok);opacity:.15}svg.chart .a3{fill:#a371f7;opacity:.18}svg.chart .a4{fill:var(--warn);opacity:.18}
+.perf{display:grid;grid-template-columns:240px minmax(0,1fr);gap:12px;align-items:start}
+.plist{display:flex;flex-direction:column;gap:6px}
+.pitem{display:grid;grid-template-columns:70px minmax(0,1fr);gap:10px;align-items:center;text-align:left;padding:6px 8px;border-radius:8px;background:none;border:1px solid transparent;width:100%}
+.pitem.on{background:var(--panel2);border-color:var(--accent)}
+.pitem b{display:block;font-size:13px;font-weight:600}.pitem span{display:block;font-size:12px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.phead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.phead h3{margin:0;font-size:22px;font-weight:600}.phead .sub{font-size:13px}
+.axis{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);margin:3px 1px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px 18px;margin-top:14px}
+.stats span{display:block;font-size:12px;color:var(--mute)}.stats b{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+.coregrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:14px}
+.coregrid .axis{margin-top:0}
+.legend{display:inline-flex;gap:12px;font-size:12px;color:var(--mute)}.legend i{display:inline-block;width:10px;height:3px;border-radius:2px;vertical-align:middle;margin-right:4px}
+.comp{display:flex;height:22px;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-top:12px}
+.comp i{display:block;height:100%}
+.ptools{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:10px}
+.ptools input[type=text]{max-width:360px}.ptools label{display:inline-flex;gap:6px;align-items:center;margin:0;font-size:13px;color:var(--fg)}
+table.procs td,table.procs th{padding:4px 8px;white-space:nowrap}table.procs td{font-variant-numeric:tabular-nums}
+table.procs td:first-child{max-width:340px;overflow:hidden;text-overflow:ellipsis}
+table.procs th .tot{font-size:16px;color:var(--fg);font-weight:600}
+table.procs tr.grp{cursor:pointer;background:var(--panel2)}table.procs td.ind{padding-left:28px}
+table.procs tbody tr:hover{outline:1px solid var(--accent);outline-offset:-1px}
+@media (max-width:760px){.perf{grid-template-columns:1fr}.plist{flex-direction:row;overflow-x:auto;padding-bottom:4px}.pitem{min-width:190px}}
+@media (max-width:520px){main{padding:10px}.big{font-size:26px}th,td{padding:5px 4px}svg.chart{height:170px}}
 </style>
 </head>
 <body>
@@ -155,9 +184,9 @@ function spark(vals,max,cls="l"){
 function tempLevel(c,s){const hi=s&&s.high,cr=s&&s.crit;if(cr!=null&&c>=cr-5)return"bad";if(hi!=null&&c>=hi-5)return"warn";if(cr==null&&hi==null){return c>=85?"bad":c>=70?"warn":"ok"}return"ok"}
 
 // ---------- state / api ----------
-const TABS=[["sys","Système"],["svc","Services"],["proc","Processus"],["disk","Disques"],["net","Réseau"],["hub","Hub"],["term","Terminal"]];
-let tab="sys",sys=null,hub=null,sortKey="cpu",showVirtual=false,busy=false,timer=null;
-try{tab=localStorage.getItem("hubAdminTab")||"sys";if(!TABS.some(t=>t[0]===tab))tab="sys"}catch(e){}
+const TABS=[["perf","Performances"],["proc","Processus"],["svc","Conteneurs"],["disk","Disques"],["net","Réseau"],["hub","Hub"],["term","Terminal"]];
+let tab="perf",sys=null,hub=null,sortKey="cpu",showVirtual=false,busy=false,timer=null,ticks=0;
+try{tab=localStorage.getItem("hubAdminTab")||"perf";if(!TABS.some(t=>t[0]===tab))tab="perf"}catch(e){}
 async function api(path,body){
   const o={credentials:"same-origin",headers:{}};
   if(body!==undefined){o.method="POST";o.headers["Content-Type"]="application/json";o.headers["X-Requested-With"]="hub-admin";o.body=JSON.stringify(body)}
@@ -191,13 +220,14 @@ function applyTab(){
 }
 
 // ---------- refresh loop ----------
-function start(){stop();timer=setInterval(()=>{if(!document.hidden)refresh()},3000)}
+// Every second, like Task Manager (the server samples every second while a panel is open); the Hub tab every 3 s.
+function start(){stop();timer=setInterval(()=>{if(!document.hidden&&(tab!=="hub"||++ticks%3===0))refresh()},1000)}
 function stop(){if(timer){clearInterval(timer);timer=null}}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&timer)refresh()});
 async function refresh(){
   if(busy||tab==="term")return;busy=true;
   try{
-    const r=await api(tab==="hub"?"/api/admin/hub":"/api/admin/system");
+    const r=await api(tab==="hub"?"/api/admin/hub":tab==="proc"?"/api/admin/system?processes=1":"/api/admin/system");
     if(r.status===401){show(false);$("#msg").textContent="Session expirée.";return}
     if(r.status===200){if(tab==="hub")hub=r.body;else sys=r.body;$("#upd").textContent=new Date().toLocaleTimeString("fr-FR");render()}
   }catch(e){$("#upd").textContent="hors ligne"}
@@ -214,44 +244,172 @@ function render(){
   if(tab==="hub"){if(hub)view.innerHTML=vHub();return}
   if(!sys)return;
   if(!sys.ready){view.innerHTML=note("Première mesure en cours, quelques secondes…");return}
-  view.innerHTML=({sys:vSys,svc:vSvc,proc:vProc,disk:vDisk,net:vNet})[tab]();
+  if(tab==="proc"){vProc();return}
+  view.innerHTML=({perf:vPerf,svc:vSvc,disk:vDisk,net:vNet})[tab]();
 }
 function sec(title,inner){return `<div class="sec"><h2>${title}</h2>${inner}</div>`}
-function vSys(){
-  const h=sys.history||{},c=sys.cpu,m=sys.memory,t=sys.temps,ho=sys.host||{};
-  const cpu=c&&!c.unavailable?`<div class="big ${lvl(c.total)}">${nf(c.total)} %</div><div class="sub">${ho.cores||"?"} cœurs</div>${bar(c.total)}${spark(h.cpu,100)}<div class="cores">${(c.cores||[]).map((p,i)=>`<div>${i}${bar(p)}</div>`).join("")}</div>`:note(c&&c.unavailable||"Indisponible");
-  const mem=m&&!m.unavailable?`<div class="big ${lvl(m.percent)}">${nf(m.percent)} %</div><div class="sub">${bytes(m.used)} utilisés sur ${bytes(m.total)}</div>${bar(m.percent)}${spark(h.mem,100)}<div class="kv sub"><span>Disponible</span><span>${bytes(m.available)}</span><span>Tampons + cache</span><span>${bytes(m.buffersCache)}</span><span>Swap</span><span>${m.swapTotal?bytes(m.swapUsed)+" / "+bytes(m.swapTotal):"aucun"}</span></div>`:note(m&&m.unavailable||"Indisponible");
-  let tmp;
-  if(t&&!t.unavailable){
-    const hot=[...t.sensors].filter(s=>s.celsius===t.max)[0];
-    tmp=`<div class="big ${tempLevel(t.max,hot)}">${nf(t.max)} °C</div><div class="sub">${esc(hot?hot.chip+" "+hot.label:"")}</div>${spark(h.temp,Math.max(100,t.max||0))}<div class="kv sub" style="margin-top:8px">${t.sensors.map(s=>`<span>${esc(s.chip)} · ${esc(s.label)}</span><span class="${tempLevel(s.celsius,s)}">${nf(s.celsius)} °C${s.high!=null?" (haut "+nf(s.high,0)+")":""}${s.crit!=null?" (crit. "+nf(s.crit,0)+")":""}</span>`).join("")}</div>`;
-  }else tmp=note(t&&t.unavailable||"Indisponible");
-  const l=ho.load||[];
-  const up=`<div class="big">${dur(ho.uptime)}</div><div class="sub">${esc(ho.hostname||"?")} · noyau ${esc(ho.kernel||"?")}</div><div class="kv" style="margin-top:8px"><span>Charge 1 min</span><span>${l[0]!=null?nf(l[0],2):"?"}</span><span>5 min</span><span>${l[1]!=null?nf(l[1],2):"?"}</span><span>15 min</span><span>${l[2]!=null?nf(l[2],2):"?"}</span></div>`;
-  return `<div class="grid"><div class="card"><h2>CPU</h2>${cpu}</div><div class="card"><h2>Mémoire</h2>${mem}</div><div class="card"><h2>Température max</h2>${tmp}</div><div class="card"><h2>Uptime et charge</h2>${up}</div></div><div class="upd" style="margin-top:8px">Historique : environ 1 h, un point toutes les ${h.step||10} s.</div>`;
+// ---------- performance (Task Manager style) ----------
+let perfSel="cpu";
+try{perfSel=localStorage.getItem("hubAdminPerf")||"cpu"}catch(e){}
+const ghz=m=>m==null?"?":nf(m/1000,2)+" GHz";
+// A line chart of the last `n` points, right-aligned like Task Manager (newest on the right).
+function chart(series,max,opt={}){
+  const N=opt.n||60,W=600,H=opt.small?60:opt.core?100:200;
+  const vals=series.flatMap(s=>(s.v||[]).filter(x=>x!=null));
+  const m=max||niceMax(Math.max(0,...vals));
+  let g="";
+  if(!opt.small){for(let i=1;i<10;i++)g+=`<line x1="${i*W/10}" y1="0" x2="${i*W/10}" y2="${H}"/>`;for(let i=1;i<4;i++)g+=`<line x1="0" y1="${i*H/4}" x2="${W}" y2="${i*H/4}"/>`}
+  const paths=series.map(s=>{
+    const v=(s.v||[]).slice(-N),off=N-v.length,pts=[];
+    v.forEach((x,i)=>{if(x!=null)pts.push([(off+i)*W/(N-1),H-Math.min(x,m)/m*(H-2)-1])});
+    if(pts.length<2)return"";
+    const line=pts.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ");
+    return (s.fill?`<polygon class="${s.fill}" points="${pts[0][0].toFixed(1)},${H} ${line} ${pts[pts.length-1][0].toFixed(1)},${H}"/>`:"")+`<polyline class="${s.cls||"l"}" points="${line}"/>`;
+  }).join("");
+  return `<svg class="chart${opt.small?" small":""}${opt.core?" core":""}${opt.hist?" hist":""}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><g class="gr">${g}</g>${paths}</svg>`;
 }
+// A round top for rate charts: 1, 2 or 5 times a power of ten (in bytes/s, at least 10 Ko/s).
+function niceMax(x){x=Math.max(x*1.1,10240);const p=Math.pow(10,Math.floor(Math.log10(x)));return [1,2,5,10].map(k=>k*p).find(v=>v>=x)}
+const axisTop=(l,r)=>`<div class="axis"><span>${l}</span><span>${r}</span></div>`;
+const axisBottom=(n,step)=>`<div class="axis"><span>${n*step>=120?nf(n*step/60,0)+" minutes":nf(n*step,0)+" secondes"}</span><span>0</span></div>`;
+const stat=(k,v)=>`<div><span>${k}</span><b>${v}</b></div>`;
+const legend=items=>`<span class="legend">${items.map(([c,t])=>`<span><i style="background:${c}"></i>${t}</span>`).join("")}</span>`;
+function perfResources(){
+  const L=sys.live||{},c=sys.cpu||{},m=sys.memory||{},io=sys.diskio||{},n=sys.network||{},t=sys.temps||{};
+  const last=a=>a&&a.length?a[a.length-1]:0;
+  const r=[];
+  if(!c.unavailable)r.push({id:"cpu",name:"Processeur",val:`${nf(c.total,0)} %${c.freqMhz?" · "+ghz(c.freqMhz):""}`,s:[{v:L.cpu,cls:"l",fill:"a"}],max:100});
+  if(!m.unavailable)r.push({id:"mem",name:"Mémoire",val:`${bytes(m.used)} / ${bytes(m.total)} (${nf(m.percent,0)} %)`,s:[{v:L.mem,cls:"l3",fill:"a3"}],max:100});
+  if(!io.unavailable&&(io.devices||[]).length)r.push({id:"disk",name:"Disques",val:`${nf(last(L.busy),0)} % · ${rate(last(L.dr)+last(L.dw))}`,s:[{v:L.busy,cls:"l2",fill:"a2"}],max:100});
+  if(!n.unavailable)r.push({id:"net",name:"Réseau",val:`↓ ${rate(last(L.rx))} · ↑ ${rate(last(L.tx))}`,s:[{v:L.rx,cls:"l4"},{v:L.tx,cls:"l"}]});
+  if(!t.unavailable)r.push({id:"temp",name:"Température",val:`${nf(t.max)} °C`,s:[{v:L.temp,cls:"l4",fill:"a4"}],max:Math.max(100,t.max||0)});
+  return r;
+}
+function vPerf(){
+  const res=perfResources();
+  if(!res.length)return note("Aucune mesure disponible : montez /proc et /sys de l'hôte, voir le README.");
+  if(!res.some(x=>x.id===perfSel))perfSel=res[0].id;
+  const list=res.map(x=>`<button class="pitem ${x.id===perfSel?"on":""}" data-perf="${x.id}">${chart(x.s,x.max,{small:true})}<div><b>${x.name}</b><span>${x.val}</span></div></button>`).join("");
+  return `<div class="perf"><div class="plist">${list}</div><div class="card">${({cpu:pCpu,mem:pMem,disk:pDisk,net:pNet,temp:pTemp})[perfSel]()}</div></div>`;
+}
+function histBlock(series,max,label){
+  const H=sys.history||{},n=(H.cpu||[]).length;
+  if(n<2)return "";
+  return `<h2 style="margin-top:18px">Dernière heure${label?" · "+label:""}</h2>${chart(series(H),max,{n:360,hist:true})}${axisBottom(360,H.step||10)}`;
+}
+function pCpu(){
+  const c=sys.cpu,ho=sys.host||{},L=sys.live||{},l=ho.load||[];
+  const cores=c.cores||[],perCore=cores.map((_,i)=>(L.cores||[]).map(p=>p&&p[i]!=null?p[i]:null));
+  return `<div class="phead"><h3>Processeur</h3><span class="sub">${esc(c.model||"")}</span></div>
+  ${axisTop("% d'utilisation","100 %")}${chart([{v:L.cpu,cls:"l",fill:"a"}],100)}${axisBottom(60,L.step||1)}
+  <div class="stats">${stat("Utilisation",nf(c.total,0)+" %")}${stat("Vitesse",c.freqMhz?ghz(c.freqMhz):"?")}${stat("Vitesse max.",c.freqMaxMhz?ghz(c.freqMaxMhz):"?")}${stat("Processus",ho.processes??"?")}${stat("Threads",ho.threads??"?")}${stat("Cœurs logiques",ho.cores||"?")}${stat("Durée de fonctionnement",dur(ho.uptime))}${stat("Charge 1 / 5 / 15 min",l.length?l.map(x=>nf(x,2)).join(" · "):"?")}</div>
+  <h2 style="margin-top:18px">Par cœur</h2><div class="coregrid">${perCore.map((v,i)=>`<div>${axisTop("Cœur "+i,nf(cores[i],0)+" %")}${chart([{v,cls:"l",fill:"a"}],100,{core:true})}</div>`).join("")}</div>
+  ${histBlock(H=>[{v:H.cpu,cls:"l",fill:"a"}],100,"% d'utilisation")}`;
+}
+function pMem(){
+  const m=sys.memory,L=sys.live||{};
+  const used=m.used,cache=Math.min(m.buffersCache||0,m.available),free=Math.max(0,m.total-used-cache),pc=x=>(x/Math.max(m.total,1)*100).toFixed(2);
+  return `<div class="phead"><h3>Mémoire</h3><span class="sub">${bytes(m.total)}</span></div>
+  ${axisTop("Utilisation de la mémoire",bytes(m.total))}${chart([{v:L.mem,cls:"l3",fill:"a3"}],100)}${axisBottom(60,L.step||1)}
+  <h2 style="margin-top:14px">Composition</h2><div class="comp" title="Utilisée · cache · libre"><i style="width:${pc(used)}%;background:#a371f7"></i><i style="width:${pc(cache)}%;background:#a371f755"></i><i style="width:${pc(free)}%"></i></div>
+  <div style="margin-top:6px">${legend([["#a371f7","Utilisée"],["#a371f755","Cache (récupérable)"],["var(--track)","Libre"]])}</div>
+  <div class="stats">${stat("Utilisée",bytes(used)+" ("+nf(m.percent,0)+" %)")}${stat("Disponible",bytes(m.available))}${stat("Cache et tampons",bytes(m.buffersCache))}${stat("Libre",bytes(free))}${stat("Swap",m.swapTotal?bytes(m.swapUsed)+" / "+bytes(m.swapTotal):"aucun")}</div>
+  ${histBlock(H=>[{v:H.mem,cls:"l3",fill:"a3"}],100,"% utilisée")}`;
+}
+function pDisk(){
+  const io=sys.diskio,L=sys.live||{},last=a=>a&&a.length?a[a.length-1]:0;
+  const space=((sys.disks||{}).items||[]);
+  const rows=io.devices.map(d=>{const parts=space.filter(s=>(s.device||"").replace(/^\/dev\//,"").startsWith(d.name));
+    return `<tr><td><b>${esc(d.name)}</b><div class="sub">${parts.map(p=>esc(p.mountpoint)).join(", ")||"–"}</div></td><td class="n">${nf(d.busy,0)} %<div class="mini">${bar(d.busy)}</div></td><td class="n">${rate(d.readRate)}</td><td class="n">${rate(d.writeRate)}</td><td class="n sub">${parts.length?bytes(parts.reduce((a,p)=>a+p.used,0))+" / "+bytes(parts.reduce((a,p)=>a+p.total,0)):""}</td></tr>`}).join("");
+  const rw=[{v:L.dr,cls:"l2"},{v:L.dw,cls:"l"}],top=niceMax(Math.max(0,...(L.dr||[]),...(L.dw||[])));
+  return `<div class="phead"><h3>Disques</h3><span class="sub">${io.devices.length} disque(s)</span></div>
+  ${axisTop("Temps d'activité (disque le plus occupé)","100 %")}${chart([{v:L.busy,cls:"l2",fill:"a2"}],100)}${axisBottom(60,L.step||1)}
+  <div style="margin-top:12px">${axisTop(legend([["var(--ok)","Lecture"],["var(--accent)","Écriture"]]),rate(top))}</div>${chart(rw,top,{core:true})}${axisBottom(60,L.step||1)}
+  <div class="stats">${stat("Temps d'activité",nf(last(L.busy),0)+" %")}${stat("Lecture",rate(last(L.dr)))}${stat("Écriture",rate(last(L.dw)))}</div>
+  <div class="tw" style="margin-top:14px"><table><thead><tr><th>Disque</th><th class="n">Activité</th><th class="n">Lecture</th><th class="n">Écriture</th><th class="n">Occupé</th></tr></thead><tbody>${rows}</tbody></table></div>
+  ${histBlock(H=>[{v:H.busy,cls:"l2",fill:"a2"}],100,"temps d'activité")}`;
+}
+function pNet(){
+  const L=sys.live||{},last=a=>a&&a.length?a[a.length-1]:0,top=niceMax(Math.max(0,...(L.rx||[]),...(L.tx||[])));
+  const ifs=((sys.network||{}).interfaces||[]).filter(i=>!i.virtual);
+  return `<div class="phead"><h3>Réseau</h3><span class="sub">${ifs.map(i=>esc(i.name)).join(", ")||"aucune interface physique"}</span></div>
+  ${axisTop(legend([["var(--warn)","Réception"],["var(--accent)","Émission"]]),rate(top))}${chart([{v:L.rx,cls:"l4"},{v:L.tx,cls:"l"}],top)}${axisBottom(60,L.step||1)}
+  <div class="stats">${stat("Réception",rate(last(L.rx)))}${stat("Émission",rate(last(L.tx)))}${ifs.map(i=>stat(esc(i.name)+" · total",bytes(i.rxTotal)+" ↓ · "+bytes(i.txTotal)+" ↑")).join("")}</div>
+  ${histBlock(H=>[{v:H.rx,cls:"l4"},{v:H.tx,cls:"l"}],0,"débit")}`;
+}
+function pTemp(){
+  const t=sys.temps,L=sys.live||{},hot=t.sensors.filter(s=>s.celsius===t.max)[0],top=Math.max(100,t.max||0);
+  return `<div class="phead"><h3>Température</h3><span class="sub">${esc(hot?hot.chip+" · "+hot.label:"")}</span></div>
+  ${axisTop("Capteur le plus chaud",nf(top,0)+" °C")}${chart([{v:L.temp,cls:"l4",fill:"a4"}],top)}${axisBottom(60,L.step||1)}
+  <div class="stats">${t.sensors.map(s=>stat(esc(s.chip)+" · "+esc(s.label),`<span class="${tempLevel(s.celsius,s)}" style="display:inline;font-size:inherit">${nf(s.celsius)} °C</span>`)).join("")}</div>
+  ${histBlock(H=>[{v:H.temp,cls:"l4",fill:"a4"}],top,"max.")}`;
+}
+
+// ---------- containers ----------
 function vSvc(){
   const k=sys.containers||{};
-  if(k.configured===false)return sec("Services",note("Conteneurs : non configuré (définissez DOCKER_URL, voir le README)."));
+  if(k.configured===false)return sec("Conteneurs",note("Conteneurs : non configuré (définissez DOCKER_URL, voir le README)."));
   let out=k.unavailable?note(k.unavailable):"";
   const items=[...(k.items||[])];
-  const key={cpu:x=>-(x.cpu??-1),mem:x=>-(x.memUsed??-1),name:x=>x.name.toLowerCase()}[sortKey];
+  const key={cpu:x=>-(x.cpu??-1),mem:x=>-(x.memUsed??-1),net:x=>-((x.rxRate??0)+(x.txRate??0)),io:x=>-((x.readRate??0)+(x.writeRate??0)),name:x=>x.name.toLowerCase()}[sortKey]||(x=>x.name.toLowerCase());
   items.sort((a,b)=>key(a)<key(b)?-1:key(a)>key(b)?1:0);
   const hostMem=sys.memory&&sys.memory.total||0;
-  const th=(id,t,n)=>`<th class="s ${n?"n ":""}${sortKey===id?"on":""}" data-sort="${id}">${t}${sortKey===id?" ▾":""}</th>`;
+  const run=items.filter(c=>c.state==="running"),sum=f=>run.reduce((a,c)=>a+(c[f]||0),0);
+  const th=(id,t,n,tot)=>`<th class="s ${n?"n ":""}${sortKey===id?"on":""}" data-sort="${id}">${tot!=null?`<div style="font-size:15px;color:var(--fg)">${tot}</div>`:""}${t}${sortKey===id?" ▾":""}</th>`;
   const rows=items.map(c=>{
-    const run=c.state==="running",lim=c.memLimit>0&&(!hostMem||c.memLimit<=hostMem)?c.memLimit:hostMem;
-    const mp=run&&lim?c.memUsed/lim*100:0;
-    return `<tr><td><b>${esc(c.name)}</b><div class="sub">${esc(c.image)}${c.project?" · "+esc(c.project):""}</div></td><td><span class="tag ${run?"ok":"bad"}">${esc(c.state)}</span><div class="sub">${esc(c.status)}</div></td><td class="n">${run&&c.cpu!=null?nf(c.cpu)+" %":"–"}${run&&c.cpu!=null?`<div class="mini">${bar(c.cpu)}</div>`:""}</td><td class="n">${run&&c.memUsed!=null?bytes(c.memUsed):"–"}${run?`<div class="mini">${bar(mp)}</div>`:""}</td><td class="n sub">${run&&c.rx!=null?"↓ "+bytes(c.rx)+"<br>↑ "+bytes(c.tx):""}</td></tr>`;
+    const on=c.state==="running",lim=c.memLimit>0&&(!hostMem||c.memLimit<=hostMem)?c.memLimit:hostMem;
+    const mp=on&&lim?c.memUsed/lim*100:0;
+    return `<tr><td><b>${esc(c.name)}</b><div class="sub">${esc(c.image)}${c.project?" · "+esc(c.project):""}</div></td><td><span class="tag ${on?"ok":"bad"}">${esc(c.state)}</span><div class="sub">${esc(c.status)}</div></td><td class="n">${on&&c.cpu!=null?nf(c.cpu)+" %":"–"}${on&&c.cpu!=null?`<div class="mini">${bar(c.cpu)}</div>`:""}</td><td class="n">${on&&c.memUsed!=null?bytes(c.memUsed):"–"}${on?`<div class="mini">${bar(mp)}</div>`:""}</td><td class="n sub">${on&&c.rxRate!=null?"↓ "+rate(c.rxRate)+"<br>↑ "+rate(c.txRate):""}</td><td class="n sub">${on&&c.readRate!=null?"L "+rate(c.readRate)+"<br>É "+rate(c.writeRate):""}</td><td class="n sub">${on&&c.pids!=null?c.pids:""}</td></tr>`;
   }).join("");
-  out+=`<div class="card tw"><table><thead><tr>${th("name","Conteneur")}<th>État</th>${th("cpu","CPU",1)}${th("mem","Mémoire",1)}<th class="n">Réseau (total)</th></tr></thead><tbody>${rows||`<tr><td colspan="5" class="sub">Aucun conteneur.</td></tr>`}</tbody></table></div>`;
-  return sec("Services (actualisés toutes les 15 s)",out);
+  out+=`<div class="card tw"><table><thead><tr>${th("name","Conteneur")}<th>État</th>${th("cpu","CPU",1,nf(sum("cpu"),0)+" %")}${th("mem","Mémoire",1,bytes(sum("memUsed")))}${th("net","Réseau",1)}${th("io","Disque",1)}<th class="n">PID</th></tr></thead><tbody>${rows||`<tr><td colspan="7" class="sub">Aucun conteneur.</td></tr>`}</tbody></table></div>`;
+  return sec(`Conteneurs : ${run.length} en marche sur ${items.length} (actualisés toutes les 2 s, CPU en % de toute la machine)`,out);
 }
+
+// ---------- processes ----------
+let pSort="cpu",pDir=-1,pFilter="",pKernel=false,pGroup=false;const pOpen=new Set();
+try{pGroup=localStorage.getItem("hubAdminGroup")==="1"}catch(e){}
 function vProc(){
-  const p=sys.processes;if(!p||p.unavailable)return sec("Processus",note(p&&p.unavailable||"Indisponible"));
-  const t=(rows,col)=>`<div class="card tw"><table><thead><tr><th>Processus</th><th class="n">PID</th><th class="n">CPU</th><th class="n">Mémoire</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.comm)}</td><td class="n sub">${r.pid}</td><td class="n ${col==="cpu"?"":"sub"}">${nf(r.cpu)} %</td><td class="n ${col==="rss"?"":"sub"}">${nf(r.rssMb)} Mo</td></tr>`).join("")}</tbody></table></div>`;
-  return `<div class="grid"><div>${sec("Top 10 par CPU",t(p.byCpu,"cpu"))}</div><div>${sec("Top 10 par mémoire",t(p.byRss,"rss"))}</div></div>`;
+  if(!$("#ptools")){
+    view.innerHTML=`<div id="ptools" class="ptools"><input id="pq" type="text" placeholder="Rechercher : nom, PID, utilisateur, conteneur, commande" value="${esc(pFilter)}" autocomplete="off" spellcheck="false"><label><input type="checkbox" id="pg" ${pGroup?"checked":""}> Regrouper par conteneur</label><label><input type="checkbox" id="pk" ${pKernel?"checked":""}> Threads du noyau</label><span class="sub" id="pcount"></span></div><div id="ptable" class="card tw"></div>`;
+  }
+  const P=sys.processes;
+  if(!P||P.unavailable){$("#ptable").innerHTML=note(P&&P.unavailable||"Lecture des processus…");return}
+  const cn={};((sys.containers||{}).items||[]).forEach(c=>cn[c.id]=c.name);
+  const total=sys.memory&&sys.memory.total||0,ho=sys.host||{};
+  const q=pFilter.trim().toLowerCase();
+  let rows=P.items.filter(p=>pKernel||!p.kernel).map(p=>Object.assign({},p,{cname:p.container?(cn[p.container]||p.container):""}));
+  if(q)rows=rows.filter(p=>(p.name+" "+p.pid+" "+(p.user||"")+" "+p.cname+" "+p.cmd).toLowerCase().includes(q));
+  const keyf={name:p=>p.name.toLowerCase(),pid:p=>p.pid,user:p=>(p.user||"").toLowerCase(),ctr:p=>p.cname.toLowerCase(),cpu:p=>p.cpu,mem:p=>p.rss,thr:p=>p.threads}[pSort];
+  const cmp=(a,b)=>{const x=keyf(a),y=keyf(b);return (x<y?-1:x>y?1:0)*pDir||a.pid-b.pid};
+  const heat=v=>v>0.05?` style="background:rgba(74,163,255,${Math.min(.5,.06+v/100*1.5).toFixed(3)})"`:"";
+  const memPct=r=>total?r/total*100:0;
+  const th=(id,label,n,tot)=>`<th class="s ${n?"n ":""}${pSort===id?"on":""}" data-psort="${id}">${tot!=null?`<div class="tot">${tot}</div>`:""}${label}${pSort===id?(pDir<0?" ▾":" ▴"):""}</th>`;
+  const row=(p,ind)=>`<tr title="${esc(p.cmd||p.name)}"><td${ind?' class="ind"':""}>${esc(p.name)}${p.state==="Z"?' <span class="tag bad">zombie</span>':""}</td><td class="n sub">${p.pid}</td><td class="sub">${esc(p.user??"?")}</td><td class="sub">${esc(p.cname)}</td><td class="n"${heat(p.cpu)}>${nf(p.cpu)} %</td><td class="n"${heat(memPct(p.rss))}>${bytes(p.rss)}</td><td class="n sub">${p.threads}</td></tr>`;
+  let body;
+  if(pGroup){
+    const groups=new Map();
+    rows.forEach(p=>{const k=p.cname||"";if(!groups.has(k))groups.set(k,[]);groups.get(k).push(p)});
+    const g=[...groups].map(([k,list])=>({k,list:list.sort(cmp),name:k||"Hôte (hors conteneurs)",pid:list.length,user:"",cname:k,cpu:list.reduce((a,p)=>a+p.cpu,0),rss:list.reduce((a,p)=>a+p.rss,0),threads:list.reduce((a,p)=>a+p.threads,0)}));
+    g.sort(cmp);
+    body=g.map(x=>{const open=pOpen.has(x.k)||!!q;
+      return `<tr class="grp" data-grp="${esc(x.k)}"><td><b>${open?"▾":"▸"} ${esc(x.name)}</b> <span class="sub">(${x.list.length})</span></td><td></td><td></td><td></td><td class="n"${heat(x.cpu)}><b>${nf(x.cpu)} %</b></td><td class="n"${heat(memPct(x.rss))}><b>${bytes(x.rss)}</b></td><td class="n sub">${x.threads}</td></tr>`+(open?x.list.map(p=>row(p,true)).join(""):"")}).join("");
+  }else body=rows.sort(cmp).map(p=>row(p,false)).join("");
+  $("#ptable").innerHTML=`<table class="procs"><thead><tr>${th("name","Nom")}${th("pid","PID",1)}${th("user","Utilisateur")}${th("ctr","Conteneur")}${th("cpu","CPU",1,nf(sys.cpu&&sys.cpu.total,0)+" %")}${th("mem","Mémoire",1,nf(sys.memory&&sys.memory.percent,0)+" %")}${th("thr","Threads",1)}</tr></thead><tbody>${body||`<tr><td colspan="7" class="sub">Aucun processus.</td></tr>`}</tbody></table>`;
+  $("#pcount").textContent=`${rows.length} affichés · ${ho.processes??"?"} processus · ${ho.threads??"?"} threads · CPU en % de toute la machine`;
 }
+view.addEventListener("input",e=>{if(e.target.id==="pq"){pFilter=e.target.value;if(sys)vProc()}});
+view.addEventListener("change",e=>{
+  if(e.target.id==="pk"){pKernel=e.target.checked;if(sys)vProc()}
+  if(e.target.id==="pg"){pGroup=e.target.checked;try{localStorage.setItem("hubAdminGroup",pGroup?"1":"0")}catch(x){}if(sys)vProc()}
+});
+view.addEventListener("click",e=>{
+  const pb=e.target.closest("button[data-perf]");
+  if(pb){perfSel=pb.dataset.perf;try{localStorage.setItem("hubAdminPerf",perfSel)}catch(x){}render();return}
+  const ps=e.target.closest("th[data-psort]");
+  if(ps){const k=ps.dataset.psort;if(pSort===k)pDir=-pDir;else{pSort=k;pDir=["cpu","mem","thr"].includes(k)?-1:1}vProc();return}
+  const gr=e.target.closest("tr[data-grp]");
+  if(gr){const k=gr.dataset.grp;pOpen.has(k)?pOpen.delete(k):pOpen.add(k);vProc()}
+});
 function vDisk(){
   const d=sys.disks;if(!d||d.unavailable)return sec("Disques",note((d&&d.unavailable)||"Indisponible")+"");
   if(!d.items.length)return sec("Disques",note("Aucun système de fichiers lisible. Montez / de l'hôte (HOST_ROOT), voir le README."));

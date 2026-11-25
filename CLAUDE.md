@@ -20,8 +20,9 @@ Model use: Sonnet subagents for light coding, Haiku subagents for file reading.
 
 ## Machine quirks (this Windows PC)
 
-- **Node.js and git are not on PATH.** JS/TS can't be type-checked, tested or built here, and `git status` doesn't
-  work. Cargo works.
+- **Node.js, Git and GitHub CLI are installed, but not on PATH** for this shell. Use full paths:
+  `C:\Program Files\nodejs\node.exe` (and `npm` after prepending `C:\Program Files\nodejs` to `$env:Path`),
+  `C:\Program Files\Git\cmd\git.exe`, and `C:\Program Files\GitHub CLI\gh.exe`. Cargo works.
 - There's no Docker here: images are built on the home server.
 - The shell is PowerShell 5.1. To run a script on the server, write it to a file and pipe it:
   `Get-Content -Raw f.sh | ssh host "tr -d '\r' | sed '1s/^\xEF\xBB\xBF//' | bash -s"`. Inline `$` and quotes get
@@ -64,24 +65,17 @@ Model use: Sonnet subagents for light coding, Haiku subagents for file reading.
 
 ## State of work / pending
 
-- **Not compiled or run** (written while there was no Node):
-  - mobile: audio glitch fix (ExoPlayer wake mode, WAKE_LOCK, diagnostics logging), Settings split into sub-pages
-    (`src/app/settings/[section].tsx`), Wrapped rework (periods, range picker, drillable chart), hub-server client
-    (`src/services/hubServer.ts`, `listeningSync.ts`, server card in `src/app/devices/index.tsx`);
-  - desktop: hub client (`src/main/hubServerClient.ts`), listening recorder (`src/renderer/src/services/listeningLog.ts`),
-    `Settings/HubServerSection.tsx`.
-
-  Once Node is installed:
-  1. Run `npm install` in `mobile/`, so the expo-audio patch is copied in again.
-  2. Run `node tests/run-all.js`.
-  3. Run `tsc` on both apps.
-  4. Rebuild the APK and the desktop app.
-- **Admin web shell (Terminal tab): deployed 2026-11-25, enabled** (`SHELL_ENABLED=true`, `SHELL_SSH_USER=mboot`).
-  Code: `apps/server/src/{shell,terminal,totp}.rs`, panel tab in `admin/index.html`. Tests and clippy pass; panel JS
-  was checked with `node --check` (in a Docker node container on the server). Not yet tried in a browser. The owner
-  still has to add the hub key line (shown in the tab) to `~/.ssh/authorized_keys` and set up TOTP.
-- **This folder is behind GitHub.** Local HEAD is v3.2.0 (`12dfacaf`) plus uncommitted work; GitHub `main` has
-  3.2.1, 3.3.0 and 3.4.0 (`cb194213`, 4 commits and 117 files ahead). Merge before building or releasing anything.
-- The owner was asked to change the server password, which was weak and was shared in chat. Turning off SSH
-  password login was recommended.
-- The admin login and the remote/sync flows haven't been tested end to end with real devices yet.
+- **3.5.0 built and tested on the home server (2026-11-25):** merged GitHub 3.4.0 (`cb194213`) into `local-work`,
+  including the audio glitch fix, Settings sub-pages, Wrapped rework, hub clients, and the watch update confirmation
+  fix (`PendingConfirm.kt` + phone prompt). Phone tests (40/40), phone `tsc`, desktop `typecheck`, watch Gradle
+  `test`, and APK signature verification passed.
+- **Hub server deployed 2026-11-25:** ships the task-manager admin panel (`Performances` 1 s live / 1 h history,
+  `Processus`, `Conteneurs`, `Disques`, `Réseau`, `Hub`, `Terminal`), the TOTP-protected SSH terminal
+  (`SHELL_ENABLED=true`, `SHELL_SSH_USER=mboot`), and the multi-domain sign-in gate
+  (`GATE_DOMAIN=goofysound.duckdns.org,goofydownloader.duckdns.org`).
+- **Still pending for the owner:**
+  - Add the hub SSH key line (shown in the Terminal tab) to `~/.ssh/authorized_keys` and set up TOTP.
+  - Paste the Nginx Proxy Manager **Advanced** snippet from `deploy/README.md` into `goofydownloader.duckdns.org`
+    and check whether router port 8087 is forwarded externally.
+  - Change the weak server password and disable SSH password login / `PermitRootLogin`.
+  - Test the admin login, Terminal, `/gate`, watch update flow, and remote/sync flows end to end with real devices.

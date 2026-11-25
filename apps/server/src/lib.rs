@@ -4,6 +4,7 @@ pub mod admin;
 pub mod auth;
 pub mod config;
 pub mod db;
+pub mod gate;
 pub mod hub;
 pub mod limiter;
 pub mod protocol;
@@ -38,6 +39,8 @@ pub struct AppState {
     pub navidrome_url: Arc<str>,
     /// The admin terminal (off unless configured).
     pub shell: Arc<shell::ShellState>,
+    /// The sign-in gate for other services (off unless GATE_DOMAIN is set).
+    pub gate: Option<Arc<gate::Gate>>,
     /// Turns `true` when the server is shutting down.
     pub shutdown: watch::Receiver<bool>,
 }
@@ -63,8 +66,15 @@ impl AppState {
             db_path: None,
             navidrome_url: "".into(),
             shell: Arc::default(),
+            gate: None,
             shutdown,
         }
+    }
+
+    /// Turns the sign-in gate on.
+    pub fn with_gate(mut self, gate: gate::Gate) -> Self {
+        self.gate = Some(Arc::new(gate));
+        self
     }
 
     /// What the admin panel shows about the process: the database file, Navidrome, and the host monitor.
@@ -87,6 +97,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/ws", get(ws::upgrade))
         .merge(admin::routes())
+        .merge(gate::routes())
         .with_state(state)
 }
 

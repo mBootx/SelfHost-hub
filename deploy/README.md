@@ -32,6 +32,7 @@ Variables (dans `docker-compose.yml`) :
 | `HOST_SYS` | `/sys` | Où lire le `/sys` de l'hôte (températures) |
 | `HOST_ROOT` | (vide) | Racine de l'hôte montée en lecture seule, pour les disques ; vide : les disques du conteneur |
 | `DOCKER_URL` | (vide) | Proxy Docker en lecture seule (`http://docker-proxy:2375`) ; vide : page Services « non configuré » |
+| `GATE_DOMAIN` | (vide) | Active `/gate` et `/api/gate/*` avec un cookie `hub_gate` sur un ou plusieurs domaines racines séparés par des virgules (choisi d'après `Host`) ; vide : désactivé |
 
 `NAVIDROME_URL` : `http://navidrome:4533` si Navidrome est dans le même réseau Docker, `http://192.168.1.10:4533`
 s'il est ailleurs sur le réseau local, `http://host.docker.internal:4533` s'il tourne directement sur la machine hôte.
@@ -109,9 +110,9 @@ administrateur est refusé. Le mot de passe ne quitte jamais le navigateur (seul
 envoyé, comme le fait Subsonic). La session dure 12 h, dans un cookie `HttpOnly` + `SameSite=Strict` (et `Secure`
 derrière HTTPS avec `TRUST_PROXY=true`). Les 5 échecs en 10 min par adresse bloquent la connexion, comme pour les apps.
 
-La page affiche : Système (CPU, mémoire, températures, uptime, avec 1 h d'historique), Services (conteneurs Docker),
-Processus, Disques, Réseau, et Hub (appareils en ligne avec un bouton « Déconnecter », appareils connus, données
-d'écoute). Elle se rafraîchit toutes les 3 s tant que l'onglet est visible.
+La page affiche : Performances (courbes en direct sur 60 s, détail par cœur, E/S disque, températures, 1 h d'historique),
+Processus, Conteneurs, Disques, Réseau, Hub (appareils en ligne avec un bouton « Déconnecter », appareils connus, données
+d'écoute) et Terminal. Elle se rafraîchit toutes les 1 s tant que l'onglet est visible (3 s pour l'onglet Hub).
 
 Ce que le compose monte, et pourquoi tout est en lecture seule :
 
@@ -149,3 +150,81 @@ L'onglet **Terminal** ouvre un shell sur l'hôte, par SSH depuis le hub. Il est 
 Limites : 2 shells à la fois, fermés après 15 min d'inactivité ou 4 h. Les sessions sont listées dans l'onglet.
 5 codes faux ferment la session admin. Téléphone perdu : `docker exec selfhost-hub /selfhost-hub-server --reset-totp <utilisateur>`.
 Hôte réinstallé (clé SSH changée) : `--reset-shell-hostkey`. Pour désactiver : `SHELL_ENABLED: "false"`.
+
+## Protéger un service web (`/gate`)
+
+Quand `GATE_DOMAIN` est défini (un ou plusieurs domaines racines séparés par des virgules, par exemple
+`goofysound.duckdns.org,goofydownloader.duckdns.org`), le hub expose une page de connexion sur `/gate` et valide les
+requêtes via `GET /api/gate/verify` (`auth_request` Nginx). Cela permet de protéger un service web (comme Downtify)
+derrière Nginx Proxy Manager avec **n'importe quel compte Navidrome** (pas seulement les administrateurs), tout en
+laissant les apps sur le réseau local y accéder directement.
+
+Le cookie `hub_gate` (signé HMAC-SHA256, valable 30 jours) reçoit un `Domain=` choisi d'après l'en-tête `Host` de la
+requête, et `rd` est validé sur ce même domaine (les sous-domaines partagent le cookie). Mets `auth_request` dans
+`location /` afin que les défis Let's Encrypt (`/.well-known/acme-challenge/`) ne soient jamais bloqués.
+
+**1. Service sur son propre domaine DuckDNS** (ex. `goofydownloader.duckdns.org`, distinct de `goofysound.duckdns.org` :
+un cookie DuckDNS ne peut pas être partagé entre deux sous-domaines racine) — onglet **Advanced** du Proxy Host :
+
+```nginx
+location = /__hub_gate {
+    internal;
+    proxy_pass http://172.17.0.1:51823/api/gate/verify;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header Cookie $http_cookie;
+}
+location = /gate {
+    proxy_pass http://172.17.0.1:51823;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+location /api/gate/ {
+    proxy_pass http://172.17.0.1:51823;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+location = /api/admin/challenge {
+    proxy_pass http://172.17.0.1:51823;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+location @hub_gate_login {
+    return 302 https://$host/gate?rd=$scheme://$host$request_uri;
+}
+location / {
+    auth_request /__hub_gate;
+    error_page 401 = @hub_gate_login;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $http_connection;
+    proxy_http_version 1.1;
+    include conf.d/include/proxy.conf;
+}
+```
+
+**2. Sous-domaine de `*.goofysound.duckdns.org`** (le cookie est déjà posé sur `goofysound.duckdns.org` par
+`hub.goofysound.duckdns.org`) — onglet **Advanced** du Proxy Host :
+
+```nginx
+location = /__hub_gate {
+    internal;
+    proxy_pass http://172.17.0.1:51823/api/gate/verify;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header Cookie $http_cookie;
+}
+location @hub_gate_login {
+    return 302 https://hub.goofysound.duckdns.org/gate?rd=$scheme://$host$request_uri;
+}
+location / {
+    auth_request /__hub_gate;
+    error_page 401 = @hub_gate_login;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $http_connection;
+    proxy_http_version 1.1;
+    include conf.d/include/proxy.conf;
+}
+```

@@ -39,6 +39,8 @@ services:
       # Terminal d'administration (SSH vers l'hôte, protégé par TOTP). Voir README, section "Terminal".
       SHELL_ENABLED: "true"
       SHELL_SSH_USER: "mboot"
+      # Portail de connexion (/gate) pour protéger d'autres services web derrière Nginx Proxy Manager.
+      GATE_DOMAIN: "goofysound.duckdns.org,goofydownloader.duckdns.org"
     # Needed for host.docker.internal on Linux.
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -105,9 +105,24 @@ async fn run() -> Result<(), String> {
         docker_url: config.docker_url.clone(),
     });
     monitor.spawn();
-    let state = AppState::new(&config.server_name, config.trust_proxy, db, Arc::new(auth), stop_rx)
+    let gate_key = match &config.gate_domain {
+        Some(_) => Some(
+            db.secret("gate-key", || {
+                let mut k = vec![0u8; 32];
+                getrandom::fill(&mut k).expect("system randomness");
+                k
+            })
+            .map_err(|e| format!("gate key: {e}"))?,
+        ),
+        None => None,
+    };
+    let mut state = AppState::new(&config.server_name, config.trust_proxy, db, Arc::new(auth), stop_rx)
         .with_runtime(db_path.clone(), &config.navidrome_url, monitor)
         .with_shell(shell::ShellState::new(config.shell.clone(), shell_key));
+    if let (Some(domain), Some(key)) = (&config.gate_domain, gate_key) {
+        tracing::info!(%domain, "sign-in gate enabled");
+        state = state.with_gate(selfhost_hub_server::gate::Gate::new(domain, key));
+    }
     if let Some(s) = &config.shell {
         tracing::info!(host = %s.host, port = s.port, user = %s.user, "admin terminal enabled (SSH to the host)");
     }

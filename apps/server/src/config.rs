@@ -13,6 +13,8 @@ pub struct Config {
     pub docker_url: Option<String>,
     /// The admin terminal: None unless SHELL_ENABLED=true.
     pub shell: Option<crate::shell::ShellConfig>,
+    /// The sign-in gate's cookie domain (GATE_DOMAIN): None leaves the gate off.
+    pub gate_domain: Option<String>,
 }
 
 impl Config {
@@ -55,6 +57,20 @@ impl Config {
             host_root: non_empty("HOST_ROOT").map(PathBuf::from),
             docker_url: non_empty("DOCKER_URL"),
             shell,
+            gate_domain: match non_empty("GATE_DOMAIN") {
+                Some(raw) => {
+                    let mut domains = Vec::new();
+                    for part in raw.split(',') {
+                        let d = part.trim().trim_start_matches('.').to_ascii_lowercase();
+                        if !(d.contains('.') && d.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')) {
+                            return Err(format!("GATE_DOMAIN is not a domain name: {d}"));
+                        }
+                        domains.push(d);
+                    }
+                    Some(domains.join(","))
+                }
+                None => None,
+            },
         })
     }
 }
@@ -77,6 +93,18 @@ mod tests {
         assert_eq!((c.host_proc.as_path(), c.host_sys.as_path()), ("/proc".as_ref(), "/sys".as_ref()));
         assert_eq!((c.host_root.clone(), c.docker_url.clone()), (None, None));
         assert_eq!(c.shell, None);
+        assert_eq!(c.gate_domain, None);
+        let gate = |d: &'static str| Config::from_lookup(move |k| match k {
+            "NAVIDROME_URL" => Some("http://n".into()),
+            "GATE_DOMAIN" => Some(d.into()),
+            _ => None,
+        });
+        assert_eq!(gate(".GoofySound.duckdns.org").unwrap().gate_domain.as_deref(), Some("goofysound.duckdns.org"));
+        assert_eq!(
+            gate(".GoofySound.duckdns.org, goofydownloader.duckdns.org").unwrap().gate_domain.as_deref(),
+            Some("goofysound.duckdns.org,goofydownloader.duckdns.org")
+        );
+        assert!(gate("localhost").is_err() && gate("a.b; Path=/").is_err() && gate("a.com,").is_err());
         let c = Config::from_lookup(|k| match k {
             "NAVIDROME_URL" => Some("http://n".into()),
             "PORT" => Some("8080".into()),

@@ -85,7 +85,7 @@ impl AdminState {
     }
 
     /// Single use: removes the nonce and says whether it was valid and fresh.
-    fn take_nonce(&self, nonce: &str) -> bool {
+    pub(crate) fn take_nonce(&self, nonce: &str) -> bool {
         lock(&self.nonces).remove(nonce).is_some_and(|t| t.elapsed() < NONCE_TTL)
     }
 
@@ -369,9 +369,11 @@ async fn me(State(state): State<AppState>, headers: HeaderMap) -> Response {
     }
 }
 
-async fn system(State(state): State<AppState>, headers: HeaderMap) -> Response {
+async fn system(State(state): State<AppState>, headers: HeaderMap, uri: axum::http::Uri) -> Response {
+    // `?processes=1`: every process too (the Processus tab), left out otherwise to keep the answer small.
+    let processes = uri.query().is_some_and(|q| q.split('&').any(|kv| kv == "processes=1"));
     match require_session(&state, &headers) {
-        Ok(_) => reply(StatusCode::OK, state.monitor.snapshot()),
+        Ok(_) => reply(StatusCode::OK, state.monitor.snapshot(processes)),
         Err(r) => r,
     }
 }

@@ -153,6 +153,7 @@ server → {"type":"listening.data","rev":1042,"entries":[{"deviceId":"…","dev
 | `SHELL_SSH_USER` | (required if enabled) | Host account the terminal signs in as |
 | `SHELL_SSH_HOST` | `host.docker.internal` | |
 | `SHELL_SSH_PORT` | `22` | |
+| `GATE_DOMAIN` | (unset) | Comma-separated root cookie domains for the sign-in gate (`/gate`, `/api/gate/*`); `Domain=` is chosen from `Host`. Unset: gate disabled (`404`) |
 
 ## Admin API
 
@@ -183,16 +184,23 @@ login) also need the header `X-Requested-With: hub-admin`, otherwise `403 csrf`.
 | `POST /api/admin/logout` | ends the session, clears the cookie |
 | `GET /api/admin/hub` | `server` (name, version, uptime), `navidrome` (url, `ok` of the last check, `checkedAt`), `dbBytes`, and `users[]`: `online[]` (deviceId, deviceName, platform, `ip`, `connectedAt`, `state` = `{title, artist, isPlaying}` or null), `known[]` (from the devices table, `lastSeen`), `listening[]` (per device: `weeks`, `totalSeconds` = sum of the numbers in each week's `days`, `rev`) |
 | `POST /api/admin/disconnect {"user","deviceId"}` | closes that connection with code 4001 `kicked`; `404 not-online` if it is not connected |
-| `GET /api/admin/system` | read-only host monitor, below |
+| `GET /api/admin/system` | read-only host monitor, below (`?processes=1` includes the full `processes` list) |
 
-`GET /api/admin/system` returns `ready`, `sampledAt`, and the sections `host` (hostname, kernel, uptime, load,
-cores), `cpu` (total and per-core %), `memory` (bytes; used = total - available), `temps` (hwmon and thermal zones,
-with `high`/`crit` when the files exist), `disks` (ext2/3/4, xfs, btrfs, vfat, exfat, zfs, ntfs, f2fs, one per device),
-`network` (rates in bytes/s from `HOST_PROC/1/net/dev`; `virtual: true` for `lo`, `veth*`, `br-*`, `docker0`),
-`processes` (top 10 by RSS and by CPU), `containers` (from `DOCKER_URL`, refreshed every 15 s, GET only), and
-`history` (one point per 10 s for the last hour: cpu, mem, temp, rx, tx). A section that cannot be read is
-`{"unavailable":"<reason>"}` (for `network`, `interfaces` is `[]` next to `unavailable`). Host values are sampled
-every 5 s by a background task.
+`GET /api/admin/system` returns `ready`, `sampledAt`, and:
+
+- `host` (`hostname`, `kernel`, `uptime`, `load`, `cores`, `processes`, `threads`; counts exclude kernel threads);
+- `cpu` (`total`, `cores`, `model`, `freqMhz`, `freqMaxMhz`);
+- `memory` (`total`, `used`, `available`, `buffersCache`, `swapTotal`, `swapUsed`, `percent`; bytes, `used = total - available`);
+- `temps` (`max`, `sensors[]`: `source`, `chip`, `label`, `celsius`, `high`, `crit` from hwmon and thermal zones);
+- `disks` (`items[]`: `mountpoint`, `device`, `fstype`, `total`, `used`, `free`, `percent`; ext2/3/4, xfs, btrfs, vfat, exfat, zfs, ntfs, f2fs, one per device);
+- `diskio` (`devices[]`: `name`, `readRate`, `writeRate`, `busy` from `HOST_PROC/diskstats`; whole disks only, rates in bytes/s and busy %);
+- `network` (`interfaces[]`: `name`, `rxRate`, `txRate`, `rxTotal`, `txTotal`, `virtual` from `HOST_PROC/1/net/dev`; rates in bytes/s, `virtual: true` for `lo`, `veth*`, `br-*`, `docker0`);
+- `containers` (`configured`, `items[]` from `DOCKER_URL`, GET only: `id`, `name`, `image`, `state`, `status`, `project`, `cpu`, `memUsed`, `memLimit`, `rx`, `tx`, `rxRate`, `txRate`, `readRate`, `writeRate`, `pids`);
+- `processes` (only present when `?processes=1` is passed; `items[]`: `pid`, `ppid`, `name`, `cmd`, `user`, `state`, `threads`, `rss`, `cpu`, `container`, `kernel`);
+- `live` (`step: 1`, up to 60 points: `cpu`, `mem`, `temp`, `rx`, `tx`, `dr`, `dw`, `busy`, `cores` per-core arrays);
+- `history` (`step: 10`, up to 360 points / 1 hour: `cpu`, `mem`, `temp`, `rx`, `tx`, `dr`, `dw`, `busy`).
+
+A section that cannot be read is `{"unavailable":"<reason>"}` (for `network` and `containers`, `interfaces` / `items` is `[]` next to `unavailable`). CPU % for both `processes` and `containers` is a share of the whole machine (`0–100`), not per-core. Background sampling runs every 1 s for the host (5 s when idle, after 20 s without a request) and every 2 s for containers (15 s when idle).
 
 ### Terminal
 
@@ -216,3 +224,26 @@ Codes are RFC 6238 (SHA-1, 6 digits, 30 s, +-1 step); a step is accepted once. A
 client text `{"type":"resize","cols","rows"}`; server text `{"type":"ready"}`, `{"type":"error","code","message"}`
 (`ssh-unreachable`, `hostkey-mismatch`, `ssh-auth-failed`, `ssh-error`), then `{"type":"closed","reason"}`. A shell
 ends after 15 min idle, 4 h total, on sign-out or server shutdown. CLI: `--reset-totp <user>`, `--reset-shell-hostkey`.
+
+## Sign-in gate (`/gate`)
+
+Shared sign-in gate for web services behind Nginx Proxy Manager (`auth_request`), enabled only when `GATE_DOMAIN` is
+set (otherwise `/gate` returns `404` and `/api/gate/*` returns `404 {"error":"gate-off"}`). Accepts **any** Navidrome
+account (not restricted to admins) using the same `GET /api/admin/challenge` md5 nonce flow (`400 bad-nonce`,
+`429 too-many-attempts`, `401 bad-auth`, `502 navidrome-unreachable`).
+
+| Endpoint | |
+|---|---|
+| `GET /gate?rd=<url>` | French sign-in page (strict CSP, `no-store`) |
+| `POST /api/gate/login {"user","token","nonce","rd"?}` | Requires `X-Requested-With: hub-admin` (`403 csrf`). Sets the `hub_gate` cookie and returns `200 {"ok":true,"user","redirect"}` |
+| `GET /api/gate/verify` | For Nginx `auth_request`: returns `200 {"user"}` with header `X-Hub-User: <user>`, or `401 {"error":"unauthorized"}` |
+| `POST /api/gate/logout` | Requires `X-Requested-With: hub-admin` (`403 csrf`). Clears `hub_gate` (`Max-Age=0`) and returns `200 {"ok":true}` |
+
+The `hub_gate` cookie (`Domain=<domain>; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`, valid 30 days)
+carries `<user_hex>.<expires>.<hmac_hex>`, signed with HMAC-SHA256 over `gate-v1|<user>|<expires>`. `GATE_DOMAIN`
+accepts one or more comma-separated root domains (e.g. `goofysound.duckdns.org,goofydownloader.duckdns.org`): `login`
+and `logout` pick `Domain=` by matching the request's `Host` header (port stripped) against the configured domains,
+falling back to the first one. The 32-byte key is persisted in the `secrets` table of `hub.db` under `gate-key` so
+sign-ins survive restarts. `rd` is returned as `redirect` only when it is an `https://` URL on that same matched
+domain or one of its subdomains (without `@`, `\`, whitespace, or control characters), otherwise `null`, preventing
+open redirects.
